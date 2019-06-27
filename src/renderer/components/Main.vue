@@ -110,7 +110,7 @@
 </template>
 
 <script>
-import { sec_to_time, getProgress, dateNow } from "@/utils/common";
+import { sec_to_time, getProgress, dateNow, getFilename } from "@/utils/common";
 import { ffmpegBinary, runFFmpeg } from "@/utils/core";
 import AudioSlider from "@/components/AudioSlider";
 
@@ -184,11 +184,11 @@ export default {
       ffmpegBinary(media).ffprobe(media, (err, metadata) => {
         if (err === null) {
           let {
-            format: { bit_rate, tags, duration }
+            format: { bit_rate = 0, tags = {}, duration = 0, filename = ''}
           } = metadata;
           // console.log(bit_rate, tags, duration);
           this.bit_rate = parseInt(bit_rate / 1000);
-          this.filename = tags.TITLE || tags.title || "";
+          this.filename = tags.TITLE || tags.title || getFilename(filename); // "E:\下载\glive001.ts"
           this.duration = duration;
           this.cutAudioValue = [0, duration];
           this.cutAudioMarks = {

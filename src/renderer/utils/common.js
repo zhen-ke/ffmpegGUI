@@ -82,3 +82,10 @@ export function dateNow() {
     .replace(/\//g, "-")
     .replace(/\:/g, "-");
 }
+
+// 通过用户路径获取文件名
+export function getFilename(filename) {
+  const path = require("path");
+  const filenameArr = filename.split(path.sep)
+  return ((filenameArr[filenameArr.length - 1]).split('.'))[0]
+}
