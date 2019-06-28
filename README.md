@@ -57,6 +57,11 @@ ffmpeg()
   .inputFormat('mov')
 ```
 
+```js
+// 原生ffmpeg的方式
+ffmpeg -vcodec h264_videotoolbox
+```
+
 以上就可以开启硬件加速功能了
 
 ### 待完善
