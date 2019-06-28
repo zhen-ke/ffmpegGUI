@@ -24,7 +24,7 @@ export function runFFmpeg(
   let spawn = require("child_process").spawn;
   exec(`${ffmpegPath} -h`, (err, stdout, stderr) => {
     // -hwaccels
-    console.log(stdout, stderr)
+    // console.log(stdout, stderr)
     if (err === null) {
       let ffmpeg = spawn(`${ffmpegPath}`, commandLine);
       // 捕获标准输出并将其打印到控制台
