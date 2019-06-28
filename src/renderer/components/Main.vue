@@ -187,7 +187,7 @@ export default {
             format: { bit_rate = 0, tags = {}, duration = 0, filename = ''}
           } = metadata;
           // console.log(bit_rate, tags, duration);
-          this.bit_rate = (parseInt(bit_rate / 1000)) * 5; // 在开启硬件加速的情况下，很难平衡视频的质量和体积，这里是一个折中的选择，让视频尽量保持质量，体积稍微大点
+          this.bit_rate = (parseInt(bit_rate / 1000)) * 1.5; // 在开启硬件加速的情况下，很难平衡视频的质量和体积，这里是一个折中的选择，让视频尽量保持质量，体积稍微大点
           this.filename = tags.TITLE || tags.title || getFilename(filename); // "E:\下载\glive001.ts"
           this.duration = duration;
           this.cutAudioValue = [0, duration];
