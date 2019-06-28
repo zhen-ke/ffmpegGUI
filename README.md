@@ -11,7 +11,7 @@
 
 ### 如何开启硬件加速（只是以我个人的经验，不代表100%正确的，不对的地方请指点）
 
- **注意：** 在开启硬件加速时，转码的速度虽然快了，但视频质量会出现大幅下滑，目前解决办法只能通过设置高码率来解决，目前我的做法是在原码率的基础上提高1.5倍，基本能保证视频质量，但体积也会增加1.5倍（如果有更好的方法请告诉我）
+ **注意：** 在开启硬件加速时，转码的速度虽然快了，但视频质量会出现大幅下滑，目前解决办法只能通过设置高码率来解决，目前我的做法是在原码率的基础上提高1.5倍，基本能保证视频质量，但体积也会增加1.5倍（如果有更好的方法请告诉我）
 
 以我这个项目为例，首先通过执行 `ffmpeg -hwaccels` 来获取当前机器支持哪些硬件加速的方法，不同的平台开启硬件加速的方法不一样
 
@@ -37,7 +37,7 @@ ffmpeg -hwaccels
 let exec = require("child_process").exec;
 exec(`${ffmpegPath} -encoders`, (err, stdout, stderr) => {
   console.log(stdout); 
-  // 这里会打印出很多信息，只需要找出带有之前带有videotoolbox的就行（这里的 videotoolbox 是上次查到的支持硬件加速的方法）
+  // 这里会打印出很多信息，只需要找出带有之前带有videotoolbox的就行（这里的 videotoolbox 是上次查到的支持硬件加速的方法）
   // ......
   // V..... h264_videotoolbox    VideoToolbox H.264 Encoder (codec h264)
   // V..... hevc_videotoolbox    VideoToolbox H.265 Encoder (codec hevc)
