@@ -9,7 +9,9 @@
 ![screenshot1](./screenshot/screenshot-01.png)
 ![screenshot2](./screenshot/screenshot-02.png)
 
-### 如何开启硬件加速（只是以我个人的经验，不代表100%正确的，不对的地方请指点）
+### 遇到的问题
+
+#### 如何开启硬件加速（只是以我个人的经验，不代表100%正确的，不对的地方请指点）
 
  **注意：** 在开启硬件加速时，转码的速度虽然快了，但视频质量会出现大幅下滑，目前解决办法只能通过设置高码率来解决，目前我的做法是在原码率的基础上提高1.5倍，基本能保证视频质量，但体积也会增加1.5倍（如果有更好的方法请告诉我）
 
@@ -65,6 +67,20 @@ ffmpeg -vcodec h264_videotoolbox
 ```
 
 以上就可以开启硬件加速功能了
+
+#### 打包后 electron asar 不能使用二进制文件的问题
+
+```js
+// 修复 electron asar 不能使用二进制文件的问题
+if (process.env.NODE_ENV !== "development") {
+  ffmpegPath = ffmpegPath.replace("app.asar", "app.asar.unpacked");
+  ffprobePath = ffprobePath.replace("app.asar", "app.asar.unpacked");
+}
+```
+
+在打完包后，会把相关的二进制文件放到`app.asar.unpacked`里，默认会放到`app.asar`里
+
+![screenshot3](./screenshot/screenshot-03.png)
 
 ### 待完善
 
