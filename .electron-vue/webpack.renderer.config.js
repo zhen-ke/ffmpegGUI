@@ -156,6 +156,27 @@ if (process.env.NODE_ENV !== 'production') {
  * Adjust rendererConfig for production settings
  */
 if (process.env.NODE_ENV === 'production') {
+  // 打包不同平台的 ffmpeg 到 app
+  const ffmpegBasePath = '../node_modules/ffmpeg-static/bin/'   // ffmpeg-static
+  const ffprobeBasePath = '../node_modules/ffprobe-static/bin/' // ffprobe-static
+  const { platform } = process
+  const ffmpegPathMap = {
+    darwin: "darwin/x64/ffmpeg",
+    win32: 'win32/ia32/ffmpeg.exe',
+    win64: 'win32/x64/ffmpeg.exe',
+    linux32: 'linux/ia32/ffmpeg',
+    linux64: 'linux/x64/ffmpeg'
+  }
+  const ffprobePathMap = {
+    darwin: "darwin/x64/ffprobe",
+    win32: 'win32/ia32/ffprobe.exe',
+    win64: 'win32/x64/ffprobe.exe',
+    linux32: 'linux/ia32/ffprobe',
+    linux64: 'linux/x64/ffprobe'
+  }
+  const ffmpegPath = ffmpegBasePath + ffmpegPathMap[platform]
+  const ffprobePath = ffprobeBasePath + ffprobePathMap[platform]
+
   rendererConfig.devtool = ''
 
   rendererConfig.plugins.push(
@@ -164,6 +185,16 @@ if (process.env.NODE_ENV === 'production') {
       {
         from: path.join(__dirname, '../static'),
         to: path.join(__dirname, '../dist/electron/static'),
+        ignore: ['.*']
+      },
+      {
+        from: path.join(__dirname, ffmpegPath),
+        to: path.join(__dirname, '../core'),
+        ignore: ['.*']
+      },
+      {
+        from: path.join(__dirname, ffprobePath),
+        to: path.join(__dirname, '../core'),
         ignore: ['.*']
       }
     ]),

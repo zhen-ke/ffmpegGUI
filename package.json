@@ -41,7 +41,19 @@
       ]
     },
     "mac": {
-      "icon": "build/icons/icon.icns"
+      "icon": "build/icons/icon.icns",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "type": "distribution",
+      "extraResources": {
+        "from": "./core/",
+        "to": "./core/",
+        "filter": [
+          "**/*"
+        ]
+      }
     },
     "win": {
       "icon": "build/icons/icon.ico"
@@ -53,8 +65,6 @@
   "dependencies": {
     "axios": "^0.18.0",
     "element-ui": "^2.8.2",
-    "ffmpeg-static": "^2.4.0",
-    "ffprobe-static": "^3.0.0",
     "fluent-ffmpeg": "^2.1.2",
     "vue": "^2.5.16",
     "vue-electron": "^1.0.6",
@@ -64,6 +74,8 @@
     "ytdl-core": "^0.29.2"
   },
   "devDependencies": {
+    "ffmpeg-static": "^2.4.0",
+    "ffprobe-static": "^3.0.0",
     "ajv": "^6.5.0",
     "babel-core": "^6.26.3",
     "babel-loader": "^7.1.4",
