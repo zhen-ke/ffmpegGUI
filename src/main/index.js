@@ -4,7 +4,7 @@ const template = [
     label: "Application",
     submenu: [
       {
-        label: "关于七牛",
+        label: "关于",
         selector: "orderFrontStandardAboutPanel:"
       },
       { type: "separator" },

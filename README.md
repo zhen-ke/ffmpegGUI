@@ -82,14 +82,14 @@ if (process.env.NODE_ENV !== 'development') {
 
 ![screenshot3](./screenshot/screenshot-03.png)
 
-#### 如何通过 Webpack 打包不同的二进制文件到 APP 里？
+#### 如何通过 Webpack 打包不同平台的二进制文件到 APP 里？
 
 首先通过 `process.platform`来判断平台，然后用 `CopyWebpackPlugin` 插件从 `node_modules` 把相关平台的的二进制文件复制出来
 
+**webpack.renderer.config**
+
 ```js
-// Webpack
 if (process.env.NODE_ENV === 'production') {
-  // 打包不同平台的 ffmpeg 到 app
   const ffmpegBasePath = '../node_modules/ffmpeg-static/bin/'; // ffmpeg-static
 
   const { platform } = process;
@@ -112,17 +112,22 @@ if (process.env.NODE_ENV === 'production') {
 }
 ```
 
-调整二进制文件的权限（复制出来的二进制文件似乎有权限问题）
+调整二进制文件的权限，并设置 `ffmpeg` 的打包后的路径（复制出来的二进制文件似乎有权限问题）
+
+**core.js**
 
 ```js
-// 更新打包后 ffmpeg、ffprobe 路径
+import ffmpeg from 'fluent-ffmpeg';
 import { resolve } from 'path';
+
 // 找出复制出来的路径
 let basePath = resolve(__dirname, '../../../core/');
 
 if (process.env.NODE_ENV == 'production') {
   const fs = require('fs');
+
   let realFfmpegPath = basePath + '/ffmpeg';
+
   fs.stat(realFfmpegPath, (err, stats) => {
     if (err) return;
     // 如果 ffmpeg、ffprobe 非 777 权限，则设置成 777
@@ -139,9 +144,13 @@ if (process.env.NODE_ENV == 'production') {
 
   ffmpegPath = realFfmpegPath;
 }
+
+ffmpeg.setFfmpegPath(ffmpegPath);
 ```
 
-把二进制文件打包到 APP 里（通过 extraResources 把进制文件拷贝到 APP 里）
+把二进制文件打包到 APP 里（通过 `electron builder` 的 `extraResources` 把二进制文件拷贝到 APP 里）
+
+**package.json**
 
 ```json
 "mac": {
