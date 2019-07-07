@@ -56,14 +56,61 @@
       }
     },
     "win": {
-      "icon": "build/icons/icon.ico"
+      "icon": "build/icons/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64",
+            "ia32"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "ia32"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64",
+            "ia32"
+          ]
+        }
+      ],
+      "extraResources": {
+        "from": "./core/",
+        "to": "./core/",
+        "filter": [
+          "**/*"
+        ]
+      }
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
     },
     "linux": {
-      "icon": "build/icons"
+      "icon": "build/icons",
+      "category": "Network",
+      "target": [
+        "deb",
+        "snap",
+        "AppImage"
+      ],
+      "extraResources": {
+        "from": "./core/",
+        "to": "./core/",
+        "filter": [
+          "**/*"
+        ]
+      }
     }
   },
   "dependencies": {
-    "axios": "^0.18.0",
+    "axios": "^0.19.0",
     "element-ui": "^2.8.2",
     "fluent-ffmpeg": "^2.1.2",
     "vue": "^2.5.16",
@@ -115,3 +162,4 @@
     "webpack-merge": "^4.1.3"
   }
 }
+
