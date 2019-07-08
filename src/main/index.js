@@ -62,25 +62,17 @@ function createWindow() {
     height: 563,
     useContentSize: true,
     titleBarStyle: "hidden",
-    width: 1000
+    width: 1000,
+    show: false, //默认隐藏
   });
 
   mainWindow.loadURL(winURL);
-
+  mainWindow.on('ready-to-show', function () {
+    mainWindow.show() // 初始化后再显示
+  })
   mainWindow.on("closed", () => {
     mainWindow = null;
   });
-  // var ses = mainWindow.webContents.session;
-  // mainWindow.webContents.session.setProxy('socks5://23.28.195.172:10200', function () {
-  //   mainWindow.loadUrl('http://whatismyipaddress.com');
-  // });
-  // mainWindow.webContents.session.setProxy(
-  //   { proxyRules: "socks5://127.0.0.1:1086", proxyBypassRules: winURL },
-  //   function() {
-  //     // mainWindow.loadURL("https://www.youtube.com");
-  //     mainWindow.loadURL(winURL);
-  //   }
-  // );
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
