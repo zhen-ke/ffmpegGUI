@@ -111,8 +111,10 @@
 
 <script>
 import { sec_to_time, getProgress, dateNow, getFilename } from "@/utils/common";
-import { ffmpegBinary, runFFmpeg } from "@/utils/core";
+import { ffmpegBinary, runFFmpeg, Fluentffmpeg } from "@/utils/core";
 import AudioSlider from "@/components/AudioSlider";
+
+let ffmpeg = null;
 
 export default {
   data() {
@@ -138,14 +140,16 @@ export default {
   },
   watch: {
     video(val, oldVal) {
-      console.log("video", val);
       if (val) {
+        console.log("video", val);
+        this.videoPath = val;
         this.getMediaInfo(val);
       }
     },
     audio(val, oldVal) {
-      console.log("audio", val);
       if (val) {
+        console.log("audio", val);
+        this.audioPath = val;
         this.getMediaInfo(val);
       }
     }
@@ -181,6 +185,9 @@ export default {
     },
     // 读取媒体元数据
     getMediaInfo(media) {
+      // this.getInfo(media).then(it => {
+      //   this._gatherData(it);
+      // });
       ffmpegBinary(media).ffprobe(media, (err, metadata) => {
         if (err === null) {
           let {
@@ -198,43 +205,34 @@ export default {
         }
       });
     },
-    // node子进程转码
-    coverTo(commandLine) {
-      // console.log(commandLine);
-      runFFmpeg(
-        commandLine,
-        stdout => {
-          console.log("stdout", stdout);
-          // this.progress = getProgress(stdout, this.duration);
-        },
-        stderr => {
-          // console.log("stderr", stderr);
-          this.progress = getProgress(stderr, this.duration);
-        },
-        finish => {
-          this.progress = 0;
-          this.msg("完成", "success");
-        },
-        error => {
-          console.log(error);
-          this.msg("错误", "warning");
-        }
+    startConversion(command, format, time) {
+      ffmpeg = new Fluentffmpeg();
+      let inputPath = [];
+      switch (command) {
+        case "convertMerge":
+          inputPath = [this.videoPath, this.audioPath];
+          break;
+        case "convertAudio":
+          inputPath = [this.audioPath];
+          break;
+        case "convertCutAudio":
+          inputPath = [this.audioPath];
+          break;
+        default:
+          inputPath = [this.videoPath];
+          break;
+      }
+      ffmpeg.convert(
+        inputPath,
+        this.save,
+        this.onProgress,
+        command,
+        format,
+        time
       );
     },
-    // fluentFFmpeg转码
-    fluentFFmpeg(ffmpegInfo, format) {
-      this.command = ffmpegInfo
-        .on("error", err => {
-          this.msg("错误: " + err.message, "error");
-        })
-        .on("progress", progress => {
-          this.progress = +progress.percent.toFixed(2);
-        })
-        .on("end", () => {
-          this.msg("完成", "success");
-          this.progress = 0;
-        })
-        .saveToFile(`${this.save}/${this.filename}${dateNow()}${format}`);
+    onProgress(data) {
+      this.progress = +data;
     },
     // 开始转码
     startCommand() {
@@ -244,25 +242,14 @@ export default {
           this.msg("视频路径为空", "warning");
           return;
         }
-        this.fluentFFmpeg(
-          ffmpegBinary(this.video)
-            .videoCodec(this.decoding)
-            .videoBitrate(this.bit_rate)
-            .toFormat("mp4"),
-          ".mp4"
-        );
+        this.startConversion("convertVideo", "mp4");
       }
       if (this.activeTab === "audio") {
         if (this.audio === "") {
           this.msg("音频路径为空", "warning");
           return;
         }
-        this.fluentFFmpeg(
-          ffmpegBinary(this.audio)
-            .audioCodec("libmp3lame")
-            .toFormat("mp3"),
-          ".mp3"
-        );
+        this.startConversion("convertAudio", "mp3");
       }
       if (this.activeTab === "merge") {
         if (this.video === "") {
@@ -273,66 +260,33 @@ export default {
           this.msg("音频路径为空", "warning");
           return;
         }
-        this.fluentFFmpeg(
-          ffmpegBinary(this.video)
-            .input(this.audio)
-            .videoCodec(this.decoding)
-            .videoBitrate(this.bit_rate)
-            .audioCodec("libmp3lame")
-            .toFormat("mp4"),
-          ".mp4"
-        );
+        this.startConversion("convertMerge", "mp4");
       }
       // 基于node子进程的转码
       if (this.activeTab === "cutAudio") {
-        let cutAudio = [
-          "-ss",
-          sec_to_time(this.cutAudioValue[0]),
-          "-t",
-          sec_to_time(this.cutAudioValue[1] - this.cutAudioValue[0]),
-          "-i",
-          this.audio,
-          "-acodec",
-          "copy",
-          `${this.save}/${this.filename}${dateNow()}.mp3`
-        ];
-        this.coverTo(cutAudio);
+        this.startConversion("convertCutAudio", "mp3", this.cutAudioValue);
       }
       if (this.activeTab === "cutVideo") {
-        let cutVideo = [
-          "-i",
-          this.video,
-          "-ss",
-          sec_to_time(this.cutAudioValue[0]),
-          "-t",
-          sec_to_time(this.cutAudioValue[1] - this.cutAudioValue[0]),
-          "-vcodec",
-          "copy",
-          "-acodec",
-          "copy",
-          `${this.save}/${this.filename}${dateNow()}.mp4`
-        ];
-        this.coverTo(cutVideo);
+        this.startConversion("convertCutVideo", "mp4", this.cutAudioValue);
       }
       if (this.activeTab === "gif") {
-        let videoToGif = [
-          "-i",
-          this.video,
-          "-s",
-          "320x180",
-          "-r",
-          "15",
-          `${this.save}/${this.filename}${dateNow()}.gif`
-        ];
-        this.coverTo(videoToGif);
+        this.startConversion("convertGIF", "gif");
+        // let videoToGif = [
+        //   "-i",
+        //   this.video,
+        //   "-s",
+        //   "320x180",
+        //   "-r",
+        //   "15",
+        //   `${this.save}/${this.filename}${dateNow()}.gif`
+        // ];
+        // this.coverTo(videoToGif);
       }
     },
     // 停止转码
     stopCommand() {
-      if (this.command != null) {
-        this.command.kill();
-        this.progress = 0;
-      }
+      ffmpeg.stop();
+      this.progress = 0;
     }
   }
 };
