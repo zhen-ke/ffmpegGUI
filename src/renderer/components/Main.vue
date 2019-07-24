@@ -111,7 +111,7 @@
 
 <script>
 import { sec_to_time, getProgress, dateNow, getFilename } from "@/utils/common";
-import { ffmpegBinary, runFFmpeg, Fluentffmpeg } from "@/utils/core";
+import Fluentffmpeg from "@/utils/core";
 import AudioSlider from "@/components/AudioSlider";
 
 let ffmpeg = null;
@@ -185,24 +185,15 @@ export default {
     },
     // 读取媒体元数据
     getMediaInfo(media) {
-      // this.getInfo(media).then(it => {
-      //   this._gatherData(it);
-      // });
-      ffmpegBinary(media).ffprobe(media, (err, metadata) => {
-        if (err === null) {
-          let {
-            format: { bit_rate = 0, tags = {}, duration = 0, filename = "" }
-          } = metadata;
-          // console.log(bit_rate, tags, duration);
-          this.bit_rate = parseInt(bit_rate / 1000) * 1.5; // 在开启硬件加速的情况下，很难平衡视频的质量和体积，这里是一个折中的选择，让视频尽量保持质量，体积稍微大点
-          this.filename = getFilename(filename) || tags.TITLE || tags.title; // "E:\下载\glive001.ts"
-          this.duration = duration;
-          this.cutAudioValue = [0, duration];
-          this.cutAudioMarks = {
-            0: "0:00:00",
-            [duration]: sec_to_time(duration) + ""
-          };
-        }
+      ffmpeg = new Fluentffmpeg();
+      ffmpeg.getMediaInfo(media).then(it => {
+        let { duration } = it;
+        console.log(it)
+        this.cutAudioValue = [0, duration];
+        this.cutAudioMarks = {
+          0: "0:00:00",
+          [duration]: sec_to_time(duration) + ""
+        };
       });
     },
     startConversion(command, format, time) {

@@ -45,39 +45,6 @@ ffmpeg.setFfprobePath(ffprobePath);
 
 console.log(ffmpegPath, ffprobePath);
 
-export function runFFmpeg(
-  commandLine,
-  stdoutCallback,
-  stderrCallback,
-  finishCallback,
-  errorCallback
-) {
-  let exec = require("child_process").exec;
-  let spawn = require("child_process").spawn;
-  exec(`${ffmpegPath} -h`, (err, stdout, stderr) => {
-    // -hwaccels
-    // console.log(stdout, stderr)
-    if (err === null) {
-      let ffmpeg = spawn(`${ffmpegPath}`, commandLine);
-      // 捕获标准输出并将其打印到控制台
-      ffmpeg.stdout.on("data", data => {
-        stdoutCallback(data);
-      });
-      ffmpeg.stderr.on("data", data => {
-        stderrCallback(data);
-      });
-      // 注册子进程关闭事件
-      ffmpeg.on("exit", (code, signal) => {
-        finishCallback(code, signal);
-      });
-    } else {
-      if (err.toString().indexOf("Command not found") > 0) {
-        errorCallback(err);
-      }
-    }
-  });
-}
-
 // fluent-ffmpeg
 class Fluentffmpeg {
   constructor() {
@@ -200,6 +167,16 @@ class Fluentffmpeg {
       .size("320x180")
       .outputOptions("-r 15");
   }
+  
+  async getMediaInfo(inputPath) {
+    try {
+      let info = await this.getInfo(inputPath);
+      let mediaInfo = await this._gatherData(info);
+      return mediaInfo
+    } catch (error) {
+      console.log(error);
+    }
+  }
 
   // 解析并整合媒体相关信息
   _gatherData(data) {
@@ -220,7 +197,7 @@ class Fluentffmpeg {
       height: stream.height,
       start: parseInt(start_time) || 0,
       duration,
-      bit_rate,
+      bit_rate: parseInt(bit_rate / 1000) * 1.5,
       tags,
       fileName: this._getFilename(filename)
     };
@@ -253,9 +230,5 @@ class Fluentffmpeg {
     this.command.kill();
   }
 }
-// node child_process
-class Spawnffmpeg {}
 
-export const ffmpegBinary = ffmpeg;
-
-export { Fluentffmpeg, Spawnffmpeg };
+export default Fluentffmpeg;
