@@ -213,14 +213,15 @@ export default {
           inputPath = [this.videoPath];
           break;
       }
-      ffmpeg.convert(
+      let params = {
         inputPath,
-        this.save,
-        this.onProgress,
+        outputPath: this.save,
+        onProgress: this.onProgress,
         command,
         format,
         time
-      );
+      };
+      ffmpeg.convert({ ...params });
     },
     onProgress(data) {
       this.progress = +data;

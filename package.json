@@ -113,6 +113,7 @@
     "axios": "^0.19.0",
     "element-ui": "^2.8.2",
     "fluent-ffmpeg": "^2.1.2",
+    "tmp": "^0.1.0",
     "vue": "^2.5.16",
     "vue-electron": "^1.0.6",
     "vue-router": "^3.0.1",
@@ -162,4 +163,3 @@
     "webpack-merge": "^4.1.3"
   }
 }
-

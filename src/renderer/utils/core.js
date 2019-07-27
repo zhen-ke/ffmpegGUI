@@ -3,6 +3,8 @@ import ffmpegStatic from "ffmpeg-static";
 import ffprobeStatic from "ffprobe-static";
 import { resolve } from "path";
 
+const tmp = require("tmp");
+
 let ffmpegPath = ffmpegStatic.path;
 let ffprobePath = ffprobeStatic.path;
 let basePath = resolve(__dirname, "../../../core/");
@@ -43,8 +45,6 @@ if (process.env.NODE_ENV == "production") {
 ffmpeg.setFfmpegPath(ffmpegPath);
 ffmpeg.setFfprobePath(ffprobePath);
 
-console.log(ffmpegPath, ffprobePath);
-
 // fluent-ffmpeg
 class Fluentffmpeg {
   constructor() {
@@ -54,25 +54,36 @@ class Fluentffmpeg {
       process.platform === "darwin" ? "h264_videotoolbox" : "h264_qsv";
   }
 
-  // 开始转换
-  async convert(
-    inputPath,
-    outputPath,
-    onProgress = () => {},
-    command,
-    format,
-    time
-  ) {
+  // 开始转码
+  async convert({ inputPath, outputPath, onProgress, command, format, time }) {
     let originPath = inputPath.length > 1 ? inputPath : inputPath[0];
     try {
       let info = await this.getInfo(originPath);
       await this._gatherData(info);
-      await this.run(
-        outputPath,
-        onProgress,
-        this[command](originPath, time),
-        format
-      );
+      if (format === "gif") {
+        this.convertGIF(
+          originPath,
+          onProgress,
+          `${outputPath}/${this.metaData.fileName}${this._dateNow()}.${format}`
+        );
+      } else {
+        await this.run(
+          onProgress,
+          this[command]({ originPath, time }),
+          `${outputPath}/${this.metaData.fileName}${this._dateNow()}.${format}`
+        );
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  }
+
+  // 读取媒体信息
+  async getMediaInfo(inputPath) {
+    try {
+      let info = await this.getInfo(inputPath);
+      let mediaInfo = await this._gatherData(info);
+      return mediaInfo;
     } catch (error) {
       console.log(error);
     }
@@ -94,45 +105,43 @@ class Fluentffmpeg {
   }
 
   // 执行 ffmpeg
-  run(outputPath, onProgress, command, format) {
+  run(onProgress, command, savePath) {
     return new Promise((resolve, reject) => {
       this.command = command
         .on("start", commandLine => {
           console.log("Spawned Ffmpeg with command: " + commandLine);
         })
         .on("progress", progress => {
-          onProgress(progress.percent.toFixed(2));
+          onProgress(
+            progress && progress.percent && progress.percent.toFixed(2)
+          );
         })
         .on("end", () => {
-          console.log("完成", "success");
           onProgress(0);
-          resolve(outputPath);
+          resolve("success");
         })
         .on("error", err => {
-          console.log("错误: " + err.message, "error");
           reject(err);
         })
-        .saveToFile(
-          `${outputPath}/${this.metaData.fileName}${this._dateNow()}.${format}`
-        );
+        .saveToFile(savePath);
     });
   }
 
   // 转视频
-  convertVideo(inputPath) {
-    return ffmpeg(inputPath)
+  convertVideo({ originPath }) {
+    return ffmpeg(originPath)
       .videoCodec(this.vcodec)
       .videoBitrate(this.metaData.bit_rate);
   }
 
   // 转音频
-  convertAudio(inputPath) {
-    return ffmpeg(inputPath).audioCodec("libmp3lame");
+  convertAudio({ originPath }) {
+    return ffmpeg(originPath).audioCodec("libmp3lame");
   }
 
   // 合并
-  convertMerge(inputPath) {
-    let [videoPath, aidioPath] = inputPath;
+  convertMerge({ originPath }) {
+    let [videoPath, aidioPath] = originPath;
     return ffmpeg(videoPath)
       .input(aidioPath)
       .videoCodec(this.vcodec)
@@ -141,41 +150,51 @@ class Fluentffmpeg {
   }
 
   // 剪切视频
-  convertCutVideo(inputPath, time) {
+  convertCutVideo({ originPath, time }) {
     let [startTime, endTime] = time;
     let duration = endTime - startTime;
-    return ffmpeg(inputPath)
+    return ffmpeg(originPath)
       .setStartTime(startTime)
       .setDuration(duration)
       .outputOptions("-vcodec copy")
       .outputOptions("-acodec copy");
+    // .outputOptions('-metadata', 'title=song x') 写入媒体信息
   }
 
   // 剪切音频
-  convertCutAudio(inputPath, time) {
+  convertCutAudio({ originPath, time }) {
     let [startTime, endTime] = time;
     let duration = endTime - startTime;
-    return ffmpeg(inputPath)
+    return ffmpeg(originPath)
       .setStartTime(startTime)
       .setDuration(duration)
       .outputOptions("-acodec copy");
   }
 
-  // GIF
-  convertGIF(inputPath) {
-    return ffmpeg(inputPath)
-      .size("320x180")
-      .outputOptions("-r 15");
-  }
-  
-  async getMediaInfo(inputPath) {
-    try {
-      let info = await this.getInfo(inputPath);
-      let mediaInfo = await this._gatherData(info);
-      return mediaInfo
-    } catch (error) {
-      console.log(error);
-    }
+  // 视频转 gif
+  // ffmpeg -i original.mp4 -vf fps=30,scale=480:-1::flags=lanczos,palettegen palette.png
+  // ffmpeg -i original.mp4 -i palette.png -filter_complex 'fps=30,scale=-1:-1:flags=lanczos[x]; [x][1:v]paletteuse' palette.gif
+  async convertGIF(originPath, onProgress, outputPath) {
+    // 生成调色板
+    const palettePath = tmp.tmpNameSync({ postfix: ".png" });
+    await this.run(
+      onProgress,
+      ffmpeg(originPath).addOptions([
+        "-vf",
+        "fps=15,scale=480:-1::flags=lanczos,palettegen"
+      ]),
+      palettePath
+    );
+    // 转码
+    await this.run(
+      onProgress,
+      ffmpeg(originPath)
+        .addOptions(["-i", palettePath])
+        .complexFilter([
+          "fps=15,scale=480:-1:flags=lanczos[x]; [x][1:v]paletteuse"
+        ]),
+      outputPath
+    );
   }
 
   // 解析并整合媒体相关信息
@@ -208,7 +227,8 @@ class Fluentffmpeg {
   _getFilename(filename) {
     const path = require("path");
     const filenameArr = filename.split(path.sep);
-    return filenameArr[filenameArr.length - 1].split(".")[0];
+    let fullName = filenameArr[filenameArr.length - 1];
+    return fullName.slice(0, fullName.lastIndexOf("."));
   }
 
   // 获取fps
@@ -221,6 +241,8 @@ class Fluentffmpeg {
   _dateNow() {
     return new Date()
       .toLocaleString()
+      .replace(/[\u4e00-\u9fa5]/g, "")
+      .replace(/\s+/g, "_")
       .replace(/\//g, "-")
       .replace(/\:/g, "-");
   }
