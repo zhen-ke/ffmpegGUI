@@ -59,7 +59,7 @@ class Fluentffmpeg {
     let originPath = inputPath.length > 1 ? inputPath : inputPath[0];
     try {
       let info = await this.getInfo(originPath);
-      await this._gatherData(info);
+      await this._gatherData(info, outputPath);
       if (format === "gif") {
         this.convertGIF(
           originPath,
@@ -74,6 +74,7 @@ class Fluentffmpeg {
         );
       }
     } catch (error) {
+      this.deskNotification("文件转换失败！", error);
       console.error(error);
     }
   }
@@ -118,6 +119,7 @@ class Fluentffmpeg {
         })
         .on("end", () => {
           onProgress(0);
+          this.deskNotification("文件转换成功！", "点击以在窗口中显示该文件");
           resolve("success");
         })
         .on("error", err => {
@@ -198,7 +200,7 @@ class Fluentffmpeg {
   }
 
   // 解析并整合媒体相关信息
-  _gatherData(data) {
+  _gatherData(data, outputPath) {
     let stream = data.streams[0];
     let {
       format: {
@@ -218,7 +220,8 @@ class Fluentffmpeg {
       duration,
       bit_rate: parseInt(bit_rate / 1000) * 1.5,
       tags,
-      fileName: this._getFilename(filename)
+      fileName: this._getFilename(filename),
+      outputPath
     };
     return this.metaData;
   }
@@ -236,6 +239,7 @@ class Fluentffmpeg {
     const parts = fpsStr.split("/").map(v => parseInt(v, 10));
     return parts[0] / parts[1];
   }
+  
   // 解析时间
   timetrans(date) {
     let d = new Date((date + "").length <= 10 ? date * 1000 : +date);
@@ -256,6 +260,23 @@ class Fluentffmpeg {
       )
     );
   }
+
+  // 打开文件或者文件夹
+  openFolder(filepath) {
+    const { shell } = require("electron");
+    shell.openItem(filepath);
+  }
+
+  // 桌面通知
+  deskNotification(title, body) {
+    let myNotification = new Notification(title, {
+      body
+    });
+    myNotification.onclick = () => {
+      this.openFolder(this.metaData.outputPath);
+    };
+  }
+
   // 获取当前时间
   _dateNow() {
     return this.timetrans(new Date().getTime());

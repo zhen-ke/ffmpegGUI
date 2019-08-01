@@ -1,4 +1,6 @@
 import { app, BrowserWindow, Menu } from "electron";
+const { platform } = process
+
 const template = [
   {
     label: "Application",
@@ -89,6 +91,12 @@ app.on("activate", () => {
     createWindow();
   }
 });
+
+// 在 win 下，启用 electron 桌面通知后,修改默认通知应用名 electron.app.Electron 为自己应用的名称
+if (platform === "win32" && platform === "win64") {
+  app.setAppUserModelId("ffmpegGUI")
+}
+
 /**
  * Auto Updater
  *
