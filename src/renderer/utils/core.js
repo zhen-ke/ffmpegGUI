@@ -85,7 +85,7 @@ class Fluentffmpeg {
       let mediaInfo = await this._gatherData(info);
       let hwaccels = await this._getAvailableHwaccels();
       console.log(hwaccels);
-      this.vcodec = !hwaccels.length ? hwaccels[0] : "libx264"; //如果不支持硬解就用软解
+      this.vcodec = hwaccels.length ? hwaccels[0] : "libx264"; //如果不支持硬解就用软解
       return mediaInfo;
     } catch (error) {
       console.log(error);
