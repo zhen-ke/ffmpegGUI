@@ -183,7 +183,7 @@ class Fluentffmpeg {
       onProgress,
       ffmpeg(originPath).addOptions([
         "-vf",
-        "fps=15,scale=480:-1::flags=lanczos,palettegen"
+        "fps=15,scale=-1:-1::flags=lanczos,palettegen"
       ]),
       palettePath
     );
@@ -191,9 +191,9 @@ class Fluentffmpeg {
     await this.run(
       onProgress,
       ffmpeg(originPath)
-        .addOptions(["-i", palettePath])
+        .addOptions(["-i", palettePath]) // "-ss", 0, "-to", 5
         .complexFilter([
-          "fps=15,scale=480:-1:flags=lanczos[x]; [x][1:v]paletteuse"
+          "fps=15,scale=-1:-1:flags=lanczos[x]; [x][1:v]paletteuse"
         ]),
       outputPath
     );
@@ -239,7 +239,7 @@ class Fluentffmpeg {
     const parts = fpsStr.split("/").map(v => parseInt(v, 10));
     return parts[0] / parts[1];
   }
-  
+
   // 解析时间
   timetrans(date) {
     let d = new Date((date + "").length <= 10 ? date * 1000 : +date);
@@ -268,6 +268,7 @@ class Fluentffmpeg {
   }
 
   // 桌面通知
+  // new Notification("title", {body: "message", icon: "path/to/image.png"});
   deskNotification(title, body) {
     let myNotification = new Notification(title, {
       body
