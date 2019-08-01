@@ -236,15 +236,29 @@ class Fluentffmpeg {
     const parts = fpsStr.split("/").map(v => parseInt(v, 10));
     return parts[0] / parts[1];
   }
-
+  // 解析时间
+  timetrans(date) {
+    let d = new Date((date + "").length <= 10 ? date * 1000 : +date);
+    let day = d.getDate();
+    let month = d.getMonth() + 1;
+    let h = d.getHours();
+    let m = d.getMinutes();
+    let s = d.getSeconds();
+    return (
+      [
+        d.getFullYear(),
+        month < 10 ? "0" + month : month,
+        day < 10 ? "0" + day : day
+      ].join("-") +
+      "_" +
+      [h < 10 ? "0" + h : h, m < 10 ? "0" + m : m, s < 10 ? "0" + s : s].join(
+        "-"
+      )
+    );
+  }
   // 获取当前时间
   _dateNow() {
-    return new Date()
-      .toLocaleString()
-      .replace(/[\u4e00-\u9fa5]/g, "")
-      .replace(/\s+/g, "_")
-      .replace(/\//g, "-")
-      .replace(/\:/g, "-");
+    return this.timetrans(new Date().getTime());
   }
 
   // 停止转码
