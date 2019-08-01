@@ -122,15 +122,9 @@ export default {
       video: "",
       audio: "",
       save: "",
-      command: null,
       progress: 0,
       activeTab: "video",
-      bit_rate: 0,
-      filename: "",
-      decoding:
-        process.platform === "darwin" ? "h264_videotoolbox" : "h264_qsv", // 默认：硬解（mac: h264_videotoolbox win: h264_qsv）  软解：libx265
       duration: 0,
-      tags: {},
       cutAudioMarks: {},
       cutAudioValue: [0, 0]
     };
@@ -189,6 +183,7 @@ export default {
       ffmpeg.getMediaInfo(media).then(it => {
         let { duration } = it;
         console.log(it)
+        this.duration = duration
         this.cutAudioValue = [0, duration];
         this.cutAudioMarks = {
           0: "0:00:00",
