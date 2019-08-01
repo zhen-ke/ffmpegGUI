@@ -50,8 +50,7 @@ class Fluentffmpeg {
   constructor() {
     this.metaData = {};
     this.command = null;
-    this.vcodec =
-      process.platform === "darwin" ? "h264_videotoolbox" : "h264_qsv";
+    this.vcodec = "";
   }
 
   // 开始转码
@@ -84,6 +83,9 @@ class Fluentffmpeg {
     try {
       let info = await this.getInfo(inputPath);
       let mediaInfo = await this._gatherData(info);
+      let hwaccels = await this._getAvailableHwaccels();
+      console.log(hwaccels);
+      this.vcodec = !hwaccels.length ? hwaccels[0] : "libx264"; //如果不支持硬解就用软解
       return mediaInfo;
     } catch (error) {
       console.log(error);
@@ -287,6 +289,44 @@ class Fluentffmpeg {
   stop() {
     this.command.kill();
   }
+
+  // 获取可用的硬件加速方法
+  _getAvailableHwaccels = () => {
+    return new Promise((resolve, reject) => {
+      ffmpeg.prototype._spawnFfmpeg(
+        ["-hwaccels"],
+        { captureStdout: true, stdoutLines: 0 },
+        (err, stdoutRing) => {
+          if (err) {
+            reject(err);
+          }
+          let stdout = stdoutRing.get();
+          let lines = [
+            ...new Set(
+              stdout
+                .replace("Hardware acceleration methods:", "")
+                .replace(/\n/g, " ")
+                .trim()
+                .split(" ")
+            )
+          ];
+          ffmpeg.getAvailableEncoders((err, encoders) => {
+            if (err) {
+              reject(err);
+            }
+            let reslut = lines.reduce((total, it) => {
+              return total.concat(
+                Object.keys(encoders).filter(encodersName =>
+                  encodersName.includes(it)
+                )
+              );
+            }, []);
+            resolve(reslut);
+          });
+        }
+      );
+    });
+  };
 }
 
 export default Fluentffmpeg;

@@ -114,7 +114,7 @@ import { sec_to_time, getProgress, dateNow, getFilename } from "@/utils/common";
 import Fluentffmpeg from "@/utils/core";
 import AudioSlider from "@/components/AudioSlider";
 
-let ffmpeg = null;
+let ffmpeg = new Fluentffmpeg();
 
 export default {
   data() {
@@ -179,7 +179,6 @@ export default {
     },
     // 读取媒体元数据
     getMediaInfo(media) {
-      ffmpeg = new Fluentffmpeg();
       ffmpeg.getMediaInfo(media).then(it => {
         let { duration } = it;
         console.log(it)
@@ -192,7 +191,6 @@ export default {
       });
     },
     startConversion(command, format, time) {
-      ffmpeg = new Fluentffmpeg();
       let inputPath = [];
       switch (command) {
         case "convertMerge":
