@@ -175,20 +175,39 @@ class Fluentffmpeg {
       .outputOptions("-acodec copy");
   }
 
+  // 执行命令
+  _spawnFfmpeg(commandLine) {
+    return new Promise((resolve, reject) => {
+      ffmpeg.prototype._spawnFfmpeg(
+        commandLine,
+        { captureStdout: true, stdoutLines: 0 },
+        (err, stdoutRing) => {
+          if (err) {
+            reject(err);
+          }
+          resolve(stdoutRing);
+        }
+      );
+    });
+  }
+
   // 视频转 gif
   // ffmpeg -i original.mp4 -vf fps=30,scale=480:-1::flags=lanczos,palettegen palette.png
   // ffmpeg -i original.mp4 -i palette.png -filter_complex 'fps=30,scale=-1:-1:flags=lanczos[x]; [x][1:v]paletteuse' palette.gif
   async convertGIF(originPath, onProgress, outputPath) {
     // 生成调色板
     const palettePath = tmp.tmpNameSync({ postfix: ".png" });
-    await this.run(
-      onProgress,
-      ffmpeg(originPath).addOptions([
-        "-vf",
-        "fps=15,scale=-1:-1::flags=lanczos,palettegen"
-      ]),
+    await this._spawnFfmpeg([
+      "-ss",
+      40,
+      "-t",
+      5,
+      "-i",
+      originPath,
+      "-vf",
+      "fps=15,scale=-1:-1::flags=lanczos,palettegen",
       palettePath
-    );
+    ]);
     // 转码
     await this.run(
       onProgress,
