@@ -111,10 +111,10 @@
 
 <script>
 import { sec_to_time, getProgress, dateNow, getFilename } from "@/utils/common";
-import Fluentffmpeg from "@/utils/core";
+import ChildProcessFFmpeg from "@/utils/core";
 import AudioSlider from "@/components/AudioSlider";
 
-let ffmpeg = new Fluentffmpeg();
+let ffmpeg = new ChildProcessFFmpeg();
 
 export default {
   data() {
@@ -181,8 +181,8 @@ export default {
     getMediaInfo(media) {
       ffmpeg.getMediaInfo(media).then(it => {
         let { duration } = it;
-        console.log(it)
-        this.duration = duration
+        console.log(it);
+        this.duration = duration;
         this.cutAudioValue = [0, duration];
         this.cutAudioMarks = {
           0: "0:00:00",
@@ -217,7 +217,8 @@ export default {
       ffmpeg.convert({ ...params });
     },
     onProgress(data) {
-      this.progress = +data;
+      console.log(data);
+      // this.progress = +data;
     },
     // 开始转码
     startCommand() {

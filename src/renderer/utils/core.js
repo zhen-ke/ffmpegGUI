@@ -1,9 +1,11 @@
+import { resolve } from "path";
 import ffmpeg from "fluent-ffmpeg";
 import ffmpegStatic from "ffmpeg-static";
 import ffprobeStatic from "ffprobe-static";
-import { resolve } from "path";
 
 const tmp = require("tmp");
+const exec = require("child_process").exec;
+const spawn = require("child_process").spawn;
 
 let ffmpegPath = ffmpegStatic.path;
 let ffprobePath = ffprobeStatic.path;
@@ -45,43 +47,195 @@ if (process.env.NODE_ENV == "production") {
 ffmpeg.setFfmpegPath(ffmpegPath);
 ffmpeg.setFfprobePath(ffprobePath);
 
-// fluent-ffmpeg
-class Fluentffmpeg {
+class ChildProcessFFmpeg {
   constructor() {
-    this.metaData = {};
-    this.command = null;
+    this.ffmpeg = null;
     this.vcodec = "";
+    this.metaData = {};
+    this.outputPath = "";
   }
 
-  // 开始转码
+  // convert
   async convert({ inputPath, outputPath, onProgress, command, format, time }) {
     let originPath = inputPath.length > 1 ? inputPath : inputPath[0];
+
     try {
-      let info = await this.getInfo(originPath);
-      await this._gatherData(info, outputPath);
-      if (format === "gif") {
-        this.convertGIF(
-          originPath,
-          onProgress,
-          `${outputPath}/${this.metaData.fileName}${this._dateNow()}.${format}`
+      this.outputPath = outputPath;
+      let info = await this._getInfo(originPath);
+      this.metaData = await this._gatherData(info);
+
+      Promise.resolve(
+        this[command]({
+          inputPath: originPath,
+          outputPath,
+          time
+        })
+      ).then(it => {
+        this.spawnFFmpeg(
+          it.concat(
+            `${outputPath}/${
+              this.metaData.fileName
+            }${this._dateNow()}.${format}`
+          ),
+          onProgress
         );
-      } else {
-        await this.run(
-          onProgress,
-          this[command]({ originPath, time }),
-          `${outputPath}/${this.metaData.fileName}${this._dateNow()}.${format}`
-        );
-      }
+      });
     } catch (error) {
       this.deskNotification("文件转换失败！", error);
       console.error(error);
     }
   }
 
+  // child_process run ffmpeg
+  spawnFFmpeg(commandLine, onProgress) {
+    console.log(commandLine);
+    exec(`${ffmpegPath} -h`, err => {
+      if (err) {
+        console.log(err);
+      }
+      this.ffmpeg = spawn(`${ffmpegPath}`, commandLine);
+      // 捕获标准输出
+      this.ffmpeg.stderr.on("data", data => {
+        onProgress(data.toString());
+      });
+      // 注册子进程关闭事件
+      this.ffmpeg.on("exit", (code, signal) => {
+        console.log(code, signal);
+        this.deskNotification("文件转换成功！", "点击以在窗口中显示该文件");
+      });
+      // 注册子进程错误事件
+      this.ffmpeg.on("error", err => console.log(err));
+    });
+  }
+
+  // stop ffmpeg
+  stop() {
+    this.ffmpeg.kill("SIGINT");
+  }
+
+  // convert Video
+  // ffmpeg -i test.webm -vcodec h264_videotoolbox -b:v 1744.5k test.mp4
+  convertVideo({ inputPath }) {
+    return [
+      "-i",
+      inputPath,
+      "-vcodec",
+      this.vcodec,
+      "-b:v",
+      this.metaData.bit_rate
+    ];
+  }
+
+  // convert Audio
+  // ffmpeg -i test.flac -acodec libmp3lame test.mp3
+  convertAudio({ inputPath }) {
+    return ["-i", inputPath, "-acodec", "libmp3lame"];
+  }
+
+  // Cut Audio
+  // ffmpeg -i test.mp3 -ss 66 -t 110 -acodec copy test.mp3
+  convertCutAudio({ inputPath, time }) {
+    let [startTime, endTime] = time;
+    let duration = endTime - startTime;
+    return [
+      "-i",
+      inputPath,
+      "-ss",
+      startTime,
+      "-t",
+      duration,
+      "-acodec",
+      "copy"
+    ];
+  }
+
+  // Cut Video
+  // ffmpeg -i test.mp4 -ss 66 -t 110 -vcode copy -acodec copy test.mp4
+  // ('-metadata', 'title=song x') 写入媒体信息
+  convertCutVideo({ inputPath, time }) {
+    let [startTime, endTime] = time;
+    let duration = endTime - startTime;
+    return [
+      "-i",
+      inputPath,
+      "-ss",
+      startTime,
+      "-t",
+      duration,
+      "-vcodec",
+      "copy",
+      "-acodec",
+      "copy"
+    ];
+  }
+
+  // Merge
+  // ffmpeg -y -i filename1 -i filename2 -vcode copy -acodec copy test.mp4
+  convertMerge({ inputPath }) {
+    let [videoPath, aidioPath] = inputPath;
+    return [
+      "-i",
+      videoPath,
+      "-i",
+      aidioPath,
+      "-vcodec",
+      "copy",
+      "-acodec",
+      "copy"
+    ];
+  }
+
+  // convert GIF
+  // ffmpeg -ss 2.6 -t 1.3 -i video.mp4 -vf fps = 15，scale = 320：-1：flags = lanczos，palettegen palette.png
+  // ffmpeg -ss 2.6 -t 1.3 -i video.mp4 -i palette.png -filter_complex “fps=15,scale=400:-1:flags=lanczos[x];[x][1:v]paletteuse” sixthtry.gif
+  async convertGIF({ inputPath }) {
+    // 生成调色板
+    const palettePath = tmp.tmpNameSync({ postfix: ".png" });
+    await this._run([
+      "-ss",
+      0,
+      "-t",
+      5,
+      "-i",
+      inputPath,
+      "-vf",
+      "fps=15,scale=-1:-1::flags=lanczos,palettegen",
+      palettePath
+    ]);
+    // 生成gif
+    return [
+      "-ss",
+      0,
+      "-t",
+      5,
+      "-i",
+      inputPath,
+      "-i",
+      palettePath,
+      "-filter_complex",
+      "fps=15,scale=-1:-1:flags=lanczos[x]; [x][1:v]paletteuse"
+    ];
+  }
+
+  // run
+  _run(commandLine) {
+    return new Promise((resolve, reject) => {
+      exec(`${ffmpegPath} -h`, err => {
+        if (err) {
+          reject(err);
+        }
+        this.ffmpeg = spawn(`${ffmpegPath}`, commandLine);
+        this.ffmpeg.on("exit", (code, signal) => {
+          resolve();
+        });
+      });
+    });
+  }
+
   // 读取媒体信息
   async getMediaInfo(inputPath) {
     try {
-      let info = await this.getInfo(inputPath);
+      let info = await this._getInfo(inputPath);
       let mediaInfo = await this._gatherData(info);
       let hwaccels = await this._getAvailableHwaccels();
       console.log(hwaccels);
@@ -93,7 +247,7 @@ class Fluentffmpeg {
   }
 
   // 获取媒体相关信息
-  getInfo(inputPath) {
+  _getInfo(inputPath) {
     return new Promise((resolve, reject) => {
       ffmpeg()
         .input(inputPath)
@@ -107,121 +261,8 @@ class Fluentffmpeg {
     });
   }
 
-  // 执行 ffmpeg
-  run(onProgress, command, savePath) {
-    return new Promise((resolve, reject) => {
-      this.command = command
-        .on("start", commandLine => {
-          console.log("Spawned Ffmpeg with command: " + commandLine);
-        })
-        .on("progress", progress => {
-          onProgress(
-            progress && progress.percent && progress.percent.toFixed(2)
-          );
-        })
-        .on("end", () => {
-          onProgress(0);
-          this.deskNotification("文件转换成功！", "点击以在窗口中显示该文件");
-          resolve("success");
-        })
-        .on("error", err => {
-          reject(err);
-        })
-        .saveToFile(savePath);
-    });
-  }
-
-  // 转视频
-  convertVideo({ originPath }) {
-    return ffmpeg(originPath)
-      .videoCodec(this.vcodec)
-      .videoBitrate(this.metaData.bit_rate);
-  }
-
-  // 转音频
-  convertAudio({ originPath }) {
-    return ffmpeg(originPath).audioCodec("libmp3lame");
-  }
-
-  // 合并
-  convertMerge({ originPath }) {
-    let [videoPath, aidioPath] = originPath;
-    return ffmpeg(videoPath)
-      .input(aidioPath)
-      .videoCodec(this.vcodec)
-      .videoBitrate(this.metaData.bit_rate)
-      .audioCodec("libmp3lame");
-  }
-
-  // 剪切视频
-  convertCutVideo({ originPath, time }) {
-    let [startTime, endTime] = time;
-    let duration = endTime - startTime;
-    return ffmpeg(originPath)
-      .setStartTime(startTime)
-      .setDuration(duration)
-      .outputOptions("-vcodec copy")
-      .outputOptions("-acodec copy");
-    // .outputOptions('-metadata', 'title=song x') 写入媒体信息
-  }
-
-  // 剪切音频
-  convertCutAudio({ originPath, time }) {
-    let [startTime, endTime] = time;
-    let duration = endTime - startTime;
-    return ffmpeg(originPath)
-      .setStartTime(startTime)
-      .setDuration(duration)
-      .outputOptions("-acodec copy");
-  }
-
-  // 执行命令
-  _spawnFfmpeg(commandLine) {
-    return new Promise((resolve, reject) => {
-      ffmpeg.prototype._spawnFfmpeg(
-        commandLine,
-        { captureStdout: true, stdoutLines: 0 },
-        (err, stdoutRing) => {
-          if (err) {
-            reject(err);
-          }
-          resolve(stdoutRing);
-        }
-      );
-    });
-  }
-
-  // 视频转 gif
-  // ffmpeg -ss 2.6 -t 1.3 -i MVI_7035.MOV -vf fps = 15，scale = 320：-1：flags = lanczos，palettegen palette.png
-  // ffmpeg -ss 2.6 -t 1.3 -i MVI_7035.MOV -i palette.png -filter_complex “fps=15,scale=400:-1:flags=lanczos[x];[x][1:v]paletteuse” sixthtry.gif
-  async convertGIF(originPath, onProgress, outputPath) {
-    // 生成调色板
-    const palettePath = tmp.tmpNameSync({ postfix: ".png" });
-    await this._spawnFfmpeg([
-      "-ss",
-      40,
-      "-t",
-      5,
-      "-i",
-      originPath,
-      "-vf",
-      "fps=15,scale=-1:-1::flags=lanczos,palettegen",
-      palettePath
-    ]);
-    // 转码
-    await this.run(
-      onProgress,
-      ffmpeg(originPath)
-        .addOptions(["-i", palettePath]) // "-ss", 0, "-to", 5
-        .complexFilter([
-          "fps=15,scale=-1:-1:flags=lanczos[x]; [x][1:v]paletteuse"
-        ]),
-      outputPath
-    );
-  }
-
   // 解析并整合媒体相关信息
-  _gatherData(data, outputPath) {
+  _gatherData(data) {
     let stream = data.streams[0];
     let {
       format: {
@@ -233,18 +274,16 @@ class Fluentffmpeg {
       }
     } = data;
 
-    this.metaData = {
+    return {
       fps: this._getFps(stream["r_frame_rate"]),
       width: stream.width,
       height: stream.height,
       start: parseInt(start_time) || 0,
       duration,
-      bit_rate: parseInt(bit_rate / 1000) * 1.5,
+      bit_rate: parseInt(bit_rate / 1000) * 1.5 + "K",
       tags,
-      fileName: this._getFilename(filename),
-      outputPath
+      fileName: this._getFilename(filename)
     };
-    return this.metaData;
   }
 
   // 获取文件名称
@@ -261,8 +300,30 @@ class Fluentffmpeg {
     return parts[0] / parts[1];
   }
 
+  // 打开文件或者文件夹
+  _openFolder(filepath) {
+    const { shell } = require("electron");
+    shell.openItem(filepath);
+  }
+
+  // 桌面通知
+  // new Notification("title", {body: "message", icon: "path/to/image.png"});
+  deskNotification(title, body) {
+    let myNotification = new Notification(title, {
+      body
+    });
+    myNotification.onclick = () => {
+      this._openFolder(this.outputPath);
+    };
+  }
+
+  // 获取当前时间
+  _dateNow() {
+    return this._timetrans(new Date().getTime());
+  }
+
   // 解析时间
-  timetrans(date) {
+  _timetrans(date) {
     let d = new Date((date + "").length <= 10 ? date * 1000 : +date);
     let day = d.getDate();
     let month = d.getMonth() + 1;
@@ -280,33 +341,6 @@ class Fluentffmpeg {
         "-"
       )
     );
-  }
-
-  // 打开文件或者文件夹
-  openFolder(filepath) {
-    const { shell } = require("electron");
-    shell.openItem(filepath);
-  }
-
-  // 桌面通知
-  // new Notification("title", {body: "message", icon: "path/to/image.png"});
-  deskNotification(title, body) {
-    let myNotification = new Notification(title, {
-      body
-    });
-    myNotification.onclick = () => {
-      this.openFolder(this.metaData.outputPath);
-    };
-  }
-
-  // 获取当前时间
-  _dateNow() {
-    return this.timetrans(new Date().getTime());
-  }
-
-  // 停止转码
-  stop() {
-    this.command.kill();
   }
 
   // 获取可用的硬件加速方法
@@ -348,4 +382,4 @@ class Fluentffmpeg {
   };
 }
 
-export default Fluentffmpeg;
+export default ChildProcessFFmpeg;
