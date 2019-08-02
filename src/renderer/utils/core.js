@@ -192,8 +192,8 @@ class Fluentffmpeg {
   }
 
   // 视频转 gif
-  // ffmpeg -i original.mp4 -vf fps=30,scale=480:-1::flags=lanczos,palettegen palette.png
-  // ffmpeg -i original.mp4 -i palette.png -filter_complex 'fps=30,scale=-1:-1:flags=lanczos[x]; [x][1:v]paletteuse' palette.gif
+  // ffmpeg -ss 2.6 -t 1.3 -i MVI_7035.MOV -vf fps = 15，scale = 320：-1：flags = lanczos，palettegen palette.png
+  // ffmpeg -ss 2.6 -t 1.3 -i MVI_7035.MOV -i palette.png -filter_complex “fps=15,scale=400:-1:flags=lanczos[x];[x][1:v]paletteuse” sixthtry.gif
   async convertGIF(originPath, onProgress, outputPath) {
     // 生成调色板
     const palettePath = tmp.tmpNameSync({ postfix: ".png" });
