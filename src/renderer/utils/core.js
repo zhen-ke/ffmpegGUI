@@ -2,6 +2,7 @@ import { resolve } from "path";
 import ffmpeg from "fluent-ffmpeg";
 import ffmpegStatic from "ffmpeg-static";
 import ffprobeStatic from "ffprobe-static";
+import { time_to_sec } from "@/utils/common";
 
 const tmp = require("tmp");
 const exec = require("child_process").exec;
@@ -96,7 +97,9 @@ class ChildProcessFFmpeg {
       this.ffmpeg = spawn(`${ffmpegPath}`, commandLine);
       // 捕获标准输出
       this.ffmpeg.stderr.on("data", data => {
-        onProgress(data.toString());
+        onProgress(
+          this.extractProgress(this.metaData.duration, data.toString())
+        );
       });
       // 注册子进程关闭事件
       this.ffmpeg.on("exit", (code, signal) => {
@@ -188,26 +191,33 @@ class ChildProcessFFmpeg {
   // convert GIF
   // ffmpeg -ss 2.6 -t 1.3 -i video.mp4 -vf fps = 15，scale = 320：-1：flags = lanczos，palettegen palette.png
   // ffmpeg -ss 2.6 -t 1.3 -i video.mp4 -i palette.png -filter_complex “fps=15,scale=400:-1:flags=lanczos[x];[x][1:v]paletteuse” sixthtry.gif
-  async convertGIF({ inputPath }) {
+  async convertGIF({ inputPath, time }) {
+    let [startTime, endTime] = time;
+    let duration = endTime - startTime;
+
+    this.metaData = { ...this.metaData, duration };
+
     // 生成调色板
     const palettePath = tmp.tmpNameSync({ postfix: ".png" });
+
     await this._run([
       "-ss",
-      0,
+      startTime,
       "-t",
-      5,
+      duration,
       "-i",
       inputPath,
       "-vf",
       "fps=15,scale=-1:-1::flags=lanczos,palettegen",
       palettePath
     ]);
+
     // 生成gif
     return [
       "-ss",
-      0,
+      startTime,
       "-t",
-      5,
+      duration,
       "-i",
       inputPath,
       "-i",
@@ -215,6 +225,55 @@ class ChildProcessFFmpeg {
       "-filter_complex",
       "fps=15,scale=-1:-1:flags=lanczos[x]; [x][1:v]paletteuse"
     ];
+  }
+
+  // 字符转对象
+  parseProgressLine(line) {
+    var progress = {};
+
+    // Remove all spaces after = and trim
+    line = line.replace(/=\s+/g, "=").trim();
+    var progressParts = line.split(" ");
+
+    // Split every progress part by "=" to get key and value
+    for (var i = 0; i < progressParts.length; i++) {
+      var progressSplit = progressParts[i].split("=", 2);
+      var key = progressSplit[0];
+      var value = progressSplit[1];
+
+      // This is not a progress line
+      if (typeof value === "undefined") return null;
+
+      progress[key] = value;
+    }
+
+    return progress;
+  }
+  
+  // 获取进度
+  extractProgress(duration, stderrLine) {
+    var progress = this.parseProgressLine(stderrLine);
+
+    if (progress) {
+      // build progress report object
+      var ret = {
+        frames: parseInt(progress.frame, 10),
+        currentFps: parseInt(progress.fps, 10),
+        currentKbps: progress.bitrate
+          ? parseFloat(progress.bitrate.replace("kbits/s", ""))
+          : 0,
+        targetSize: parseInt(progress.size || progress.Lsize, 10),
+        timemark: progress.time
+      };
+
+      // calculate percent progress using duration
+      if (duration) {
+        var duration = Number(duration);
+        if (!isNaN(duration))
+          ret.percent = (time_to_sec(ret.timemark) / duration) * 100;
+      }
+      return ret.percent.toFixed(2);
+    }
   }
 
   // run

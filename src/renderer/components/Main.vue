@@ -217,8 +217,7 @@ export default {
       ffmpeg.convert({ ...params });
     },
     onProgress(data) {
-      console.log(data);
-      // this.progress = +data;
+      this.progress = +data;
     },
     // 开始转码
     startCommand() {
@@ -256,7 +255,7 @@ export default {
         this.startConversion("convertCutVideo", "mp4", this.cutAudioValue);
       }
       if (this.activeTab === "gif") {
-        this.startConversion("convertGIF", "gif");
+        this.startConversion("convertGIF", "gif", [0, 5]);
         // let videoToGif = [
         //   "-i",
         //   this.video,
