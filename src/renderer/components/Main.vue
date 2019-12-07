@@ -194,16 +194,16 @@ export default {
       let inputPath = [];
       switch (command) {
         case "convertMerge":
-          inputPath = [this.videoPath, this.audioPath];
+          inputPath = { videoPath: this.videoPath, aidioPath: this.audioPath };
           break;
         case "convertAudio":
-          inputPath = [this.audioPath];
+          inputPath = this.audioPath;
           break;
         case "convertCutAudio":
-          inputPath = [this.audioPath];
+          inputPath = this.audioPath;
           break;
         default:
-          inputPath = [this.videoPath];
+          inputPath = this.videoPath;
           break;
       }
       let params = {

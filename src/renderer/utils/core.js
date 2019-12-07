@@ -57,37 +57,16 @@ class ChildProcessFFmpeg {
   }
 
   // convert
-  async convert({ inputPath, outputPath, onProgress, command, format, time }) {
-    let originPath = inputPath.length > 1 ? inputPath : inputPath[0];
-
+  async convert({ command, onProgress, ...params }) {
     try {
-      this.outputPath = outputPath;
-      let info = await this._getInfo(originPath);
-      this.metaData = await this._gatherData(info);
-
-      Promise.resolve(
-        this[command]({
-          inputPath: originPath,
-          outputPath,
-          time
-        })
-      ).then(it => {
-        this.spawnFFmpeg(
-          it.concat(
-            `${outputPath}/${
-              this.metaData.fileName
-            }${this._dateNow()}.${format}`
-          ),
-          onProgress
-        );
-      });
+      const commandLine = await this[command]({ ...params });
+      this.spawnFFmpeg(commandLine, onProgress);
     } catch (error) {
       this.deskNotification("文件转换失败！", error);
-      console.error(error);
     }
   }
 
-  // child_process run ffmpeg
+  // node run ffmpeg
   spawnFFmpeg(commandLine, onProgress) {
     console.log(commandLine);
     exec(`${ffmpegPath} -h`, err => {
@@ -116,28 +95,42 @@ class ChildProcessFFmpeg {
     this.ffmpeg.kill("SIGINT");
   }
 
+  // 生成文件保存地址和文件名
+  outputPathGenerate(outputPath, format) {
+    return `${outputPath}/${
+      this.metaData.fileName
+    }${this._dateNow()}.${format}`;
+  }
+
   // convert Video
   // ffmpeg -i test.webm -vcodec h264_videotoolbox -b:v 1744.5k test.mp4
-  convertVideo({ inputPath }) {
+  convertVideo({ inputPath, outputPath, format }) {
     return [
       "-i",
       inputPath,
       "-vcodec",
       this.vcodec,
       "-b:v",
-      this.metaData.bit_rate
+      this.metaData.bit_rate,
+      this.outputPathGenerate(outputPath, format)
     ];
   }
 
   // convert Audio
   // ffmpeg -i test.flac -acodec libmp3lame test.mp3
-  convertAudio({ inputPath }) {
-    return ["-i", inputPath, "-acodec", "libmp3lame"];
+  convertAudio({ inputPath, outputPath, format }) {
+    return [
+      "-i",
+      inputPath,
+      "-acodec",
+      "libmp3lame",
+      this.outputPathGenerate(outputPath, format)
+    ];
   }
 
   // Cut Audio
   // ffmpeg -i test.mp3 -ss 66 -t 110 -acodec copy test.mp3
-  convertCutAudio({ inputPath, time }) {
+  convertCutAudio({ inputPath, time, outputPath, format }) {
     let [startTime, endTime] = time;
     let duration = endTime - startTime;
     return [
@@ -148,14 +141,15 @@ class ChildProcessFFmpeg {
       "-t",
       duration,
       "-acodec",
-      "copy"
+      "copy",
+      this.outputPathGenerate(outputPath, format)
     ];
   }
 
   // Cut Video
   // ffmpeg -i test.mp4 -ss 66 -t 110 -vcode copy -acodec copy test.mp4
   // ('-metadata', 'title=song x') 写入媒体信息
-  convertCutVideo({ inputPath, time }) {
+  convertCutVideo({ inputPath, time, outputPath, format }) {
     let [startTime, endTime] = time;
     let duration = endTime - startTime;
     return [
@@ -165,33 +159,31 @@ class ChildProcessFFmpeg {
       startTime,
       "-t",
       duration,
-      "-vcodec",
+      "-c",
       "copy",
-      "-acodec",
-      "copy"
+      this.outputPathGenerate(outputPath, format)
     ];
   }
 
   // Merge
   // ffmpeg -y -i filename1 -i filename2 -vcode copy -acodec copy test.mp4
-  convertMerge({ inputPath }) {
-    let [videoPath, aidioPath] = inputPath;
+  convertMerge({ inputPath, outputPath, format }) {
+    let {videoPath, aidioPath} = inputPath;
     return [
       "-i",
       videoPath,
       "-i",
       aidioPath,
-      "-vcodec",
+      "-c",
       "copy",
-      "-acodec",
-      "copy"
+      this.outputPathGenerate(outputPath, format)
     ];
   }
 
   // convert GIF
   // ffmpeg -ss 2.6 -t 1.3 -i video.mp4 -vf fps = 15，scale = 320：-1：flags = lanczos，palettegen palette.png
   // ffmpeg -ss 2.6 -t 1.3 -i video.mp4 -i palette.png -filter_complex “fps=15,scale=400:-1:flags=lanczos[x];[x][1:v]paletteuse” sixthtry.gif
-  async convertGIF({ inputPath, time }) {
+  async convertGIF({ inputPath, time, outputPath, format }) {
     let [startTime, endTime] = time;
     let duration = endTime - startTime;
 
@@ -223,7 +215,8 @@ class ChildProcessFFmpeg {
       "-i",
       palettePath,
       "-filter_complex",
-      "fps=15,scale=-1:-1:flags=lanczos[x]; [x][1:v]paletteuse"
+      "fps=15,scale=-1:-1:flags=lanczos[x]; [x][1:v]paletteuse",
+      this.outputPathGenerate(outputPath, format)
     ];
   }
 
@@ -249,7 +242,7 @@ class ChildProcessFFmpeg {
 
     return progress;
   }
-  
+
   // 获取进度
   extractProgress(duration, stderrLine) {
     var progress = this.parseProgressLine(stderrLine);
@@ -295,11 +288,11 @@ class ChildProcessFFmpeg {
   async getMediaInfo(inputPath) {
     try {
       let info = await this._getInfo(inputPath);
-      let mediaInfo = await this._gatherData(info);
+      this.metaData = await this._gatherData(info);
       let hwaccels = await this._getAvailableHwaccels();
       console.log(hwaccels);
       this.vcodec = hwaccels.length ? hwaccels[0] : "libx264"; //如果不支持硬解就用软解
-      return mediaInfo;
+      return this.metaData;
     } catch (error) {
       console.log(error);
     }
