@@ -97,6 +97,7 @@ class ChildProcessFFmpeg {
 
   // 生成文件保存地址和文件名
   outputPathGenerate(outputPath, format) {
+    this.outputPath = outputPath;
     return `${outputPath}/${
       this.metaData.fileName
     }${this._dateNow()}.${format}`;
@@ -168,7 +169,7 @@ class ChildProcessFFmpeg {
   // Merge
   // ffmpeg -y -i filename1 -i filename2 -vcode copy -acodec copy test.mp4
   convertMerge({ inputPath, outputPath, format }) {
-    let {videoPath, aidioPath} = inputPath;
+    let { videoPath, aidioPath } = inputPath;
     return [
       "-i",
       videoPath,
