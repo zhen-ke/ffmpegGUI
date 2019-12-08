@@ -146,8 +146,10 @@ export default {
           return;
         }
       } else {
-        this.msg("路径为空", "warning");
-        return;
+        if (this.entry === "") {
+          this.msg("视频或者路径为空", "warning");
+          return;
+        }
       }
       switch (this.activeTab) {
         case "video":
