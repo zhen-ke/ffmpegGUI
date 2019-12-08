@@ -112,12 +112,15 @@
   "dependencies": {
     "element-ui": "^2.8.2",
     "fluent-ffmpeg": "^2.1.2",
+    "node-pty": "^0.9.0",
     "tmp": "^0.1.0",
     "vue": "^2.5.16",
     "vue-electron": "^1.0.6",
     "vue-router": "^3.0.1",
     "vuex": "^3.0.1",
-    "vuex-electron": "^1.0.0"
+    "vuex-electron": "^1.0.0",
+    "xterm": "4.2.0",
+    "xterm-addon-fit": "^0.3.0"
   },
   "devDependencies": {
     "ffmpeg-static": "^2.4.0",

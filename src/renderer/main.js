@@ -4,6 +4,7 @@ import router from './router'
 import store from './store'
 import ElementUI from 'element-ui'; // element
 import 'element-ui/lib/theme-chalk/index.css'; // element css
+import 'xterm/css/xterm.css'; // xterm css
 
 if (!process.env.IS_WEB) Vue.use(require('vue-electron'))
 

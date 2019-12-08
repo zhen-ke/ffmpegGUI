@@ -76,6 +76,7 @@ class ChildProcessFFmpeg {
       this.ffmpeg = spawn(`${ffmpegPath}`, commandLine);
       // 捕获标准输出
       this.ffmpeg.stderr.on("data", data => {
+        console.log(data.toString());
         onProgress(
           this.extractProgress(this.metaData.duration, data.toString())
         );
@@ -95,12 +96,40 @@ class ChildProcessFFmpeg {
     this.ffmpeg.kill("SIGINT");
   }
 
+  // 编码命令
+  encodeCommandLine(line) {
+    if (!line) return "";
+    return line
+      .reverse()
+      .concat("ffmpeg")
+      .reverse()
+      .join(" ");
+  }
+
+  // 解码命令
+  decodeCommandLine(line) {
+    if (!line) return [];
+    return line
+      .replace("ffmpeg", "")
+      .split(" ")
+      .filter(it => it !== "");
+  }
+
   // 生成文件保存地址和文件名
   outputPathGenerate(outputPath, format) {
     this.outputPath = outputPath;
     return `${outputPath}/${
       this.metaData.fileName
     }${this._dateNow()}.${format}`;
+  }
+
+  // customize
+  customize({ commandLine, onProgress }) {
+    try {
+      this.spawnFFmpeg(this.decodeCommandLine(commandLine), onProgress);
+    } catch (error) {
+      this.deskNotification("文件转换失败！", error);
+    }
   }
 
   // convert Video
