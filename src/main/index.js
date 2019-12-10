@@ -1,5 +1,5 @@
 import { app, BrowserWindow, Menu } from "electron";
-const { platform } = process
+const { platform } = process;
 
 const template = [
   {
@@ -35,9 +35,7 @@ const template = [
   {
     role: "help",
     id: "menu.help",
-    submenu: [
-      { id: "help.toggle-dev-tools", role: "toggledevtools" }
-    ]
+    submenu: [{ id: "help.toggle-dev-tools", role: "toggledevtools" }]
   }
 ];
 /**
@@ -46,7 +44,7 @@ const template = [
  */
 
 // 禁用安全警告
-process.env['ELECTRON_DISABLE_SECURITY_WARNINGS'] = 'true';
+process.env["ELECTRON_DISABLE_SECURITY_WARNINGS"] = "true";
 
 if (process.env.NODE_ENV !== "development") {
   global.__static = require("path")
@@ -70,12 +68,15 @@ function createWindow() {
     titleBarStyle: "hidden",
     width: 1000,
     show: false, //默认隐藏
+    webPreferences: {
+      nodeIntegration: true
+    }
   });
 
   mainWindow.loadURL(winURL);
-  mainWindow.on('ready-to-show', function () {
-    mainWindow.show() // 初始化后再显示
-  })
+  mainWindow.on("ready-to-show", function() {
+    mainWindow.show(); // 初始化后再显示
+  });
   mainWindow.on("closed", () => {
     mainWindow = null;
   });
@@ -98,7 +99,7 @@ app.on("activate", () => {
 
 // 在 win 下，启用 electron 桌面通知后,修改默认通知应用名 electron.app.Electron 为自己应用的名称
 if (platform === "win32" && platform === "win64") {
-  app.setAppUserModelId("ffmpegGUI")
+  app.setAppUserModelId("ffmpegGUI");
 }
 
 /**

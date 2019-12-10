@@ -131,7 +131,10 @@ class ChildProcessFFmpeg {
       this.deskNotification("文件转换失败！", error);
     }
   }
-
+  /*
+  逆时针 90 度
+  ffmpeg -i input.mp4 -metadata:s:v rotate="90" -codec copy output.mp4
+  */
   // convert Video
   // ffmpeg -i test.webm -vcodec h264_videotoolbox -b:v 1744.5k test.mp4
   convertVideo({ inputPath, outputPath, format }) {

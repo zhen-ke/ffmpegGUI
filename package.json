@@ -120,7 +120,8 @@
     "vuex": "^3.0.1",
     "vuex-electron": "^1.0.0",
     "xterm": "4.2.0",
-    "xterm-addon-fit": "^0.3.0"
+    "xterm-addon-fit": "^0.3.0",
+    "xterm-addon-ligatures": "^0.2.1"
   },
   "devDependencies": {
     "ffmpeg-static": "^2.4.0",
@@ -140,7 +141,7 @@
     "css-loader": "^0.28.11",
     "del": "^3.0.0",
     "devtron": "^1.4.0",
-    "electron": "^4.1.5",
+    "electron": "^5.0.12",
     "electron-debug": "^2.2.0",
     "electron-devtools-installer": "^2.2.4",
     "electron-builder": "^20.39.0",
