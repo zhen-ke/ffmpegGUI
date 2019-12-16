@@ -2,12 +2,13 @@
 
 ### 项目说明
 
-基于 electron-vue + ffmpeg 的 GUI
+基于 Electron + Vue + ffmpeg 的 GUI
 
 ### 项目截图
 
-![screenshot1](./screenshot/screenshot-01.png)
-![screenshot2](./screenshot/screenshot-02.png)
+![screenshot1](./screenshot/screenshot-01.jpg)
+![screenshot2](./screenshot/screenshot-02.jpg)
+![screenshot3](./screenshot/screenshot-03.jpg)
 
 ### 遇到的问题
 
@@ -36,11 +37,11 @@
 # 安装依赖
 npm install
 
-# 热加载服务运行在 localhost: 9080
-npm run dev
+# 开发模式
+npm run electron:serve
 
 # 打包项目
-npm run build
+npm run electron:build
 ```
 
 ### 赞助我
