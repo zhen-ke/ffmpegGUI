@@ -4,10 +4,6 @@
 
 基于 Electron + Vue + ffmpeg 的 GUI
 
-### QQ 交流群
-
-> 769728913
-
 ### 项目截图
 
 ![screenshot1](./screenshot/screenshot-01.jpg)
