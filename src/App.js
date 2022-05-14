@@ -29,7 +29,7 @@ function App() {
   const [progress, setProgress] = useState(0);
 
   const handleProgress = (progressVal) => {
-    const val = Math.ceil(progressVal);
+    const val = progressVal.toFixed(2);
     if (+val >= 100) {
       setProgress(0);
     } else {

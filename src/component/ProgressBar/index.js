@@ -8,7 +8,9 @@ const ProgressBar = ({ progress = 0 }) => {
         className="progress-bar progress-bar-striped progress-bar-animated"
         role="progressbar"
         style={{ width: `${progress}%` }}
-      ></div>
+      >
+        <span>{progress}%</span>
+      </div>
     </div>
   );
 };
