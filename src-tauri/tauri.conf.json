@@ -18,6 +18,7 @@
       "shell": {
         "sidecar": true,
         "execute": true,
+        "open": "",
         "scope": [{ "name": "ffmpeg", "args": true, "sidecar": true }]
       }
     },

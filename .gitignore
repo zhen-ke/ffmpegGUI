@@ -11,3 +11,4 @@ thumbs.db
 !.gitkeep
 package-lock.json
 dist_electron/*
+ffmpeg-x86_64-apple-darwin

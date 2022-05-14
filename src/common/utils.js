@@ -2,7 +2,7 @@ import { shell, dialog } from "@tauri-apps/api";
 const { Command } = shell;
 export const { open, message } = dialog;
 
-export const runFFmpeg = async (command) => {
+export const runFFmpeg = async (command, outputFolder) => {
   const ffmpeg = Command.sidecar("ffmpeg", command);
 
   // 注册子进程关闭事件
@@ -10,6 +10,7 @@ export const runFFmpeg = async (command) => {
     if (code) {
       await message("文件转换失败");
     } else {
+      await shell.open(outputFolder);
       console.log("文件转换成功");
     }
   });

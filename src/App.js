@@ -14,13 +14,18 @@ function App() {
             if (!filePath) {
               return;
             }
-            runFFmpeg([
-              "-i",
-              filePath,
-              "-codec",
-              "copy",
-              "/Users/xmit/Movies/promise_test.mp4",
-            ]);
+            const outputFolder = "/Users/xmit/Movies";
+
+            await runFFmpeg(
+              [
+                "-i",
+                filePath,
+                "-codec",
+                "copy",
+                `${outputFolder}/${new Date().getTime()}.mp4`,
+              ],
+              outputFolder
+            );
           }}
         >
           点击选择文件
