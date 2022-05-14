@@ -4,14 +4,6 @@ import { path } from "@tauri-apps/api";
 import ProgressBar from "./component/ProgressBar";
 import "./App.css";
 
-const FORMAT_MAPS = {
-  mp4: "mp4",
-  mkv: "mkv",
-  h264: "mp4",
-  h265: "mp4",
-  GIF: "gif",
-};
-
 const TRANSCODE_MAPS = {
   mp4: {
     command: ["-i", "filePath", "-c:v", "copy"],
