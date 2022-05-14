@@ -4,22 +4,60 @@ import { path } from "@tauri-apps/api";
 import ProgressBar from "./component/ProgressBar";
 import "./App.css";
 
+const FORMAT_MAPS = {
+  mp4: "mp4",
+  mkv: "mkv",
+  h264: "mp4",
+  h265: "mp4",
+  GIF: "gif",
+};
+
 const TRANSCODE_MAPS = {
-  mp4: ["-i", "filePath", "-c:v", "copy"],
-  mkv: ["-i", "filePath", "-c", "copy"],
-  h264: [
-    "-i",
-    "filePath",
-    "-c:v",
-    "libx264",
-    "-preset",
-    "slow",
-    "-crf",
-    "23",
-    "-c:a",
-    "copy",
-  ],
-  h265: ["-i", "filePath", "-c:v", "libx265", "-crf", "23", "-c:a", "copy"],
+  mp4: {
+    command: ["-i", "filePath", "-c:v", "copy"],
+    format: "mp4",
+  },
+  mkv: {
+    command: ["-i", "filePath", "-c", "copy"],
+    format: "mkv",
+  },
+  h264: {
+    command: [
+      "-i",
+      "filePath",
+      "-c:v",
+      "libx264",
+      "-preset",
+      "slow",
+      "-crf",
+      "23",
+      "-c:a",
+      "copy",
+    ],
+    format: "mp4",
+  },
+  h265: {
+    command: [
+      "-i",
+      "filePath",
+      "-c:v",
+      "libx265",
+      "-crf",
+      "23",
+      "-c:a",
+      "copy",
+    ],
+    format: "mp4",
+  },
+  GIF: {
+    command: [
+      "-i",
+      "filePath",
+      "-filter_complex",
+      "[0:v] scale=480:-1, fps=15, split [a][b];[a] palettegen [p];[b][p] paletteuse",
+    ],
+    format: "gif",
+  },
 };
 
 const TAG_MAPS = Object.keys(TRANSCODE_MAPS);
@@ -59,11 +97,11 @@ function App() {
 
             // 输出目录
             const outputDir = `${dirname}/${filename}_${new Date().getTime()}.${
-              currentTag === "mkv" ? "mkv" : "mp4"
+              TRANSCODE_MAPS[currentTag].format
             }`;
 
             // const outputFolder = "/Users/xmit/Movies";
-            const command = TRANSCODE_MAPS[currentTag];
+            const command = TRANSCODE_MAPS[currentTag].command;
 
             const newCommand = command.map((it) => {
               if (it === "filePath") {

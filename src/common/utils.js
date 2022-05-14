@@ -28,7 +28,7 @@ export const runFFmpeg = async (command, outputFolder, onProgress) => {
 
   ffmpeg.stderr.on("data", (line) => {
     onProgress(getProgress(line));
-    // console.log(`command stderr: "${line}"`);
+    console.log(`command stderr: "${line}"`);
   });
 
   // 执行 ffmpeg
