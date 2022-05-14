@@ -2,7 +2,7 @@
 
 ### 项目说明
 
-基于 Electron + Vue + ffmpeg 的 GUI
+ffmpeg-gui 是一个基于 tauri 框架开发的跨平台软件，可以用它做视频音频转码、视频音频合并、视频转 GIF 等功能
 
 ### 项目截图
 
@@ -12,9 +12,9 @@
 
 ### 遇到的问题
 
- - 如何开启硬件加速
- - 打包后 electron 里 asar 不能使用二进制文件的问题
- - 如何通过 Webpack 打包不同平台的二进制文件到 APP 里
+- 如何开启硬件加速
+- 打包后 electron 里 asar 不能使用二进制文件的问题
+- 如何通过 Webpack 打包不同平台的二进制文件到 APP 里
 
 [上述问题的解决过程](https://zhen-ke.github.io/2019/06/17/ffmpeggui-development-notes/)
 

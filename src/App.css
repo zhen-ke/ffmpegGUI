@@ -1,0 +1,16 @@
+.ffmpeg {
+  text-align: center;
+}
+.ffmpeg-header {
+  background-color: #282c34;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: white;
+}
+
+.ffmpeg-link {
+  color: #61dafb;
+}
