@@ -49,6 +49,10 @@ body {
   color: #fff;
   border-color: transparent;
 }
+.progressWrap {
+  margin-top: 40px;
+  width: 70%;
+}
 .ffmpeg-link {
   color: #61dafb;
 }

@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { open, runFFmpeg } from "./common/utils";
 import { path } from "@tauri-apps/api";
+import ProgressBar from "./component/ProgressBar";
 import "./App.css";
 
 const TRANSCODE_MAPS = {
@@ -25,6 +26,16 @@ const TAG_MAPS = Object.keys(TRANSCODE_MAPS);
 
 function App() {
   const [currentTag, setCurrentTag] = useState(TAG_MAPS[0]);
+  const [progress, setProgress] = useState(0);
+
+  const handleProgress = (progressVal) => {
+    const val = Math.ceil(progressVal);
+    if (+val >= 100) {
+      setProgress(0);
+    } else {
+      setProgress(val);
+    }
+  };
 
   return (
     <div className="ffmpeg">
@@ -62,7 +73,11 @@ function App() {
               }
             });
 
-            await runFFmpeg([...newCommand, outputDir], dirname);
+            await runFFmpeg(
+              [...newCommand, outputDir],
+              dirname,
+              handleProgress
+            );
           }}
         >
           点击选择文件
@@ -78,6 +93,11 @@ function App() {
             </li>
           ))}
         </ul>
+        {progress > 0 && (
+          <div className="progressWrap">
+            <ProgressBar progress={progress} />
+          </div>
+        )}
       </header>
     </div>
   );
