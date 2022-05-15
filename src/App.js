@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { open, runFFmpeg } from "./common/utils";
 import { path } from "@tauri-apps/api";
 import ProgressBar from "./component/ProgressBar";
-import "./App.css";
+import "./App.scss";
 
 const TRANSCODE_MAPS = {
   mp4: {
@@ -69,10 +69,10 @@ function App() {
 
   return (
     <div className="ffmpeg">
-      <header className="ffmpeg-header">
+      <header className="header">
         <p
           key={currentTag}
-          className="ffmpeg-entry"
+          className="entry"
           onClick={async (e) => {
             const filePath = await open({
               title: "请选择文件",
