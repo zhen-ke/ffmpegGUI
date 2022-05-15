@@ -5,15 +5,17 @@ export const { open, message } = dialog;
 let previousFram = 0;
 
 export const runFFmpeg = async (command, outputFolder, onProgress) => {
+  onProgress(0, `ffmpeg params：${command}`);
+
   const ffmpeg = Command.sidecar("ffmpeg", command);
 
   // 注册子进程关闭事件
   ffmpeg.on("close", async ({ code }) => {
     if (code) {
-      await message("文件转换失败");
+      await message("转换失败");
     } else {
       await shell.open(outputFolder);
-      console.log("文件转换成功");
+      console.log("done");
     }
   });
 
@@ -27,7 +29,7 @@ export const runFFmpeg = async (command, outputFolder, onProgress) => {
   ffmpeg.stdout.on("data", (line) => console.log(`command stdout: "${line}"`));
 
   ffmpeg.stderr.on("data", (line) => {
-    onProgress(getProgress(line));
+    onProgress(getProgress(line), line);
     console.log(`command stderr: "${line}"`);
   });
 

@@ -1,0 +1,13 @@
+.terminalLog {
+  font-size: 14px;
+  color: #333;
+  padding: 10px;
+  overflow-y: auto;
+  background: #fff;
+  height: 200px;
+  margin: 0;
+  border-radius: 4px 4px 0 0;
+  li {
+    line-height: 20px;
+  }
+}
