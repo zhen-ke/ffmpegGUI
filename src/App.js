@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState } from "react";
 import { open, runFFmpeg } from "./common/utils";
 import { path } from "@tauri-apps/api";
 import ProgressBar from "./component/ProgressBar";

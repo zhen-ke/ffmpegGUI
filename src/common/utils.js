@@ -5,7 +5,7 @@ export const { open, message } = dialog;
 let previousFram = 0;
 
 export const runFFmpeg = async (command, outputFolder, onProgress) => {
-  onProgress(0, `ffmpeg params：${command}`);
+  onProgress(1, `ffmpeg params：${command.join(" ")}`);
 
   const ffmpeg = Command.sidecar("ffmpeg", command);
 
