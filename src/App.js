@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { open, runFFmpeg } from "./common/utils";
 import { path } from "@tauri-apps/api";
 import ProgressBar from "./component/ProgressBar";
-import "./App.scss";
+import styles from "./App.module.scss";
 
 const TRANSCODE_MAPS = {
   mp4: {
@@ -68,11 +68,11 @@ function App() {
   };
 
   return (
-    <div className="ffmpeg">
-      <header className="header">
+    <div className={styles.ffmpeg}>
+      <header className={styles.header}>
         <p
           key={currentTag}
-          className="entry"
+          className={styles.entry}
           onClick={async (e) => {
             const filePath = await open({
               title: "请选择文件",
@@ -112,19 +112,19 @@ function App() {
         >
           点击选择文件
         </p>
-        <ul className="tag">
+        <ul className={styles.tag}>
           {TAG_MAPS.map((it) => (
             <li
               onClick={() => setCurrentTag(it)}
               key={it}
-              className={currentTag === it ? "active" : ""}
+              className={`${styles[currentTag === it ? "active" : ""]}`}
             >
               {it}
             </li>
           ))}
         </ul>
         {progress > 0 && (
-          <div className="progressWrap">
+          <div className={styles.progressWrap}>
             <ProgressBar progress={progress} />
           </div>
         )}
