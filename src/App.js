@@ -51,6 +51,13 @@ const TRANSCODE_MAPS = {
     ],
     format: "gif",
   },
+  // ffmpeg -i sample.avi -q:a 0 -map a sample.mp3
+  // ffmpeg -i video.mp4 -vn -y -acodec copy video.m4a
+  // ffmpeg -i video.mp4 video.mp3
+  extractAudioFromVideo: {
+    command: ["-i", "filePath"],
+    format: "mp3",
+  },
 };
 
 const TAG_MAPS = Object.keys(TRANSCODE_MAPS);
