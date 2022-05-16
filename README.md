@@ -18,6 +18,12 @@ ffmpeg-gui 是一个基于 tauri 框架开发的跨平台软件，可以用它�
 - [ ] 下载 M3u8 的链接
 - [ ] 批量转码（指定线程池数量来优化性能）
 
+### 环境搭建
+
+[Windows](https://tauri.studio/v1/guides/getting-started/prerequisites/#setting-up-windows)
+
+[MacOs](https://tauri.studio/v1/guides/getting-started/prerequisites/#setting-up-macos)
+
 ### 构建应用
 
 ```bash
