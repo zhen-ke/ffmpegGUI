@@ -42,3 +42,7 @@ npm run tauri build
 如果觉得这些内容不错，请我喝杯咖啡吧。
 
 ![pay](./screenshot/pay.png)
+
+### Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=zhen-ke/ffmpegGUI&type=Date)](https://star-history.com/#zhen-ke/ffmpegGUI&Date)
