@@ -3,6 +3,9 @@ import { open, runFFmpeg } from "./common/utils";
 import { path } from "@tauri-apps/api";
 import ProgressBar from "./component/ProgressBar";
 import TerminalLog from "./component/TerminalLog";
+import Dropdown from "react-bootstrap/Dropdown";
+import "bootstrap/dist/css/bootstrap.min.css";
+
 import styles from "./App.module.scss";
 
 const TRANSCODE_MAPS = {
@@ -81,6 +84,17 @@ function App() {
 
   return (
     <div className={styles.ffmpeg}>
+      <Dropdown>
+        <Dropdown.Toggle variant='success' id='dropdown-basic'>
+          Dropdown Button
+        </Dropdown.Toggle>
+
+        <Dropdown.Menu>
+          <Dropdown.Item href='#/action-1'>Action</Dropdown.Item>
+          <Dropdown.Item href='#/action-2'>Another action</Dropdown.Item>
+          <Dropdown.Item href='#/action-3'>Something else</Dropdown.Item>
+        </Dropdown.Menu>
+      </Dropdown>
       <p
         key={currentTag}
         className={styles.entry}
