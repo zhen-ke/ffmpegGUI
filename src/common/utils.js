@@ -1,9 +1,8 @@
 import { shell, dialog } from "@tauri-apps/api";
-import { type } from "@testing-library/user-event/dist/type";
 const { Command } = shell;
 export const { open, message } = dialog;
 
-let previousFram = 0;
+let duration = "";
 
 export const runFFmpeg = async (command, outputFolder, onProgress) => {
   onProgress(1, `ffmpeg params：${command.join(" ")}`);
@@ -39,17 +38,15 @@ export const runFFmpeg = async (command, outputFolder, onProgress) => {
   console.log(child);
 };
 
-let duration = "";
-
 // 字符转对象
 const parseProgressLine = (line) => {
   var progress = {};
+
   if (line.startsWith("  Duration")) {
     duration = line.split(",")[0].replace(/:\s+/g, "=");
   }
   // Remove all spaces after = and trim
   line = duration.trim() + " " + line.replace(/=\s+/g, "=").trim();
-  // console.log(line.split(" "), "-----------------");
   var progressParts = line.split(" ");
 
   // Split every progress part by "=" to get key and value
@@ -84,12 +81,5 @@ const getProgress = (line) => {
     const t = getSeconds(time) / getSeconds(Duration);
     return (100 * t).toFixed(2);
   }
-  return 0;
-};
-
-const progress = (e) => {
-  var t = e.ratio;
-  const percentage = "Progress percentage: " + (100 * t).toFixed(2) + "%";
-  console.log(percentage, "percentage");
-  return percentage;
+  return 1;
 };
