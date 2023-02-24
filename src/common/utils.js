@@ -5,9 +5,8 @@ export const { open, message } = dialog;
 let duration = "";
 
 export const runFFmpeg = async (command, outputFolder, onProgress) => {
-  onProgress(1, `ffmpeg params：${command.join(" ")}`);
-
-  const ffmpeg = Command.sidecar("ffmpeg", command);
+  onProgress(1, `ffmpeg params：${command}`);
+  const ffmpeg = Command.sidecar("ffmpeg", command.split(" "));
 
   // 注册子进程关闭事件
   ffmpeg.on("close", async ({ code }) => {
@@ -81,5 +80,5 @@ const getProgress = (line) => {
     const t = getSeconds(time) / getSeconds(Duration);
     return (100 * t).toFixed(2);
   }
-  return 1;
+  return 0;
 };
