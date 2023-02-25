@@ -6,6 +6,8 @@ ffmpegGUI 是一个基于 tauri 框架开发的跨平台软件，可以用它做
 
 ### 项目截图
 
+![screenshot1](./screenshot/ffmpeg_08.jpg)
+
 ![screenshot1](./screenshot/ffmpeg_07.gif)
 
 ### 待完善
