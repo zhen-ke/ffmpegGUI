@@ -79,7 +79,7 @@ const getProgress = (line) => {
 
   if (time && Duration) {
     const t = getSeconds(time) / getSeconds(Duration);
-    return (100 * t).toFixed(2);
+    return Math.floor(100 * t);
   }
-  return 0;
+  return 100;
 };

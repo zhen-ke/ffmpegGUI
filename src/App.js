@@ -7,7 +7,6 @@ import {
   Container,
   Dropdown,
   Button,
-  ProgressBar,
   OverlayTrigger,
   Tooltip,
 } from "react-bootstrap";
@@ -53,14 +52,10 @@ function App() {
   const [commandLine, setCommandLine] = useState("");
   const [filePath, setFilePath] = useState("");
   const [inputPathFolder, setInputPathFolder] = useState("");
-  const [activeStep, setActiveStep] = useState(0);
+  const [activeStep, setActiveStep] = useState(1);
 
   const handleProgress = (progressVal, line) => {
-    if (+progressVal >= 100) {
-      setProgress(0);
-    } else {
-      setProgress(progressVal);
-    }
+    setProgress(+progressVal);
     // setLog((pre) => {
     //   return [...pre, line];
     // });
@@ -88,6 +83,7 @@ function App() {
 
   const start = async () => {
     try {
+      setActiveStep(3);
       await runFFmpeg(commandLine, inputPathFolder, handleProgress);
     } catch (error) {
       console.error(error);
@@ -112,7 +108,11 @@ function App() {
   return (
     <div className={styles.ffmpeg}>
       <div className={styles.uploadTool}>
-        <ProgressSteps steps={steps} activeStep={activeStep} />
+        <ProgressSteps
+          steps={steps}
+          activeStep={activeStep}
+          progress={progress}
+        />
         <Container>
           <Row>
             <Col>
@@ -140,7 +140,7 @@ function App() {
                     handleConvertTo("MP4", filePathUrl);
 
                     setFilePath(filePathUrl);
-                    setActiveStep(1);
+                    setActiveStep(2);
                   }}
                 >
                   Choose Files
@@ -173,12 +173,6 @@ function App() {
             </Col>
           </Row>
         </Container>
-
-        {progress > 0 && (
-          <div className={styles.progressWrap}>
-            <ProgressBar animated now={progress} label={`${progress}%`} />
-          </div>
-        )}
       </div>
     </div>
   );

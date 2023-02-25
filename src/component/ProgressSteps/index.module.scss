@@ -19,7 +19,7 @@
       transform: translateY(-50%);
       left: 0;
     }
-    &:after {
+    .afterStepBar {
       content: "";
       position: absolute;
       height: 12px;
@@ -58,7 +58,8 @@
         .CheckMark {
           font-size: 26px;
           font-weight: 600;
-          color: #4a154b;
+          color: #2487eb;
+          margin-bottom: 3px;
           -ms-transform: scaleX(-1) rotate(-46deg); /* IE 9 */
           -webkit-transform: scaleX(-1) rotate(-46deg); /* Chrome, Safari, Opera */
           transform: scaleX(-1) rotate(-46deg);
@@ -66,6 +67,11 @@
         .StepCount {
           font-size: 19px;
           color: #666;
+        }
+        .percentage {
+          font-size: 12px;
+          color: #2487eb;
+          font-weight: bold;
         }
       }
       .StepsLabelContainer {

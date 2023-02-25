@@ -1,7 +1,26 @@
 import React from "react";
 import styles from "./index.module.scss";
 
-const ProgressSteps = ({ steps = [], activeStep = 0 }) => {
+const renderStepCount = (activeStep, step, totalSteps, progress) => {
+  if (activeStep >= step) {
+    if (step === totalSteps) {
+      if (progress >= 100) {
+        return <div className={styles.CheckMark}>L</div>;
+      }
+      return (
+        <div className={`${styles.StepCount} ${styles.percentage}`}>
+          {progress + "%"}
+        </div>
+      );
+    }
+    return <div className={styles.CheckMark}>L</div>;
+  }
+  return <div className={styles.StepCount}>{step}</div>;
+};
+
+const ProgressSteps = ({ steps = [], activeStep = 1, progress = 0 }) => {
+  const totalSteps = steps.length;
+  const width = `${(100 / (totalSteps - 1)) * (activeStep - 1)}%`;
   return (
     <div className={styles.MainContainer}>
       <div className={styles.StepContainer}>
@@ -12,11 +31,7 @@ const ProgressSteps = ({ steps = [], activeStep = 0 }) => {
                 activeStep >= step ? "completed" : "incomplete"
               }`}
             >
-              {activeStep >= step ? (
-                <div className={styles.CheckMark}>L</div>
-              ) : (
-                <div className={styles.StepCount}>{step}</div>
-              )}
+              {renderStepCount(activeStep, step, totalSteps, progress)}
             </div>
             <div className={styles.StepsLabelContainer}>
               <div className={styles.StepLabel} key={step}>
@@ -25,6 +40,7 @@ const ProgressSteps = ({ steps = [], activeStep = 0 }) => {
             </div>
           </div>
         ))}
+        <div className={styles.afterStepBar} style={{ width }} />
       </div>
     </div>
   );
