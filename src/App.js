@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import { open, runFFmpeg } from "./common/utils";
 import { path } from "@tauri-apps/api";
-import TerminalLog from "./component/TerminalLog";
 import {
   Row,
   Col,
@@ -14,10 +13,38 @@ import "bootstrap/dist/css/bootstrap.min.css";
 
 import styles from "./App.module.scss";
 
-const TAG_MAPS = ["MP4", "MKV", "H264", "H265", "GIF"];
+// 转换格式 map
+const CONVERT_TO_FORMAT_MAPS = [
+  {
+    label: "MP4",
+    format: "mp4",
+    command: "-c:v copy",
+  },
+  {
+    label: "MKV",
+    format: "mkv",
+    command: "-c:v copy -c:a copy",
+  },
+  {
+    label: "H264",
+    format: "mp4",
+    command: "-vcodec libx264 -acodec aac",
+  },
+  {
+    label: "H265",
+    format: "mp4",
+    command: "-c:v libx265 -vtag hvc1",
+  },
+  {
+    label: "GIF",
+    format: "gif",
+    command:
+      "-vf fps=10,scale=320:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse",
+  },
+];
 
 function App() {
-  const [currentTag, setCurrentTag] = useState(TAG_MAPS[0]);
+  const [currentTag, setCurrentTag] = useState(CONVERT_TO_FORMAT_MAPS[0].label);
   const [progress, setProgress] = useState(0);
   const [log, setLog] = useState([]);
   const [commandLine, setCommandLine] = useState("");
@@ -45,32 +72,14 @@ function App() {
     const [firstFileName] = fileName.split(".");
     const outputPath = `${inputPath}/${firstFileName}-${new Date().getTime()}`;
 
-    const headPath = `-i ${pathName}`;
-    const footPath = `${outputPath}.mp4`;
+    const selectFormatCommand = CONVERT_TO_FORMAT_MAPS.find(
+      (it) => it.label === curTag
+    );
 
     setInputPathFolder(inputPath);
-    switch (curTag) {
-      case "MP4":
-        setCommandLine(`${headPath} -c:v copy ${footPath}`);
-        break;
-      case "MKV":
-        setCommandLine(`${headPath} -c:v copy -c:a copy ${outputPath}.mkv`);
-        break;
-      case "H264":
-        setCommandLine(`${headPath} -vcodec libx264 -acodec aac ${footPath}`);
-        break;
-      case "H265":
-        setCommandLine(`${headPath} -c:v libx265 -vtag hvc1 ${footPath}`);
-        break;
-      case "GIF":
-        setCommandLine(
-          `${headPath} -vf 'fps=10,scale=320:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse' -loop 0 ${outputPath}.gif`
-        );
-        break;
-      default:
-        setCommandLine(`${headPath} -c:v copy ${footPath}`);
-        break;
-    }
+    setCommandLine(
+      `-i ${pathName} ${selectFormatCommand.command} ${outputPath}.${selectFormatCommand.format}`
+    );
   };
 
   const start = async () => {
@@ -112,13 +121,12 @@ function App() {
                 {"Convert To " + currentTag}
               </Dropdown.Toggle>
               <Dropdown.Menu>
-                {TAG_MAPS.map((it) => (
+                {CONVERT_TO_FORMAT_MAPS.map((it) => (
                   <Dropdown.Item
-                    onClick={() => handleConvertTo(it)}
-                    key={it}
-                    className={`${styles[currentTag === it ? "active" : ""]}`}
+                    onClick={() => handleConvertTo(it.label)}
+                    key={it.label}
                   >
-                    {it}
+                    {it.label}
                   </Dropdown.Item>
                 ))}
               </Dropdown.Menu>
@@ -135,12 +143,9 @@ function App() {
 
       {progress > 0 && (
         <div className={styles.progressWrap}>
-          <ProgressBar animated now={progress} />
+          <ProgressBar animated now={progress} label={`${progress}%`} />
         </div>
       )}
-      <div className={styles.log}>
-        <TerminalLog logList={log} />
-      </div>
     </div>
   );
 }

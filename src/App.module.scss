@@ -12,36 +12,6 @@
     cursor: pointer;
     user-select: none;
   }
-  .tag {
-    user-select: none;
-    display: flex;
-    li {
-      box-sizing: border-box;
-      margin: 0 8px 0 0;
-      color: #000000d9;
-      font-size: 14px;
-      font-variant: tabular-nums;
-      line-height: 1.5715;
-      list-style: none;
-      display: inline-block;
-      height: auto;
-      padding: 0 7px;
-      font-size: 12px;
-      line-height: 20px;
-      white-space: nowrap;
-      background: #fafafa;
-      border: 1px solid #d9d9d9;
-      border-radius: 2px;
-      opacity: 1;
-      transition: all 0.3s;
-      cursor: pointer;
-    }
-    .active {
-      background: #f50;
-      color: #fff;
-      border-color: transparent;
-    }
-  }
   .progressWrap {
     margin-bottom: 100px;
     margin-top: 20px;
