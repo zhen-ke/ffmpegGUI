@@ -7,7 +7,7 @@
     "distDir": "../build"
   },
   "package": {
-    "productName": "ffmpeg-gui",
+    "productName": "ffmpegGUI",
     "version": "0.1.0"
   },
   "tauri": {
@@ -69,7 +69,7 @@
         "fullscreen": false,
         "height": 600,
         "resizable": true,
-        "title": "ffmpeg-gui",
+        "title": "ffmpegGUI",
         "width": 800
       }
     ]

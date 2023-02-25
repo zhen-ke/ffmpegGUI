@@ -1,5 +1,5 @@
 {
-  "name": "ffmpeg-gui",
+  "name": "ffmpegGUI",
   "version": "0.1.0",
   "private": true,
   "dependencies": {
