@@ -1,13 +1,19 @@
 .ffmpeg {
-  text-align: center;
-  background-color: #282c34;
+  background-color: #2487eb;
+  background-image: url("data:image/webp;base64,UklGRoIBAABXRUJQVlA4THUBAAAvJAALABcgFkzxvUQjG6BMFVYEAhSF/xNtmf/4b1MLkmRrT+vo/7+SArNPLjk0YtqF5JKT7pmces6DUZhWwTRrCs2awevsRUT0PyXXH8aE8g4iIiUpAj00phKKh8uUsbBoAobd0ejt+Gn4jJISK7NiFCXdRXS71kBXvED9uwT1gfXFPLM6yrK7HXoL0ySnkbOHEC9pU3omojEhaHQ2Q5zQlttO0f5+ao/+vf1qoS0blQ8iSFlEe7P5ETqfrA0rteJm14v6L6VD9nLxkawa1CzEmoUJhRQRyoYLqDMvxozbUJAiNjEPsdN27VO7czxEzD7GOK9TUK83mNiWeQhFi/xFAyIfcqy5ZxCy8rIYGAul7iudaZCWr27qiimCX1u9jR8iYVww1YVfdvj31L4ddUdP56gpXovBfA+kEjN7CyVi5sX7yWZGcbg8oONQL3C5PBZUd33C7Uh7TzNOLoD5CeMwwzk4Si4O864g8N3lla6Wu+j+df8DAA==");
+  color: white;
   min-height: 100vh;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  color: white;
-  position: relative;
+  .uploadTool {
+    text-align: center;
+    padding: 50px;
+    background: #fff;
+    box-shadow: 0 3px 24px rgb(0 0 0 / 8%);
+    border-radius: 4px;
+    min-width: 600px;
+  }
   .entry {
     cursor: pointer;
     user-select: none;

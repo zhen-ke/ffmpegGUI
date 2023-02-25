@@ -8,7 +8,10 @@ import {
   Dropdown,
   Button,
   ProgressBar,
+  OverlayTrigger,
+  Tooltip,
 } from "react-bootstrap";
+import ProgressSteps from "./component/ProgressSteps";
 import "bootstrap/dist/css/bootstrap.min.css";
 
 import styles from "./App.module.scss";
@@ -46,10 +49,11 @@ const CONVERT_TO_FORMAT_MAPS = [
 function App() {
   const [currentTag, setCurrentTag] = useState(CONVERT_TO_FORMAT_MAPS[0].label);
   const [progress, setProgress] = useState(0);
-  const [log, setLog] = useState([]);
+  // const [log, setLog] = useState([]);
   const [commandLine, setCommandLine] = useState("");
   const [filePath, setFilePath] = useState("");
   const [inputPathFolder, setInputPathFolder] = useState("");
+  const [activeStep, setActiveStep] = useState(0);
 
   const handleProgress = (progressVal, line) => {
     if (+progressVal >= 100) {
@@ -57,9 +61,9 @@ function App() {
     } else {
       setProgress(progressVal);
     }
-    setLog((pre) => {
-      return [...pre, line];
-    });
+    // setLog((pre) => {
+    //   return [...pre, line];
+    // });
   };
 
   const handleConvertTo = async (curTag, pathName = filePath) => {
@@ -90,62 +94,92 @@ function App() {
     }
   };
 
+  const steps = [
+    {
+      label: "",
+      step: 1,
+    },
+    {
+      label: "",
+      step: 2,
+    },
+    {
+      label: "",
+      step: 3,
+    },
+  ];
+
   return (
     <div className={styles.ffmpeg}>
-      <Container>
-        <Row>
-          <Col>
-            <Button
-              variant='success'
-              key={currentTag}
-              className={styles.entry}
-              onClick={async (e) => {
-                const filePathUrl = await open({
-                  title: "请选择文件",
-                });
-
-                if (!filePathUrl) {
-                  return;
+      <div className={styles.uploadTool}>
+        <ProgressSteps steps={steps} activeStep={activeStep} />
+        <Container>
+          <Row>
+            <Col>
+              <OverlayTrigger
+                placement='bottom'
+                overlay={
+                  <Tooltip>
+                    {filePath ? filePath : "请选择要转换的文件"}
+                  </Tooltip>
                 }
-                setFilePath(filePathUrl);
-                handleConvertTo("MP4", filePathUrl);
-              }}
-            >
-              Choose Files
-            </Button>
-          </Col>
+              >
+                <Button
+                  variant='primary'
+                  key={currentTag}
+                  className={styles.entry}
+                  onClick={async (e) => {
+                    const filePathUrl = await open({
+                      title: "请选择文件",
+                    });
 
-          <Col>
-            <Dropdown>
-              <Dropdown.Toggle variant='secondary' id='dropdown-basic'>
-                {"Convert To " + currentTag}
-              </Dropdown.Toggle>
-              <Dropdown.Menu>
-                {CONVERT_TO_FORMAT_MAPS.map((it) => (
-                  <Dropdown.Item
-                    onClick={() => handleConvertTo(it.label)}
-                    key={it.label}
-                  >
-                    {it.label}
-                  </Dropdown.Item>
-                ))}
-              </Dropdown.Menu>
-            </Dropdown>
-          </Col>
+                    if (!filePathUrl) {
+                      return;
+                    }
 
-          <Col>
-            <Button variant='primary' onClick={start}>
-              Convert Now
-            </Button>
-          </Col>
-        </Row>
-      </Container>
+                    handleConvertTo("MP4", filePathUrl);
 
-      {progress > 0 && (
-        <div className={styles.progressWrap}>
-          <ProgressBar animated now={progress} label={`${progress}%`} />
-        </div>
-      )}
+                    setFilePath(filePathUrl);
+                    setActiveStep(1);
+                  }}
+                >
+                  Choose Files
+                </Button>
+              </OverlayTrigger>
+            </Col>
+
+            <Col>
+              <Dropdown>
+                <Dropdown.Toggle variant='secondary' id='dropdown-basic'>
+                  {"Convert To " + currentTag}
+                </Dropdown.Toggle>
+                <Dropdown.Menu>
+                  {CONVERT_TO_FORMAT_MAPS.map((it) => (
+                    <Dropdown.Item
+                      onClick={() => handleConvertTo(it.label)}
+                      key={it.label}
+                    >
+                      {it.label}
+                    </Dropdown.Item>
+                  ))}
+                </Dropdown.Menu>
+              </Dropdown>
+            </Col>
+
+            <Col>
+              <Button variant='success' onClick={start}>
+                Convert Now
+              </Button>
+            </Col>
+          </Row>
+        </Container>
+
+        {progress > 0 && (
+          <div className={styles.progressWrap}>
+            <ProgressBar animated now={progress} label={`${progress}%`} />
+          </div>
+        )}
+      </div>
     </div>
   );
 }

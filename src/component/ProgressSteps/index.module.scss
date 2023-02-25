@@ -1,0 +1,92 @@
+.MainContainer {
+  width: 100%;
+  max-width: 550px;
+  margin: 0 auto;
+  padding: 0 15px;
+
+  .StepContainer {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 40px;
+    position: relative;
+    &:before {
+      content: "";
+      position: absolute;
+      background: rgba(225, 225, 225, 0.6);
+      height: 12px;
+      width: 100%;
+      top: 50%;
+      transform: translateY(-50%);
+      left: 0;
+    }
+    &:after {
+      content: "";
+      position: absolute;
+      height: 12px;
+      width: 100%;
+      top: 50%;
+      transition: 0.6s ease;
+      background-color: #5cd510;
+      transform: translateY(-50%);
+      left: 0;
+      background-image: linear-gradient(
+        45deg,
+        rgba(255, 255, 255, 0.15) 25%,
+        transparent 25%,
+        transparent 50%,
+        rgba(255, 255, 255, 0.15) 50%,
+        rgba(255, 255, 255, 0.15) 75%,
+        transparent 75%,
+        transparent
+      );
+      background-size: 12px 12px;
+      animation: 1s linear infinite progress-bar-stripes;
+    }
+    .StepWrapper {
+      position: relative;
+      z-index: 1;
+      .StepStyle {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background-color: #ffffff;
+        border: 3px solid #f3e7f3;
+        transition: 0.4s ease;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        .CheckMark {
+          font-size: 26px;
+          font-weight: 600;
+          color: #4a154b;
+          -ms-transform: scaleX(-1) rotate(-46deg); /* IE 9 */
+          -webkit-transform: scaleX(-1) rotate(-46deg); /* Chrome, Safari, Opera */
+          transform: scaleX(-1) rotate(-46deg);
+        }
+        .StepCount {
+          font-size: 19px;
+          color: #666;
+        }
+      }
+      .StepsLabelContainer {
+        position: absolute;
+        top: 66px;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        .StepLabel {
+          font-size: 19px;
+          color: #fff;
+        }
+      }
+    }
+  }
+}
+
+@keyframes progress-bar-stripes {
+  0% {
+    background-position: 12px 0;
+  }
+  100% {
+    background-position: 0 0;
+  }
+}
