@@ -34,7 +34,7 @@ export const runFFmpeg = async (command, outputFolder, onProgress) => {
   });
 
   // 执行 ffmpeg
-  await ffmpeg.execute();
+  return await ffmpeg.spawn();
 };
 
 // 字符转对象

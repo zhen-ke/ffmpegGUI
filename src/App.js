@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { open, runFFmpeg, formatDate } from "./common/utils";
 import { path } from "@tauri-apps/api";
 import {
@@ -53,6 +53,7 @@ function App() {
   const [filePath, setFilePath] = useState("");
   const [inputPathFolder, setInputPathFolder] = useState("");
   const [activeStep, setActiveStep] = useState(1);
+  const ffmpegRef = useRef(null);
 
   const handleProgress = (progressVal, state) => {
     setProgress(progressVal);
@@ -91,10 +92,18 @@ function App() {
   const start = async () => {
     try {
       setActiveStep(3);
-      await runFFmpeg(commandLine, inputPathFolder, handleProgress);
+      ffmpegRef.current = await runFFmpeg(
+        commandLine,
+        inputPathFolder,
+        handleProgress
+      );
     } catch (error) {
       console.error(error);
     }
+  };
+
+  const stop = async () => {
+    ffmpegRef.current.kill();
   };
 
   const steps = [
@@ -182,11 +191,11 @@ function App() {
 
             <Col>
               {progress > 0 && progress !== 100 ? (
-                <Button variant='danger' onClick={start}>
+                <Button variant='danger' onClick={stop}>
                   Convert Stop
                 </Button>
               ) : (
-                <Button variant='success' onClick={start}>
+                <Button disabled={!filePath} variant='success' onClick={start}>
                   Convert Now
                 </Button>
               )}
