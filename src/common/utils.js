@@ -28,8 +28,6 @@ export const runFFmpeg = async (command, outputFolder, onProgress) => {
   });
 
   // 捕获标准输出
-  ffmpeg.stdout.on("data", (line) => console.log(`command stdout: "${line}"`));
-
   ffmpeg.stderr.on("data", (line) => {
     onProgress(getProgress(line), line);
     console.log(`command stderr: "${line}"`);
@@ -37,7 +35,6 @@ export const runFFmpeg = async (command, outputFolder, onProgress) => {
 
   // 执行 ffmpeg
   const child = await ffmpeg.execute();
-  console.log(child);
 };
 
 // 字符转对象
