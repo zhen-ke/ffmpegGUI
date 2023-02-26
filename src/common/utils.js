@@ -7,7 +7,7 @@ let duration = "";
 export const runFFmpeg = async (command, outputFolder, onProgress) => {
   // onProgress(1, `ffmpeg params：${command}`);
 
-  const ffmpeg = Command.sidecar("ffmpeg", command.split(" "));
+  const ffmpeg = Command.sidecar("ffmpeg", command);
 
   // 注册子进程关闭事件
   ffmpeg.on("close", async ({ code }) => {
@@ -34,7 +34,7 @@ export const runFFmpeg = async (command, outputFolder, onProgress) => {
   });
 
   // 执行 ffmpeg
-  const child = await ffmpeg.execute();
+  await ffmpeg.execute();
 };
 
 // 字符转对象
