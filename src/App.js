@@ -69,7 +69,7 @@ function App() {
     const fileName = await path.basename(pathName);
     // 输出目录
     const [firstFileName] = fileName.split(".");
-    const outputPath = `${inputPath}/${firstFileName}-${formatDate(
+    const outputPath = `${inputPath}/${firstFileName}_${formatDate(
       new Date(),
       "YY-MM-DD_hh-mm-ss"
     )}`;
@@ -79,9 +79,13 @@ function App() {
     );
 
     setInputPathFolder(inputPath);
-    setCommandLine(
-      `-i ${pathName} ${selectFormatCommand.command} ${outputPath}.${selectFormatCommand.format}`
-    );
+
+    setCommandLine([
+      "-i",
+      `${pathName}`,
+      ...selectFormatCommand.command.split(" "),
+      `${outputPath}.${selectFormatCommand.format}`,
+    ]);
   };
 
   const start = async () => {
@@ -130,6 +134,7 @@ function App() {
                 <Button
                   variant='primary'
                   key={currentTag}
+                  disabled={progress > 0 && progress !== 100}
                   className={styles.entry}
                   onClick={async (e) => {
                     const filePathUrl = await open({
@@ -155,7 +160,11 @@ function App() {
 
             <Col>
               <Dropdown>
-                <Dropdown.Toggle variant='secondary' id='dropdown-basic'>
+                <Dropdown.Toggle
+                  disabled={progress > 0 && progress !== 100}
+                  variant='secondary'
+                  id='dropdown-basic'
+                >
                   {"Convert To " + currentTag}
                 </Dropdown.Toggle>
                 <Dropdown.Menu>
@@ -172,9 +181,15 @@ function App() {
             </Col>
 
             <Col>
-              <Button variant='success' onClick={start}>
-                Convert Now
-              </Button>
+              {progress > 0 && progress !== 100 ? (
+                <Button variant='danger' onClick={start}>
+                  Convert Stop
+                </Button>
+              ) : (
+                <Button variant='success' onClick={start}>
+                  Convert Now
+                </Button>
+              )}
             </Col>
           </Row>
         </Container>
