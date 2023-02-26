@@ -60,13 +60,15 @@
           font-weight: 600;
           color: #2487eb;
           margin-bottom: 3px;
-          -ms-transform: scaleX(-1) rotate(-46deg); /* IE 9 */
-          -webkit-transform: scaleX(-1) rotate(-46deg); /* Chrome, Safari, Opera */
           transform: scaleX(-1) rotate(-46deg);
         }
         .StepCount {
           font-size: 19px;
           color: #666;
+        }
+        .fail {
+          color: #dc3545;
+          transform: none;
         }
         .percentage {
           font-size: 12px;

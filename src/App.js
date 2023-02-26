@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { open, runFFmpeg } from "./common/utils";
+import { open, runFFmpeg, formatDate } from "./common/utils";
 import { path } from "@tauri-apps/api";
 import {
   Row,
@@ -54,8 +54,8 @@ function App() {
   const [inputPathFolder, setInputPathFolder] = useState("");
   const [activeStep, setActiveStep] = useState(1);
 
-  const handleProgress = (progressVal, line) => {
-    setProgress(+progressVal);
+  const handleProgress = (progressVal, state) => {
+    setProgress(progressVal);
     // setLog((pre) => {
     //   return [...pre, line];
     // });
@@ -69,7 +69,10 @@ function App() {
     const fileName = await path.basename(pathName);
     // 输出目录
     const [firstFileName] = fileName.split(".");
-    const outputPath = `${inputPath}/${firstFileName}-${new Date().getTime()}`;
+    const outputPath = `${inputPath}/${firstFileName}-${formatDate(
+      new Date(),
+      "YY-MM-DD_hh-mm-ss"
+    )}`;
 
     const selectFormatCommand = CONVERT_TO_FORMAT_MAPS.find(
       (it) => it.label === curTag
@@ -141,6 +144,8 @@ function App() {
 
                     setFilePath(filePathUrl);
                     setActiveStep(2);
+                    setCommandLine("");
+                    setProgress(0);
                   }}
                 >
                   Choose Files

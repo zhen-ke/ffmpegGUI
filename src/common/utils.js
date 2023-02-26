@@ -5,7 +5,7 @@ export const { open, message } = dialog;
 let duration = "";
 
 export const runFFmpeg = async (command, outputFolder, onProgress) => {
-  onProgress(1, `ffmpeg params：${command}`);
+  // onProgress(1, `ffmpeg params：${command}`);
 
   const ffmpeg = Command.sidecar("ffmpeg", command.split(" "));
 
@@ -13,9 +13,11 @@ export const runFFmpeg = async (command, outputFolder, onProgress) => {
   ffmpeg.on("close", async ({ code }) => {
     if (code) {
       await message("转换失败");
+      onProgress(-1);
     } else {
       await shell.open(outputFolder);
-      console.log("done");
+      console.log("转换成功");
+      onProgress(100);
     }
   });
 
@@ -79,7 +81,20 @@ const getProgress = (line) => {
 
   if (time && Duration) {
     const t = getSeconds(time) / getSeconds(Duration);
-    return Math.floor(100 * t);
+    return Math.floor(100 * +t);
   }
-  return 100;
+  return 0;
+};
+
+export const formatDate = (date, format) => {
+  const map = {
+    MM: date.getMonth() + 1,
+    DD: date.getDate(),
+    YY: date.getFullYear().toString(),
+    hh: date.getHours(),
+    mm: date.getMinutes(),
+    ss: date.getSeconds(),
+  };
+
+  return format.replace(/MM|DD|YY|hh|mm|ss/gi, (matched) => map[matched]);
 };
