@@ -33,22 +33,22 @@ const CONVERT_TO_FORMAT_MAPS = [
     command: "-vcodec libx264 -acodec aac",
   },
   {
-    label: "H264 + Intel硬件加速",
+    label: "H264  (Intel硬件加速)",
     format: "mp4",
     command: "-c:v h264_qsv",
   },
   {
-    label: "H264 + AMD硬件加速",
+    label: "H264 (AMD硬件加速)",
     format: "mp4",
     command: "-c:v h264_amf",
   },
   {
-    label: "H264 + Nvidia硬件加速",
+    label: "H264 (Nvidia硬件加速)",
     format: "mp4",
     command: "-c:v h264_nvenc",
   },
   {
-    label: "H264 + Mac硬件加速",
+    label: "H264 (Mac硬件加速)",
     format: "mp4",
     command: "-c:v h264_videotoolbox",
   },
@@ -68,22 +68,22 @@ const CONVERT_TO_FORMAT_MAPS = [
     command: "-c:v libx265 -vtag hvc1",
   },
   {
-    label: "H265 + Intel硬件加速",
+    label: "H265 (Intel硬件加速)",
     format: "mp4",
     command: "-c:v hevc_qsv",
   },
   {
-    label: "H265 + AMD硬件加速",
+    label: "H265 (AMD硬件加速)",
     format: "mp4",
     command: "-c:v hevc_amf",
   },
   {
-    label: "H265 + Nvidia硬件加速",
+    label: "H265 (Nvidia硬件加速)",
     format: "mp4",
     command: "-c:v hevc_nvenc",
   },
   {
-    label: "H265 + Mac硬件加速",
+    label: "H265 (Mac硬件加速)",
     format: "mp4",
     command: "-c:v hevc_videotoolbox",
   },
@@ -99,7 +99,7 @@ const CONVERT_TO_FORMAT_MAPS = [
       "-vf fps=10,scale=320:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse",
   },
   {
-    label: "MP3 + 嵌入式封面",
+    label: "MP3 (嵌入式封面)",
     format: "mp3",
     command: "-c:v copy -c:a libmp3lame -qscale:a 0 -ac 2",
   },
@@ -113,7 +113,7 @@ const CONVERT_TO_FORMAT_MAPS = [
 function App() {
   const [currentTag, setCurrentTag] = useState(CONVERT_TO_FORMAT_MAPS[0].label);
   const [progress, setProgress] = useState(0);
-  // const [log, setLog] = useState([]);
+  // const [log, setLog] = useState ([]);
   const [commandLine, setCommandLine] = useState("");
   const [filePath, setFilePath] = useState("");
   const [inputPathFolder, setInputPathFolder] = useState("");
@@ -122,7 +122,7 @@ function App() {
 
   const handleProgress = (progressVal, state) => {
     setProgress(progressVal);
-    // setLog((pre) => {
+    // setLog ( (pre) => {
     //   return [...pre, line];
     // });
   };
