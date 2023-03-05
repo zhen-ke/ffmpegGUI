@@ -6,7 +6,7 @@ let duration = "";
 
 export const runFFmpeg = async (command, outputFolder, onProgress) => {
   // onProgress(1, `ffmpeg params：${command}`);
-
+  console.log("this is command：", command);
   const ffmpeg = Command.sidecar("ffmpeg", command);
 
   // 注册子进程关闭事件

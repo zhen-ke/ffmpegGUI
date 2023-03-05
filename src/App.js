@@ -18,12 +18,12 @@ import styles from "./App.module.scss";
 // 转换格式 map
 const CONVERT_TO_FORMAT_MAPS = [
   {
-    label: "MP4",
+    label: "复制流到MP4",
     format: "mp4",
     command: "-c:v copy",
   },
   {
-    label: "MKV",
+    label: "复制流到MKV",
     format: "mkv",
     command: "-c:v copy -c:a copy",
   },
@@ -33,9 +33,64 @@ const CONVERT_TO_FORMAT_MAPS = [
     command: "-vcodec libx264 -acodec aac",
   },
   {
+    label: "H264 + Intel硬件加速",
+    format: "mp4",
+    command: "-c:v h264_qsv",
+  },
+  {
+    label: "H264 + AMD硬件加速",
+    format: "mp4",
+    command: "-c:v h264_amf",
+  },
+  {
+    label: "H264 + Nvidia硬件加速",
+    format: "mp4",
+    command: "-c:v h264_nvenc",
+  },
+  {
+    label: "H264 + Mac硬件加速",
+    format: "mp4",
+    command: "-c:v h264_videotoolbox",
+  },
+  {
+    label: "H264超快",
+    format: "mp4",
+    command: "-map 0 -c:v libx264 -crf 23 -preset ultrafast -c:a copy",
+  },
+  {
+    label: "H264 HQ + 源音频",
+    format: "mp4",
+    command: "-map 0 -c:v libx264 -crf 20 -c:a copy",
+  },
+  {
     label: "H265",
     format: "mp4",
     command: "-c:v libx265 -vtag hvc1",
+  },
+  {
+    label: "H265 + Intel硬件加速",
+    format: "mp4",
+    command: "-c:v hevc_qsv",
+  },
+  {
+    label: "H265 + AMD硬件加速",
+    format: "mp4",
+    command: "-c:v hevc_amf",
+  },
+  {
+    label: "H265 + Nvidia硬件加速",
+    format: "mp4",
+    command: "-c:v hevc_nvenc",
+  },
+  {
+    label: "H265 + Mac硬件加速",
+    format: "mp4",
+    command: "-c:v hevc_videotoolbox",
+  },
+  {
+    label: "H265 HQ + 源音频",
+    format: "mp4",
+    command: "-map 0 -c:v libx265 -crf 23 -c:a copy",
   },
   {
     label: "GIF",
@@ -43,6 +98,16 @@ const CONVERT_TO_FORMAT_MAPS = [
     command:
       "-vf fps=10,scale=320:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse",
   },
+  {
+    label: "MP3 + 嵌入式封面",
+    format: "mp3",
+    command: "-c:v copy -c:a libmp3lame -qscale:a 0 -ac 2",
+  },
+  // {
+  //   label: "录制屏幕",
+  //   format: "mp4",
+  //   command: "-f gdigrab -i desktop -preset ultrafast -crf 20",
+  // },
 ];
 
 function App() {
@@ -62,8 +127,8 @@ function App() {
     // });
   };
 
-  const handleConvertTo = async (curTag, pathName = filePath) => {
-    setCurrentTag(curTag);
+  const handleConvertTo = async (cur, pathName = filePath) => {
+    setCurrentTag(cur.label);
     // 文件路径
     const inputPath = await path.dirname(pathName);
     // 文件名
@@ -76,7 +141,7 @@ function App() {
     )}`;
 
     const selectFormatCommand = CONVERT_TO_FORMAT_MAPS.find(
-      (it) => it.label === curTag
+      (it) => it.command === cur.command
     );
 
     setInputPathFolder(inputPath);
@@ -154,7 +219,7 @@ function App() {
                       return;
                     }
 
-                    handleConvertTo("MP4", filePathUrl);
+                    handleConvertTo(CONVERT_TO_FORMAT_MAPS[0], filePathUrl);
 
                     setFilePath(filePathUrl);
                     setActiveStep(2);
@@ -173,14 +238,15 @@ function App() {
                   disabled={progress > 0 && progress !== 100}
                   variant='secondary'
                   id='dropdown-basic'
+                  style={{ minWidth: 130 }}
                 >
-                  {"Convert To " + currentTag}
+                  {currentTag ? currentTag : "Convert To"}
                 </Dropdown.Toggle>
-                <Dropdown.Menu>
+                <Dropdown.Menu style={{ height: 240, overflow: "auto" }}>
                   {CONVERT_TO_FORMAT_MAPS.map((it) => (
                     <Dropdown.Item
-                      onClick={() => handleConvertTo(it.label)}
-                      key={it.label}
+                      onClick={() => handleConvertTo(it)}
+                      key={it.command}
                     >
                       {it.label}
                     </Dropdown.Item>
