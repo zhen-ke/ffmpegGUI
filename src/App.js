@@ -1,6 +1,7 @@
-import React, { useState, useRef } from "react";
-import { open, runFFmpeg, formatDate } from "./common/utils";
-import { path } from "@tauri-apps/api";
+import React, { useState, useRef, useEffect } from "react";
+import { formatDate } from "./common/utils";
+import createFFmpeg from "./common/createFFmpeg";
+import { path, dialog } from "@tauri-apps/api";
 import {
   Row,
   Col,
@@ -14,6 +15,8 @@ import ProgressSteps from "./component/ProgressSteps";
 import "bootstrap/dist/css/bootstrap.min.css";
 
 import styles from "./App.module.scss";
+
+const { open } = dialog;
 
 // 转换格式 map
 const CONVERT_TO_FORMAT_MAPS = [
@@ -120,13 +123,6 @@ function App() {
   const [activeStep, setActiveStep] = useState(1);
   const ffmpegRef = useRef(null);
 
-  const handleProgress = (progressVal, state) => {
-    setProgress(progressVal);
-    // setLog ( (pre) => {
-    //   return [...pre, line];
-    // });
-  };
-
   const handleConvertTo = async (cur, pathName = filePath) => {
     setCurrentTag(cur.label);
     // 文件路径
@@ -157,18 +153,14 @@ function App() {
   const start = async () => {
     try {
       setActiveStep(3);
-      ffmpegRef.current = await runFFmpeg(
-        commandLine,
-        inputPathFolder,
-        handleProgress
-      );
+      await ffmpegRef.current.run(commandLine, inputPathFolder);
     } catch (error) {
       console.error(error);
     }
   };
 
   const stop = async () => {
-    ffmpegRef.current.kill();
+    ffmpegRef.current.exit();
   };
 
   const steps = [
@@ -185,6 +177,17 @@ function App() {
       step: 3,
     },
   ];
+
+  useEffect(() => {
+    ffmpegRef.current = createFFmpeg({
+      log: (e) => {
+        console.log(e, "日志");
+      },
+      progress: ({ ratio }) => {
+        setProgress(Math.floor(100 * ratio));
+      },
+    });
+  }, []);
 
   return (
     <div className={styles.ffmpeg}>
