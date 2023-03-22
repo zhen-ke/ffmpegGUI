@@ -178,8 +178,24 @@ function App() {
     },
   ];
 
+  const showNotification = async ({ title = "通知", body = "" }) => {
+    const status = await Notification.requestPermission();
+    console.log(status);
+    new Notification(title, { body });
+  };
+
   useEffect(() => {
     ffmpegRef.current = createFFmpeg({
+      success: () => {
+        showNotification({
+          body: "转成成功",
+        });
+      },
+      error: () => {
+        showNotification({
+          body: "转成失败",
+        });
+      },
       log: (e) => {
         console.log(e, "日志");
       },

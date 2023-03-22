@@ -3,7 +3,12 @@ const { Command } = shell;
 export const { open, message } = dialog;
 
 const createFFmpeg = (_options = {}) => {
-  const { log: optLog, progress: optProgress } = {
+  const {
+    log: optLog,
+    progress: optProgress,
+    success = () => {},
+    error = () => {},
+  } = {
     ..._options,
   };
 
@@ -75,9 +80,9 @@ const createFFmpeg = (_options = {}) => {
     // 注册子进程关闭事件
     ffmpegSidecar.on("close", async ({ code }) => {
       if (code) {
-        await message("转换失败");
+        error();
       } else {
-        await shell.open(outputFolder);
+        success();
       }
     });
 
