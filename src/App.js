@@ -159,8 +159,10 @@ function App() {
     }
   };
 
-  const stop = async () => {
+  const stop = () => {
     ffmpegRef.current.exit();
+    setActiveStep(2);
+    setProgress(0);
   };
 
   const steps = [
