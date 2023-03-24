@@ -18,6 +18,8 @@ import styles from "./App.module.scss";
 
 const { open } = dialog;
 
+const TOOLS_MAPS = [];
+
 // 转换格式 map
 const CONVERT_TO_FORMAT_MAPS = [
   {
@@ -209,6 +211,19 @@ function App() {
 
   return (
     <div className={styles.ffmpeg}>
+      {TOOLS_MAPS.length ? (
+        <ul className={styles.tools}>
+          {TOOLS_MAPS.map((it, i) => (
+            <li className={styles.toolsItem} key={i}>
+              <div className={styles.content}>
+                <div className={styles.icon}>{it?.icon}</div>
+                <div className={styles.title}>{it?.title}</div>
+              </div>
+              <div className={styles.desc}>{it?.desc}</div>
+            </li>
+          ))}
+        </ul>
+      ) : null}
       <div className={styles.uploadTool}>
         <ProgressSteps
           steps={steps}

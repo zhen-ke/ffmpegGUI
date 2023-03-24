@@ -37,4 +37,56 @@ body {
   .link {
     color: #61dafb;
   }
+  .tools {
+    margin: 0;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    width: 100%;
+    margin-left: -16px;
+    margin-top: -16px;
+    .toolsItem {
+      color: #707375;
+      background: #ffffff;
+      border-radius: 12px;
+      padding: 16px;
+      overflow: hidden;
+      height: 100%;
+      margin-left: 16px;
+      margin-top: 16px;
+      width: calc((100% / 3) - 16px);
+      cursor: pointer;
+      .content {
+        display: flex;
+        align-items: center;
+        .icon {
+          border-radius: 8px;
+          width: 48px;
+          height: 48px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          padding: 5px;
+          background: #e2f0fe;
+          margin-right: 12px;
+        }
+        .title {
+          text-overflow: ellipsis;
+          overflow: hidden;
+          white-space: nowrap;
+          color: #181d20;
+          font-weight: 600;
+          font-size: 16px;
+          line-height: 1.4;
+          letter-spacing: 0.005em;
+          margin-bottom: 2px;
+        }
+      }
+      .desc {
+        margin-top: 12px;
+        font-size: 14px;
+      }
+    }
+  }
 }
