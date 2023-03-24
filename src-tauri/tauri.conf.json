@@ -23,9 +23,6 @@
         "execute": true,
         "open": "",
         "scope": [{ "name": "ffmpeg", "args": true, "sidecar": true }]
-      },
-      "notification": {
-        "all": true
       }
     },
     "bundle": {
