@@ -101,7 +101,7 @@ const CONVERT_TO_FORMAT_MAPS = [
     label: "GIF",
     format: "gif",
     command:
-      "-vf fps=10,scale=320:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse",
+      "-vf fps=10,scale=iw*.75:ih*.75:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse",
   },
   {
     label: "MP3 (嵌入式封面)",
