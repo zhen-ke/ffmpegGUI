@@ -38,26 +38,6 @@ const CONVERT_TO_FORMAT_MAPS = [
     command: "-vcodec libx264 -acodec aac",
   },
   {
-    label: "H264  (Intel硬件加速)",
-    format: "mp4",
-    command: "-c:v h264_qsv",
-  },
-  {
-    label: "H264 (AMD硬件加速)",
-    format: "mp4",
-    command: "-c:v h264_amf",
-  },
-  {
-    label: "H264 (Nvidia硬件加速)",
-    format: "mp4",
-    command: "-c:v h264_nvenc",
-  },
-  {
-    label: "H264 (Mac硬件加速)",
-    format: "mp4",
-    command: "-c:v h264_videotoolbox",
-  },
-  {
     label: "H264超快",
     format: "mp4",
     command: "-map 0 -c:v libx264 -crf 23 -preset ultrafast -c:a copy",
@@ -71,26 +51,6 @@ const CONVERT_TO_FORMAT_MAPS = [
     label: "H265",
     format: "mp4",
     command: "-c:v libx265 -vtag hvc1",
-  },
-  {
-    label: "H265 (Intel硬件加速)",
-    format: "mp4",
-    command: "-c:v hevc_qsv",
-  },
-  {
-    label: "H265 (AMD硬件加速)",
-    format: "mp4",
-    command: "-c:v hevc_amf",
-  },
-  {
-    label: "H265 (Nvidia硬件加速)",
-    format: "mp4",
-    command: "-c:v hevc_nvenc",
-  },
-  {
-    label: "H265 (Mac硬件加速)",
-    format: "mp4",
-    command: "-c:v hevc_videotoolbox",
   },
   {
     label: "H265 HQ + 源音频",
