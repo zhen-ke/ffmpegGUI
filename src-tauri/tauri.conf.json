@@ -22,7 +22,7 @@
         "sidecar": true,
         "execute": true,
         "open": "",
-        "scope": [{ "name": "ffmpeg", "args": true, "sidecar": true }]
+        "scope": [{ "name": "bin/ffmpeg", "args": true, "sidecar": true }]
       },
       "notification": {
         "all": true
@@ -35,7 +35,7 @@
       "deb": {
         "depends": []
       },
-      "externalBin": ["ffmpeg"],
+      "externalBin": ["bin/ffmpeg"],
       "icon": [
         "icons/32x32.png",
         "icons/128x128.png",

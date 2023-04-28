@@ -75,7 +75,7 @@ const createFFmpeg = (_options = {}) => {
   };
 
   const run = async (command, outputFolder) => {
-    const ffmpegSidecar = Command.sidecar("ffmpeg", command);
+    const ffmpegSidecar = Command.sidecar("bin/ffmpeg", command);
 
     // 注册子进程关闭事件
     ffmpegSidecar.on("close", async ({ code }) => {
