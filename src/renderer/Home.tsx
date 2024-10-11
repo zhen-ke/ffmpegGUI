@@ -174,12 +174,14 @@ function App() {
             <h2 className="font-bold text-lg text-blue-400">Logs</h2>
             <div className="flex space-x-2">
               <button
+                disabled={!logs?.length}
                 onClick={() => setLogs('')}
                 className="px-3 py-1 text-sm bg-blue-500 hover:bg-blue-600 text-white rounded-md transition-colors duration-300"
               >
                 Clear
               </button>
               <button
+                disabled={!logs?.length}
                 onClick={() => {
                   navigator.clipboard.writeText(logs);
                 }}
