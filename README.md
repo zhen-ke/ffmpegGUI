@@ -38,4 +38,4 @@ npm run package
 
 如果觉得这些内容不错，请我喝杯咖啡吧。
 
-![pay](./screenshot/pay.png)
+![pay](https://raw.githubusercontent.com/zhen-ke/img/main/pay.png)
