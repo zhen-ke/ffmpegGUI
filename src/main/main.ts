@@ -49,35 +49,33 @@ function getFfmpegPath(): string {
 }
 
 // 应用启动时检查 FFmpeg 是否可用
-function checkFfmpeg(): Promise<void> {
+async function checkFfmpeg(): Promise<void> {
+  const ffmpegPath = getFfmpegPath();
+  log.info('Checking FFmpeg availability...');
+  log.info('FFmpeg path:', ffmpegPath);
+
+  try {
+    await fs.promises.access(ffmpegPath, fs.constants.X_OK);
+  } catch (err) {
+    log.error('FFmpeg is not accessible:', err);
+    throw new Error(`FFmpeg is not accessible: ${err.message}`);
+  }
+
   return new Promise((resolve, reject) => {
-    const ffmpegPath = getFfmpegPath();
-    log.info('Checking FFmpeg availability...');
-    log.info('FFmpeg path:', ffmpegPath);
-
-    fs.access(ffmpegPath, fs.constants.X_OK, (err) => {
-      if (err) {
-        log.error('FFmpeg is not accessible:', err);
-        reject(new Error(`FFmpeg is not accessible: ${err.message}`));
-        return;
+    execFile(ffmpegPath, ['-version'], (error, stdout) => {
+      if (error) {
+        log.error('Error running FFmpeg:', error);
+        reject(new Error(`Error running FFmpeg: ${error.message}`));
+      } else {
+        log.info('FFmpeg version:', stdout.trim());
+        resolve();
       }
-
-      execFile(ffmpegPath, ['-version'], (error, stdout, stderr) => {
-        if (error) {
-          log.error('Error running FFmpeg:', error);
-          reject(new Error(`Error running FFmpeg: ${error.message}`));
-        } else {
-          log.info('FFmpeg version:', stdout);
-          resolve();
-        }
-      });
     });
   });
 }
 
-const ffmpegPath = getFfmpegPath();
-
 ipcMain.on('start-ffmpeg', async (event, command) => {
+  const ffmpegPath = getFfmpegPath();
   let fullCommand = `${ffmpegPath} ${command}`;
 
   // 解析命令以检查是否有输出文件
