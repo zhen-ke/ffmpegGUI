@@ -1,0 +1,18 @@
+{
+  "name": "ffmpegGUI",
+  "version": "0.1.0",
+  "description": "A FFmpeg GUI project",
+  "license": "MIT",
+  "author": {
+    "name": "zhen-ke",
+    "email": "xmit0806@outlook.com",
+    "url": "https://github.com/zhen-ke/ffmpegGUI"
+  },
+  "main": "./dist/main/main.js",
+  "scripts": {
+    "rebuild": "node -r ts-node/register ../../.erb/scripts/electron-rebuild.js",
+    "postinstall": "npm run rebuild && npm run link-modules",
+    "link-modules": "node -r ts-node/register ../../.erb/scripts/link-modules.ts"
+  },
+  "dependencies": {}
+}

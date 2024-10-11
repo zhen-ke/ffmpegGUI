@@ -1,35 +1,25 @@
-# ffmpegGUI
+# FFmpeg GUI
 
 ### 项目说明
 
-基于 Electron + Vue + ffmpeg 的 GUI
+FFmpeg GUI 是一款基于 electron-react-boilerplate 开发的现代化图形界面应用程序，旨在简化 FFmpeg 的使用流程。本应用为用户提供了一个直观、高效的界面，使复杂的音视频转换和处理任务变得轻而易举。
+
+### 主要功能
+
+- 输入 FFmpeg 命令行参数，应用程序将自动执行相应的音视频转换任务。
+- 支持大部分标准 FFmpeg 命令选项。
 
 ### 项目截图
 
-![screenshot1](./screenshot/screenshot-01.jpg)
-![screenshot2](./screenshot/screenshot-02.jpg)
-![screenshot3](./screenshot/screenshot-03.jpg)
+![screenshot1](https://raw.githubusercontent.com/zhen-ke/img/main/ffmpegGUI_2024-10-11-15-30.png)
+![screenshot2](https://raw.githubusercontent.com/zhen-ke/img/main/ffmpegGUI_2024-10-11-15-31.png)
+![screenshot3](https://raw.githubusercontent.com/zhen-ke/img/main/ffmpegGUI_2024-10-11-15-34.png)
 
-### 遇到的问题
+### 注意事项
 
- - 如何开启硬件加速
- - 打包后 electron 里 asar 不能使用二进制文件的问题
- - 如何通过 Webpack 打包不同平台的二进制文件到 APP 里
-
-[上述问题的解决过程](https://zhen-ke.github.io/2019/06/17/ffmpeggui-development-notes/)
-
-### 待完善
-
-- [x] 减小打包过大的问题（目前默认是打包全平台的 ffmpeg）
-- [ ] 增加配置项（目前所有的配置默认都是写死的，比如转视频时默认会把任意格式的视频转 MP4）
-- [ ] 切割音频和视频时可以实时预览
-- [x] 转码核心代码优化
-- [x] 提供可以让用户输入 ffmpeg 命令的形式执行转码操作（目前基本可以实现）
-- [ ] 界面优化
-- [ ] 用户可选保持原始目录路径
-- [ ] 加入文件夹监控，自动队列转码（支持数据库和 webhook）
-- [ ] 下载 M3u8 的链接
-- [ ] 批量转码（指定线程池数量来优化性能）
+- 首次启动时，应用程序会自动检查 FFmpeg 是否可用。
+- 请确保有足够的磁盘空间用于输出文件。
+- 对于大文件转换，可能需要较长处理时间，请耐心等待。
 
 ### 构建应用
 
@@ -38,10 +28,10 @@
 npm install
 
 # 开发模式
-npm run electron:serve
+npm run start
 
 # 打包项目
-npm run electron:build
+npm run package
 ```
 
 ### 赞助我
