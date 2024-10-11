@@ -170,7 +170,25 @@ function App() {
         )}
 
         <div className="flex-grow overflow-hidden bg-white p-4 pb-6">
-          <div className="font-semibold text-gray-700 mb-2">Logs</div>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="font-bold text-lg text-blue-400">Logs</h2>
+            <div className="flex space-x-2">
+              <button
+                onClick={() => setLogs('')}
+                className="px-3 py-1 text-sm bg-blue-500 hover:bg-blue-600 text-white rounded-md transition-colors duration-300"
+              >
+                Clear
+              </button>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(logs);
+                }}
+                className="px-3 py-1 text-sm bg-green-500 hover:bg-green-600 text-white rounded-md transition-colors duration-300"
+              >
+                Copy
+              </button>
+            </div>
+          </div>
           <div
             ref={logsRef}
             className="h-full overflow-y-auto font-mono text-sm bg-gray-100 p-4 rounded"
