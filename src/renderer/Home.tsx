@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Play, Square, AlertCircle } from 'lucide-react';
+import { Play, Square } from 'lucide-react';
+import FFmpegDownloader from './FFmpegDownloader';
 
 declare global {
   interface Window {
@@ -14,6 +15,7 @@ function App() {
   const [progress, setProgress] = useState(0);
   const logsRef = useRef<HTMLDivElement>(null);
   const [totalDuration, setTotalDuration] = useState(0);
+  const [ffmpegExists, setFfmpegExists] = useState<boolean | null>(null);
 
   const updateProgress = useCallback(
     (currentTime: number) => {
@@ -37,6 +39,13 @@ function App() {
   );
 
   useEffect(() => {
+    const removeFFmpegIsExistsListener = window.electron.ipcRenderer.on(
+      'ffmpeg-status',
+      (exists: boolean) => {
+        setFfmpegExists(exists);
+      },
+    );
+
     const removeFFmpegDurationListener = window.electron.ipcRenderer.on(
       'ffmpeg-duration',
       (data: { duration: number }) => {
@@ -76,6 +85,7 @@ function App() {
     );
 
     return () => {
+      removeFFmpegIsExistsListener();
       removeFFmpegDurationListener();
       removeFFmpegProgressListener();
       removeFFmpegOutputListener();
@@ -102,6 +112,10 @@ function App() {
     window.electron.ipcRenderer.sendMessage('stop-ffmpeg');
     setIsRunning(false);
   };
+
+  if (!ffmpegExists) {
+    return <FFmpegDownloader />;
+  }
 
   return (
     <div className="h-screen flex flex-col bg-gray-100 overflow-hidden">

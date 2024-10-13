@@ -9,6 +9,13 @@ export type Channels =
   | 'ffmpeg-progress'
   | 'ffmpeg-duration'
   | 'open-output-folder'
+  | 'ffmpeg-status'
+  | 'download-ffmpeg'
+  | 'ffmpeg-download-progress'
+  | 'ffmpeg-extract-progress'
+  | 'ffmpeg-install-complete'
+  | 'ffmpeg-install-error'
+  | 'fetch-ffmpeg-assets'
   | 'ffmpeg-complete';
 
 const electronHandler = {

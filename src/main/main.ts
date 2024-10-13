@@ -16,7 +16,10 @@ import MenuBuilder from './menu';
 import { resolveHtmlPath } from './util';
 import { exec } from 'child_process';
 import fs from 'fs';
-import { execFile } from 'child_process';
+import axios from 'axios';
+import extract from 'extract-zip';
+import { extractFull } from 'node-7z';
+import sevenBin from '7zip-bin';
 
 class AppUpdater {
   constructor() {
@@ -29,6 +32,135 @@ class AppUpdater {
 let mainWindow: BrowserWindow | null = null;
 
 let ffmpegProcess: ReturnType<typeof exec> | null = null;
+
+const get7zaPath = () => {
+  if (app.isPackaged) {
+    return path.join(
+      process.resourcesPath,
+      '7zip-bin',
+      process.platform === 'win32' ? '7za.exe' : '7za',
+    );
+  }
+  return sevenBin.path7za;
+};
+
+const extractSeven = (
+  source: string,
+  destination: string,
+  progressCallback: (progress: number) => void,
+): Promise<void> => {
+  return new Promise((resolve, reject) => {
+    const seven = extractFull(source, destination, {
+      $bin: get7zaPath(),
+    });
+
+    seven.on('end', () => {
+      progressCallback(100);
+      resolve();
+    });
+
+    seven.on('error', (err) => {
+      console.error('7zip extraction error:', err);
+      mainWindow?.webContents.send('main-process-log', {
+        type: 'error',
+        message: `7zip extraction error: ${err.message}`,
+      });
+      reject(err);
+    });
+
+    seven.on('progress', (progress) => {
+      progressCallback(progress.percent);
+    });
+  });
+};
+
+async function extractArchive(
+  filePath: string,
+  extractPath: string,
+  progressCallback: (progress: number) => void,
+): Promise<string> {
+  const ext = path.extname(filePath).toLowerCase();
+  if (ext === '.zip') {
+    await extract(filePath, { dir: extractPath });
+    progressCallback(100); // ZIP extraction doesn't provide progress, so we just report 100% when done
+  } else if (ext === '.7z') {
+    await extractSeven(filePath, extractPath, progressCallback);
+  } else {
+    throw new Error('Unsupported archive format');
+  }
+
+  // 查找 ffmpeg 可执行文件
+  const ffmpegName = process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg';
+  const ffmpegPath = await findFFmpegExecutable(extractPath, ffmpegName);
+
+  if (!ffmpegPath) {
+    throw new Error('FFmpeg executable not found in the extracted files');
+  }
+
+  return ffmpegPath;
+}
+
+async function findFFmpegExecutable(
+  dir: string,
+  fileName: string,
+): Promise<string | null> {
+  const files = await fs.promises.readdir(dir, { withFileTypes: true });
+  for (const file of files) {
+    if (file.isDirectory()) {
+      const found = await findFFmpegExecutable(
+        path.join(dir, file.name),
+        fileName,
+      );
+      if (found) return found;
+    } else if (file.name === fileName) {
+      return path.join(dir, file.name);
+    }
+  }
+  return null;
+}
+
+async function moveFile(source: string, destination: string): Promise<void> {
+  try {
+    await fs.promises.rename(source, destination);
+  } catch (error) {
+    if (error.code === 'EXDEV') {
+      // 如果是跨设备错误，则使用复制然后删除的方法
+      await fs.promises.copyFile(source, destination);
+      await fs.promises.unlink(source);
+    } else {
+      throw error;
+    }
+  }
+}
+
+async function downloadFile(
+  url: string,
+  filePath: string,
+  progressCallback: (progress: number) => void,
+): Promise<void> {
+  const writer = fs.createWriteStream(filePath);
+  const response = await axios({
+    url,
+    method: 'GET',
+    responseType: 'stream',
+  });
+
+  const totalLength = response.headers['content-length'];
+  let downloadedLength = 0;
+
+  response.data.on('data', (chunk: Buffer) => {
+    downloadedLength += chunk.length;
+    const progress = Math.round((downloadedLength / totalLength) * 100);
+    progressCallback(progress);
+  });
+
+  response.data.pipe(writer);
+
+  return new Promise((resolve, reject) => {
+    writer.on('finish', resolve);
+    writer.on('error', reject);
+  });
+}
 
 function getFfmpegPath(): string {
   if (app.isPackaged) {
@@ -49,29 +181,14 @@ function getFfmpegPath(): string {
 }
 
 // 应用启动时检查 FFmpeg 是否可用
-async function checkFfmpeg(): Promise<void> {
+async function checkFFmpegExists(): Promise<boolean> {
   const ffmpegPath = getFfmpegPath();
-  log.info('Checking FFmpeg availability...');
-  log.info('FFmpeg path:', ffmpegPath);
-
   try {
-    await fs.promises.access(ffmpegPath, fs.constants.X_OK);
-  } catch (err) {
-    log.error('FFmpeg is not accessible:', err);
-    throw new Error(`FFmpeg is not accessible: ${err.message}`);
+    await fs.promises.access(ffmpegPath, fs.constants.F_OK);
+    return true;
+  } catch {
+    return false;
   }
-
-  return new Promise((resolve, reject) => {
-    execFile(ffmpegPath, ['-version'], (error, stdout) => {
-      if (error) {
-        log.error('Error running FFmpeg:', error);
-        reject(new Error(`Error running FFmpeg: ${error.message}`));
-      } else {
-        log.info('FFmpeg version:', stdout.trim());
-        resolve();
-      }
-    });
-  });
 }
 
 ipcMain.on('start-ffmpeg', async (event, command) => {
@@ -202,6 +319,59 @@ ipcMain.on('stop-ffmpeg', () => {
   }
 });
 
+ipcMain.on('download-ffmpeg', async (event, url: string) => {
+  try {
+    const tempDir = app.getPath('temp');
+    const downloadPath = path.join(tempDir, 'ffmpeg-download');
+    const extractPath = path.join(tempDir, 'ffmpeg-extract');
+    const binariesPath = path.dirname(getFfmpegPath()); // 使用 getFfmpegPath 来确定正确的安装路径
+
+    // 确保目录存在
+    await fs.promises.mkdir(downloadPath, { recursive: true });
+    await fs.promises.mkdir(extractPath, { recursive: true });
+    await fs.promises.mkdir(binariesPath, { recursive: true });
+
+    const fileName = path.basename(url);
+    const filePath = path.join(downloadPath, fileName);
+
+    // 下载文件
+    event.reply('ffmpeg-download-progress', 0);
+    await downloadFile(url, filePath, (progress) => {
+      event.reply('ffmpeg-download-progress', progress);
+    });
+
+    // 解压文件
+    event.reply('ffmpeg-extract-progress', 0);
+    const ffmpegSourcePath = await extractArchive(
+      filePath,
+      extractPath,
+      (progress) => {
+        console.log(`Extraction progress: ${progress}%`);
+        event.reply('ffmpeg-extract-progress', progress);
+      },
+    );
+
+    console.log('Extraction completed');
+
+    // 移动 FFmpeg 到正确的 binaries 目录
+    const ffmpegDestPath = getFfmpegPath(); // 使用之前定义的 getFfmpegPath 函数
+    await fs.promises.mkdir(path.dirname(ffmpegDestPath), { recursive: true });
+    await moveFile(ffmpegSourcePath, ffmpegDestPath);
+
+    console.log('FFmpeg installed successfully');
+    event.reply('ffmpeg-install-complete');
+
+    // 更新 FFmpeg 状态
+    mainWindow?.webContents.send('ffmpeg-status', true);
+    // 清理临时文件
+    await fs.promises.rm(downloadPath, { recursive: true, force: true });
+    await fs.promises.rm(extractPath, { recursive: true, force: true });
+  } catch (error) {
+    console.error('Error during FFmpeg installation:', error);
+    event.reply('ffmpeg-install-error', error.message);
+  }
+});
+
 ipcMain.on('ipc-example', async (event, arg) => {
   const msgTemplate = (pingPong: string) => `IPC test: ${pingPong}`;
   console.log(msgTemplate(arg));
@@ -260,6 +430,14 @@ const createWindow = async () => {
 
   mainWindow.loadURL(resolveHtmlPath('index.html'));
 
+  // 检查 FFmpeg 是否存在
+  const ffmpegExists = await checkFFmpegExists();
+
+  // 等待页面加载完成后发送 FFmpeg 状态
+  mainWindow.webContents.on('did-finish-load', () => {
+    mainWindow?.webContents.send('ffmpeg-status', ffmpegExists);
+  });
+
   mainWindow.on('ready-to-show', () => {
     if (!mainWindow) {
       throw new Error('"mainWindow" is not defined');
@@ -303,27 +481,12 @@ app.on('window-all-closed', () => {
 
 app
   .whenReady()
-  .then(async () => {
-    try {
-      await checkFfmpeg();
-      createWindow();
-      app.on('activate', () => {
-        if (mainWindow === null) createWindow();
-      });
-    } catch (error) {
-      log.error('FFmpeg check failed:', error);
-      dialog.showErrorBox(
-        'FFmpeg Error',
-        `FFmpeg is not available: ${error?.message}`,
-      );
-      app.quit();
-    }
+  .then(() => {
+    createWindow();
+    app.on('activate', () => {
+      // On macOS it's common to re-create a window in the app when the
+      // dock icon is clicked and there are no other windows open.
+      if (mainWindow === null) createWindow();
+    });
   })
-  .catch((error) => {
-    log.error('Application failed to start:', error);
-    dialog.showErrorBox(
-      'Startup Error',
-      `Application failed to start: ${error?.message}`,
-    );
-    app.quit();
-  });
+  .catch(console.log);
