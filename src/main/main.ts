@@ -241,11 +241,16 @@ async function downloadFile(
 function getFfmpegPath(): string {
   if (app.isPackaged) {
     // 生产环境
-    return path.join(
-      process.resourcesPath,
-      'binaries',
-      process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg',
-    );
+    if (process.platform === 'darwin') {
+      // Mac OS
+      return path.join(app.getAppPath(), '..', 'binaries', 'ffmpeg');
+    } else if (process.platform === 'win32') {
+      // Windows
+      return path.join(process.resourcesPath, 'binaries', 'ffmpeg.exe');
+    } else {
+      // Linux 或其他平台
+      return path.join(process.resourcesPath, 'binaries', 'ffmpeg');
+    }
   } else {
     // 开发环境
     return path.join(
@@ -401,7 +406,7 @@ ipcMain.on('download-ffmpeg', async (event, url: string) => {
     const downloadPath = path.join(tempDir, 'ffmpeg-download');
     const extractPath = path.join(tempDir, 'ffmpeg-extract');
     const binariesPath = path.dirname(getFfmpegPath()); // 使用 getFfmpegPath 来确定正确的安装路径
-    console.log('downloadPath', extractPath, binariesPath);
+
     // 确保目录存在
     await fs.promises.mkdir(downloadPath, { recursive: true });
     await fs.promises.mkdir(extractPath, { recursive: true });
@@ -438,6 +443,11 @@ ipcMain.on('download-ffmpeg', async (event, url: string) => {
     const ffmpegDestPath = getFfmpegPath(); // 使用之前定义的 getFfmpegPath 函数
     await fs.promises.mkdir(path.dirname(ffmpegDestPath), { recursive: true });
     await moveFile(ffmpegSourcePath, ffmpegDestPath);
+
+    // 设置执行权限（对于 Mac 和 Linux）
+    if (process.platform !== 'win32') {
+      await fs.promises.chmod(ffmpegDestPath, '755');
+    }
 
     console.log('FFmpeg installed successfully');
     event.reply('ffmpeg-install-complete');

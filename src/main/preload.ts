@@ -15,7 +15,6 @@ export type Channels =
   | 'ffmpeg-extract-progress'
   | 'ffmpeg-install-complete'
   | 'ffmpeg-install-error'
-  | 'fetch-ffmpeg-assets'
   | 'ffmpeg-complete';
 
 const electronHandler = {
@@ -39,6 +38,7 @@ const electronHandler = {
       return ipcRenderer.invoke(channel, ...args);
     },
   },
+  platform: process.platform,
 };
 
 contextBridge.exposeInMainWorld('electron', electronHandler);

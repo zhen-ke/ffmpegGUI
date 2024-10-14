@@ -172,6 +172,13 @@
       "package.json"
     ],
     "mac": {
+      "extraResources": [
+        {
+          "from": "binaries",
+          "to": "binaries",
+          "filter": ["**/*"]
+        }
+      ],
       "sign": ".erb/scripts/notarize.js",
       "notarize": false,
       "target": {
