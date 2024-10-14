@@ -11,6 +11,24 @@ const FFmpegDownloader: React.FC = () => {
   const [installing, setInstalling] = useState(false);
 
   useEffect(() => {
+    const platform = window.electron.platform;
+
+    fetchFFmpegAssets(platform)
+      .then((fetchedAssets) => {
+        setAssets(fetchedAssets);
+        setLoading(false);
+        if (fetchedAssets.length === 1) {
+          setSelectedAsset(fetchedAssets[0]); // 如果只有一个选项（如 Mac），自动选择它
+        }
+      })
+      .catch((err) => {
+        setError('Failed to fetch FFmpeg assets');
+        setLoading(false);
+        console.error(err);
+      });
+  }, []);
+
+  useEffect(() => {
     const removeFFmpegDownloadProgressListener = window.electron.ipcRenderer.on(
       'ffmpeg-download-progress',
       (progress: number) => {
@@ -48,19 +66,6 @@ const FFmpegDownloader: React.FC = () => {
       removeFFmpegInstallCompleteListener();
       removeFFmpegInstallErrorListener();
     };
-  }, []);
-
-  useEffect(() => {
-    fetchFFmpegAssets()
-      .then((fetchedAssets) => {
-        setAssets(fetchedAssets);
-        setLoading(false);
-      })
-      .catch((err) => {
-        setError('Failed to fetch FFmpeg assets');
-        setLoading(false);
-        console.error(err);
-      });
   }, []);
 
   const handleAssetSelect = (asset: FFmpegAsset) => {
@@ -156,27 +161,34 @@ const FFmpegDownloader: React.FC = () => {
           Download FFmpeg
         </h2>
         <p className="text-gray-600 mb-6 text-center">
-          FFmpeg is not detected on your system. Please select a version to
-          download.
+          FFmpeg is not detected on your system. Please download it.
         </p>
-        <ul className="space-y-2 mb-6">
-          {assets.map((asset, index) => (
-            <li key={index} className="flex items-center">
-              <label className="flex items-center space-x-3 cursor-pointer">
-                <input
-                  type="radio"
-                  name="ffmpeg-asset"
-                  checked={selectedAsset === asset}
-                  onChange={() => handleAssetSelect(asset)}
-                  className="form-radio h-5 w-5 text-blue-600"
-                />
-                <span className="text-gray-700">
-                  {`${asset.name} (${(asset.size / 1024 / 1024).toFixed(2)} MB)`}
-                </span>
-              </label>
-            </li>
-          ))}
-        </ul>
+        {window.electron.platform === 'win32' ? (
+          // Windows 平台显示多个选项
+          <ul className="space-y-2 mb-6">
+            {assets.map((asset, index) => (
+              <li key={index} className="flex items-center">
+                <label className="flex items-center space-x-3 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="ffmpeg-asset"
+                    checked={selectedAsset === asset}
+                    onChange={() => handleAssetSelect(asset)}
+                    className="form-radio h-5 w-5 text-blue-600"
+                  />
+                  <span className="text-gray-700">
+                    {`${asset.name} (${(asset.size / 1024 / 1024).toFixed(2)} MB)`}
+                  </span>
+                </label>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          // Mac 平台只显示一个下载选项
+          <p className="text-gray-700 mb-6 text-center">
+            Latest version of FFmpeg will be downloaded.
+          </p>
+        )}
         <button
           onClick={handleDownload}
           disabled={!selectedAsset}
@@ -186,7 +198,7 @@ const FFmpegDownloader: React.FC = () => {
               : 'bg-gray-300 cursor-not-allowed'
           }`}
         >
-          Update to Selected Version
+          Download and Install FFmpeg
         </button>
       </div>
     </div>

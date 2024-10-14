@@ -79,24 +79,32 @@ async function extractArchive(
   extractPath: string,
   progressCallback: (progress: number) => void,
 ): Promise<string> {
+  console.log(`Extracting file: ${filePath} to ${extractPath}`);
   const ext = path.extname(filePath).toLowerCase();
-  if (ext === '.zip') {
-    await extract(filePath, { dir: extractPath });
-    progressCallback(100); // ZIP extraction doesn't provide progress, so we just report 100% when done
-  } else if (ext === '.7z') {
-    await extractSeven(filePath, extractPath, progressCallback);
-  } else {
-    throw new Error('Unsupported archive format');
+
+  try {
+    if (ext === '.zip') {
+      await extract(filePath, { dir: extractPath });
+      progressCallback(100);
+    } else if (ext === '.7z') {
+      await extractSeven(filePath, extractPath, progressCallback);
+    } else {
+      throw new Error(`Unsupported archive format: ${ext}`);
+    }
+  } catch (error) {
+    console.error(`Error during extraction: ${error.message}`);
+    throw error;
   }
 
-  // 查找 ffmpeg 可执行文件
   const ffmpegName = process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg';
   const ffmpegPath = await findFFmpegExecutable(extractPath, ffmpegName);
 
   if (!ffmpegPath) {
+    console.error(`FFmpeg executable not found in: ${extractPath}`);
     throw new Error('FFmpeg executable not found in the extracted files');
   }
 
+  console.log(`FFmpeg executable found at: ${ffmpegPath}`);
   return ffmpegPath;
 }
 
@@ -137,29 +145,97 @@ async function downloadFile(
   url: string,
   filePath: string,
   progressCallback: (progress: number) => void,
-): Promise<void> {
-  const writer = fs.createWriteStream(filePath);
-  const response = await axios({
-    url,
-    method: 'GET',
-    responseType: 'stream',
-  });
+): Promise<string> {
+  const downloadedFileName =
+    process.platform === 'darwin' ? 'ffmpeg-macos.zip' : path.basename(url);
+  const downloadedFilePath = path.join(
+    path.dirname(filePath),
+    downloadedFileName,
+  );
 
-  const totalLength = response.headers['content-length'];
-  let downloadedLength = 0;
+  if (process.platform === 'darwin') {
+    console.log('Starting Mac FFmpeg download');
+    return new Promise<string>((resolve, reject) => {
+      const tempFileName = 'ffmpeg-temp-download';
+      const finalFileName = 'ffmpeg-macos.zip';
+      const tempFilePath = path.join(path.dirname(filePath), tempFileName);
+      const finalFilePath = path.join(path.dirname(filePath), finalFileName);
 
-  response.data.on('data', (chunk: Buffer) => {
-    downloadedLength += chunk.length;
-    const progress = Math.round((downloadedLength / totalLength) * 100);
-    progressCallback(progress);
-  });
+      console.log(`Downloading to temporary file: ${tempFilePath}`);
 
-  response.data.pipe(writer);
+      // 使用 -# 选项来获取进度条输出
+      const curlCommand = `curl -L "${url}" -o "${tempFilePath}" -#`;
+      const process = exec(curlCommand);
 
-  return new Promise((resolve, reject) => {
-    writer.on('finish', resolve);
-    writer.on('error', reject);
-  });
+      let lastProgress = 0;
+
+      process.stderr?.on('data', (data) => {
+        const lines = data.toString().split('\n');
+        for (const line of lines) {
+          if (line.includes('#')) {
+            const progressMatch = line.match(/(\d+\.\d+)%/);
+            if (progressMatch) {
+              const progress = parseFloat(progressMatch[1]);
+              if (progress > lastProgress) {
+                lastProgress = progress;
+                progressCallback(progress);
+              }
+            }
+          } else {
+            console.log(`curl output: ${line}`);
+          }
+        }
+      });
+
+      process.on('close', async (code) => {
+        if (code === 0) {
+          try {
+            const stats = await fs.promises.stat(tempFilePath);
+            if (stats.size > 0) {
+              await fs.promises.rename(tempFilePath, finalFilePath);
+              console.log(`File renamed successfully: ${finalFilePath}`);
+              resolve(finalFilePath);
+            } else {
+              reject(new Error('Downloaded file is empty'));
+            }
+          } catch (error) {
+            reject(new Error(`Error processing file: ${error.message}`));
+          }
+        } else {
+          reject(new Error(`Download failed with code ${code}`));
+        }
+      });
+
+      process.on('error', (error) => {
+        reject(new Error(`Execution error: ${error.message}`));
+      });
+    });
+  } else {
+    return new Promise<string>((resolve, reject) => {
+      const writer = fs.createWriteStream(downloadedFilePath);
+      axios({
+        url,
+        method: 'GET',
+        responseType: 'stream',
+      })
+        .then((response) => {
+          const totalLength = parseInt(response.headers['content-length'], 10);
+          let downloadedLength = 0;
+
+          response.data.on('data', (chunk: Buffer) => {
+            downloadedLength += chunk.length;
+            const progress = Math.round((downloadedLength / totalLength) * 100);
+            progressCallback(progress);
+          });
+
+          response.data.pipe(writer);
+
+          writer.on('finish', () => resolve(downloadedFilePath));
+          writer.on('error', (err) => reject(err));
+        })
+        .catch((err) => reject(err));
+    });
+  }
 }
 
 function getFfmpegPath(): string {
@@ -203,7 +279,7 @@ ipcMain.on('start-ffmpeg', async (event, command) => {
   );
 
   if (outputFileIndex === -1) {
-    // 如果没有找到可能的输出文件，直接执行命令
+    // 如果没有找到可能的输出文件，直接执行命
     executeFFmpegCommand(fullCommand, event);
   } else {
     const outputFile = args[args.length - 1].replace(/^"|"$/g, '');
@@ -325,7 +401,7 @@ ipcMain.on('download-ffmpeg', async (event, url: string) => {
     const downloadPath = path.join(tempDir, 'ffmpeg-download');
     const extractPath = path.join(tempDir, 'ffmpeg-extract');
     const binariesPath = path.dirname(getFfmpegPath()); // 使用 getFfmpegPath 来确定正确的安装路径
-
+    console.log('downloadPath', extractPath, binariesPath);
     // 确保目录存在
     await fs.promises.mkdir(downloadPath, { recursive: true });
     await fs.promises.mkdir(extractPath, { recursive: true });
@@ -336,14 +412,19 @@ ipcMain.on('download-ffmpeg', async (event, url: string) => {
 
     // 下载文件
     event.reply('ffmpeg-download-progress', 0);
-    await downloadFile(url, filePath, (progress) => {
+    const downloadedFilePath = await downloadFile(url, filePath, (progress) => {
       event.reply('ffmpeg-download-progress', progress);
     });
+
+    // 检查下载的文件是否存在
+    if (!fs.existsSync(downloadedFilePath)) {
+      throw new Error(`Downloaded file not found: ${downloadedFilePath}`);
+    }
 
     // 解压文件
     event.reply('ffmpeg-extract-progress', 0);
     const ffmpegSourcePath = await extractArchive(
-      filePath,
+      downloadedFilePath,
       extractPath,
       (progress) => {
         console.log(`Extraction progress: ${progress}%`);
