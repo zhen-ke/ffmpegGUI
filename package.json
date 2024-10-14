@@ -163,7 +163,7 @@
   },
   "build": {
     "appId": "com.zhenke.ffmpeg-gui",
-    "productName": "FFmpeg GUI",
+    "productName": "FFmpegGUI",
     "asar": true,
     "asarUnpack": "**\\*.{node,dll}",
     "files": [
@@ -176,7 +176,9 @@
         {
           "from": "binaries",
           "to": "binaries",
-          "filter": ["**/*"]
+          "filter": [
+            "**/*"
+          ]
         }
       ],
       "sign": ".erb/scripts/notarize.js",
