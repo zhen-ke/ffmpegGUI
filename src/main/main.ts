@@ -243,7 +243,7 @@ function getFfmpegPath(): string {
     // 生产环境
     if (process.platform === 'darwin') {
       // Mac OS
-      return path.join(app.getAppPath(), '..', 'binaries', 'ffmpeg');
+      return path.join(process.resourcesPath, 'binaries', 'ffmpeg');
     } else if (process.platform === 'win32') {
       // Windows
       return path.join(process.resourcesPath, 'binaries', 'ffmpeg.exe');
@@ -254,7 +254,7 @@ function getFfmpegPath(): string {
   } else {
     // 开发环境
     return path.join(
-      process.cwd(),
+      app.getAppPath(),
       'binaries',
       process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg',
     );
