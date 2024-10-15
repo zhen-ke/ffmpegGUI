@@ -11,9 +11,11 @@ FFmpeg GUI 是一款基于 electron-react-boilerplate 开发的现代化图形�
 
 ### 项目截图
 
-![screenshot1](https://raw.githubusercontent.com/zhen-ke/img/main/ffmpegGUI_2024-10-11-15-30.png)
-![screenshot2](https://raw.githubusercontent.com/zhen-ke/img/main/ffmpegGUI_2024-10-11-15-31.png)
-![screenshot3](https://raw.githubusercontent.com/zhen-ke/img/main/ffmpegGUI_2024-10-11-15-34.png)
+![screenshot1](https://raw.githubusercontent.com/zhen-ke/img/main/IMG_2024-10-15-11-06.jpg)
+![screenshot2](https://raw.githubusercontent.com/zhen-ke/img/main/IMG_2024-10-15-11-08.jpg)
+![screenshot1](https://raw.githubusercontent.com/zhen-ke/img/main/IMG_2024-10-15-11-00.jpg)
+![screenshot2](https://raw.githubusercontent.com/zhen-ke/img/main/IMG_2024-10-15-11-00.jpg)
+![screenshot3](https://raw.githubusercontent.com/zhen-ke/img/main/IMG_2024-10-15-11-09.jpg)
 
 ### 注意事项
 
