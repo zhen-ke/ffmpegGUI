@@ -1,4 +1,10 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, {
+  useState,
+  useRef,
+  useEffect,
+  useCallback,
+  DragEvent,
+} from 'react';
 import { Play, Square } from 'lucide-react';
 import FFmpegDownloader from './FFmpegDownloader';
 
@@ -37,6 +43,31 @@ function App() {
     },
     [],
   );
+
+  const handleDragOver = (e: DragEvent<HTMLTextAreaElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = (e: DragEvent<HTMLTextAreaElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const files = Array.from(e.dataTransfer.files);
+    const filePaths = files.map((file) => `"${file.path}"`).join(' ');
+
+    // 将文件路径插入到当前光标位置或追加到命令末尾
+    const textarea = e.currentTarget;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const currentCommand = command;
+    const newCommand =
+      currentCommand.substring(0, start) +
+      filePaths +
+      currentCommand.substring(end);
+
+    setCommand(newCommand);
+  };
 
   useEffect(() => {
     const removeFFmpegIsExistsListener = window.electron.ipcRenderer.on(
@@ -118,7 +149,7 @@ function App() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-gray-100 overflow-hidden">
+    <div className="h-screen flex flex-col bg-gray-100 overflow-hidden pt-[30px]">
       <div className="flex-shrink-0 bg-white shadow-md p-4">
         <div className="mb-4">
           <label
@@ -132,7 +163,9 @@ function App() {
             id="ffmpeg-command"
             value={command}
             onChange={(e) => setCommand(e.target.value)}
-            placeholder="Enter FFmpeg command"
+            onDragOver={handleDragOver}
+            onDrop={handleDrop}
+            placeholder="Enter FFmpeg command or drag & drop files here"
             className="w-full p-2 border border-gray-300 rounded resize-none font-mono text-sm"
             rows={3}
             spellCheck="false"
