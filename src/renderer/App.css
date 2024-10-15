@@ -33,3 +33,8 @@ select,
 [role='button'] {
   -webkit-app-region: no-drag;
 }
+
+/* 移除默认的 outline 并为所有交互元素添加自定义焦点样式 */
+:focus {
+  outline: none;
+}

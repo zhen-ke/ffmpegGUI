@@ -14,6 +14,37 @@ declare global {
   }
 }
 
+const commandTemplates = [
+  {
+    name: 'Convert video',
+    command: '-i input.mp4 -c:v libx264 -c:a aac output.mp4',
+  },
+  {
+    name: 'Extract audio',
+    command: '-i input.mp4 -vn -acodec libmp3lame output.mp3',
+  },
+  {
+    name: 'Resize video',
+    command: '-i input.mp4 -vf scale=1280:720 output.mp4',
+  },
+  {
+    name: 'Trim video',
+    command: '-i input.mp4 -ss 00:00:10 -to 00:00:20 -c copy output.mp4',
+  },
+  {
+    name: 'Convert to GIF',
+    command:
+      '-i input.mp4 -vf "fps=10,scale=320:-1:flags=lanczos" -c:v gif output.gif',
+  },
+  {
+    name: 'Convert to High Quality GIF',
+    command:
+      '-i input.mp4 -vf "fps=15,scale=480:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" output.gif',
+    description:
+      'Creates a higher quality GIF with optimized color palette and smoother animation.',
+  },
+];
+
 function App() {
   const [command, setCommand] = useState('');
   const [isRunning, setIsRunning] = useState(false);
@@ -67,6 +98,10 @@ function App() {
       currentCommand.substring(end);
 
     setCommand(newCommand);
+  };
+
+  const handleTemplateChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setCommand(e.target.value);
   };
 
   useEffect(() => {
@@ -153,12 +188,35 @@ function App() {
       <div className="flex-shrink-0 bg-white shadow-md p-4">
         <div className="mb-4">
           <label
+            htmlFor="command-template"
+            className="block font-semibold text-gray-700 mb-2"
+          >
+            Command Template
+          </label>
+          <select
+            id="command-template"
+            onChange={handleTemplateChange}
+            className="w-full p-2 border border-gray-300 rounded text-sm"
+          >
+            <option value="">Select a template</option>
+            {commandTemplates.map((template, index) => (
+              <option
+                key={index}
+                value={template.command}
+                title={template.description}
+              >
+                {template.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="mb-4">
+          <label
             htmlFor="ffmpeg-command"
             className="block font-semibold text-gray-700 mb-2"
           >
             FFmpeg Command
           </label>
-
           <textarea
             id="ffmpeg-command"
             value={command}
