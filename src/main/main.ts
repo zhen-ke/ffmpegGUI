@@ -517,9 +517,9 @@ const createWindow = async () => {
     titleBarOverlay: {
       color: '#f0f4f8',
       symbolColor: '#4a90e2',
-      height: 30,
+      height: 35,
     },
-    trafficLightPosition: { x: 20, y: 20 }, // 调整交通灯按钮的位置
+    trafficLightPosition: { x: 15, y: 10 }, // 调整交通灯按钮的位置
     webPreferences: {
       preload: app.isPackaged
         ? path.join(__dirname, 'preload.js')

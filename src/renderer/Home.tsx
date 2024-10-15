@@ -184,7 +184,7 @@ function App() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-gray-100 overflow-hidden pt-[30px]">
+    <div className="h-screen flex flex-col bg-gray-100 overflow-hidden pt-[35px]">
       <div className="flex-shrink-0 bg-white shadow-md p-4">
         <div className="mb-4">
           <label

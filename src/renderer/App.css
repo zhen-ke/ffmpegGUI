@@ -21,7 +21,7 @@ body {
   top: 0;
   left: 0;
   right: 0;
-  height: 30px; /* 调整拖动区域的高度 */
+  height: 35px; /* 调整拖动区域的高度 */
   -webkit-app-region: drag;
   z-index: 1000;
 }
