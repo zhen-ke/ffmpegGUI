@@ -3,6 +3,33 @@
 @tailwind utilities;
 
 body {
-  font-family: 'PingFang SC', 'Microsoft YaHei', 'Helvetica Neue', Helvetica,
-    Arial, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC',
+    'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+.app {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.drag-handle {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 30px; /* 调整拖动区域的高度 */
+  -webkit-app-region: drag;
+  z-index: 1000;
+}
+
+/* 确保其他交互元素不可拖动 */
+button,
+input,
+select,
+[role='button'] {
+  -webkit-app-region: no-drag;
 }

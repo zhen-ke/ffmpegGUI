@@ -512,6 +512,14 @@ const createWindow = async () => {
     width: 1024,
     height: 728,
     icon: getAssetPath('icon.png'),
+    frame: true,
+    titleBarStyle: 'hidden', // 隐藏  标题栏，但保留交通灯按钮
+    titleBarOverlay: {
+      color: '#f0f4f8',
+      symbolColor: '#4a90e2',
+      height: 30,
+    },
+    trafficLightPosition: { x: 20, y: 20 }, // 调整交通灯按钮的位置
     webPreferences: {
       preload: app.isPackaged
         ? path.join(__dirname, 'preload.js')
