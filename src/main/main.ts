@@ -14,7 +14,7 @@ import { autoUpdater } from 'electron-updater';
 import log from 'electron-log';
 import MenuBuilder from './menu';
 import { resolveHtmlPath } from './util';
-import { spawn } from 'child_process';
+import { ChildProcess, spawn } from 'child_process';
 import fs from 'fs';
 import axios from 'axios';
 import extract from 'extract-zip';
@@ -31,7 +31,7 @@ class AppUpdater {
 
 let mainWindow: BrowserWindow | null = null;
 
-let ffmpegProcess: ReturnType<typeof exec> | null = null;
+let ffmpegProcess: ChildProcess | null = null;
 
 const isWindows = process.platform === 'win32';
 
@@ -375,7 +375,7 @@ function runFFmpegCommand(
   args: string[],
   event: Electron.IpcMainEvent,
 ) {
-  const ffmpegProcess = spawn(ffmpegPath, args, { shell: true });
+  ffmpegProcess = spawn(ffmpegPath, args, { shell: true });
 
   ffmpegProcess.stdout.on('data', (data) => {
     const output = data.toString().trim();
@@ -457,7 +457,13 @@ ipcMain.on('start-ffmpeg', async (event, command) => {
 
 ipcMain.on('stop-ffmpeg', () => {
   if (ffmpegProcess) {
-    ffmpegProcess.kill();
+    try {
+      ffmpegProcess.kill();
+    } catch (error) {
+      throw new Error(`Failed to kill FFmpeg process:', ${error}`);
+    }
+  } else {
+    throw new Error(`No FFmpeg process to kill`);
   }
 });
 
