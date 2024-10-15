@@ -14,7 +14,7 @@ import { autoUpdater } from 'electron-updater';
 import log from 'electron-log';
 import MenuBuilder from './menu';
 import { resolveHtmlPath } from './util';
-import { exec } from 'child_process';
+import { spawn } from 'child_process';
 import fs from 'fs';
 import axios from 'axios';
 import extract from 'extract-zip';
@@ -33,12 +33,14 @@ let mainWindow: BrowserWindow | null = null;
 
 let ffmpegProcess: ReturnType<typeof exec> | null = null;
 
+const isWindows = process.platform === 'win32';
+
 const get7zaPath = () => {
   if (app.isPackaged) {
     return path.join(
       process.resourcesPath,
       '7zip-bin',
-      process.platform === 'win32' ? '7za.exe' : '7za',
+      isWindows ? '7za.exe' : '7za',
     );
   }
   return sevenBin.path7za;
@@ -96,7 +98,7 @@ async function extractArchive(
     throw error;
   }
 
-  const ffmpegName = process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg';
+  const ffmpegName = isWindows ? 'ffmpeg.exe' : 'ffmpeg';
   const ffmpegPath = await findFFmpegExecutable(extractPath, ffmpegName);
 
   if (!ffmpegPath) {
@@ -244,7 +246,7 @@ function getFfmpegPath(): string {
     if (process.platform === 'darwin') {
       // Mac OS
       return path.join(process.resourcesPath, 'binaries', 'ffmpeg');
-    } else if (process.platform === 'win32') {
+    } else if (isWindows) {
       // Windows
       return path.join(process.resourcesPath, 'binaries', 'ffmpeg.exe');
     } else {
@@ -256,7 +258,7 @@ function getFfmpegPath(): string {
     return path.join(
       app.getAppPath(),
       'binaries',
-      process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg',
+      isWindows ? 'ffmpeg.exe' : 'ffmpeg',
     );
   }
 }
@@ -272,88 +274,115 @@ async function checkFFmpegExists(): Promise<boolean> {
   }
 }
 
-ipcMain.on('start-ffmpeg', async (event, command) => {
+function parseFFmpegCommand(command: string): string[] {
+  const args: string[] = [];
+  let currentArg = '';
+  let inQuotes = false;
+  let escapeNext = false;
+
+  for (let i = 0; i < command.length; i++) {
+    const char = command[i];
+
+    if (escapeNext) {
+      currentArg += char;
+      escapeNext = false;
+    } else if (char === '\\') {
+      if (i + 1 < command.length && command[i + 1] === '"') {
+        // 处理转义的引号
+        currentArg += '"';
+        i++; // 跳过下一个字符
+      } else {
+        currentArg += char;
+      }
+    } else if (char === '"') {
+      inQuotes = !inQuotes;
+      if (!inQuotes && currentArg) {
+        args.push(currentArg);
+        currentArg = '';
+      }
+    } else if (char === ' ' && !inQuotes) {
+      if (currentArg) {
+        args.push(currentArg);
+        currentArg = '';
+      }
+    } else {
+      currentArg += char;
+    }
+  }
+
+  if (currentArg) {
+    args.push(currentArg);
+  }
+
+  // 处理路径
+  return args.map((arg) => {
+    if (isWindows) {
+      // Windows 路径处理
+      if (arg.includes(':') && !arg.startsWith('"')) {
+        return `"${arg}"`;
+      }
+    } else {
+      // macOS 路径处理
+      if (arg.startsWith('/') && arg.includes(' ') && !arg.startsWith('"')) {
+        return `"${arg}"`;
+      }
+    }
+    return arg;
+  });
+}
+
+function executeFFmpegCommand(
+  command: string,
+  event: Electron.IpcMainEvent,
+  outputFile?: string,
+) {
   const ffmpegPath = getFfmpegPath();
-  let fullCommand = `${ffmpegPath} ${command}`;
+  const args = parseFFmpegCommand(command);
 
-  // 解析命令以检查是否有输出文件
-  const args = command.split(/\s+/);
-  const outputFileIndex = args.findIndex(
-    (arg, index) =>
-      index > 0 && !arg.startsWith('-') && args[index - 1] !== '-i',
-  );
+  console.log('Parsed FFmpeg arguments:', args);
 
-  if (outputFileIndex === -1) {
-    // 如果没有找到可能的输出文件，直接执行命
-    executeFFmpegCommand(fullCommand, event);
-  } else {
-    const outputFile = args[args.length - 1].replace(/^"|"$/g, '');
-    // 检查文件是否存在
-    if (fs.existsSync(outputFile)) {
-      const response = await dialog.showMessageBox(mainWindow!, {
+  // 检查文件是否存在
+  if (outputFile && fs.existsSync(outputFile)) {
+    dialog
+      .showMessageBox(mainWindow!, {
         type: 'question',
         buttons: ['Yes', 'No'],
         title: 'Confirm Overwrite',
         message: `File '${outputFile}' already exists. Overwrite?`,
+      })
+      .then((response) => {
+        if (response.response === 1) {
+          // 用户选择 "No"
+          event.reply(
+            'ffmpeg-error',
+            'Operation cancelled: File not overwritten.',
+          );
+          return;
+        } else {
+          // 用户选择 "Yes"，添加 -y 参数并执行命令
+          args.unshift('-y');
+          runFFmpegCommand(ffmpegPath, args, event);
+        }
       });
-
-      if (response.response === 1) {
-        event.reply(
-          'ffmpeg-error',
-          'Operation cancelled: File not overwritten.',
-        );
-        return;
-      } else {
-        // 用户确认覆盖，添加 -y 参数
-        fullCommand = `${ffmpegPath} -y ${command}`;
-      }
-    }
-
-    // 执行 FFmpeg 命令
-    executeFFmpegCommand(fullCommand, event, outputFile);
+  } else {
+    // 文件不存在，直接执行命令
+    runFFmpegCommand(ffmpegPath, args, event);
   }
-});
+}
 
-function executeFFmpegCommand(
-  fullCommand: string,
+function runFFmpegCommand(
+  ffmpegPath: string,
+  args: string[],
   event: Electron.IpcMainEvent,
-  outputFile?: string,
 ) {
-  const ffmpegProcess = exec(fullCommand, (error, stdout, stderr) => {
-    if (error) {
-      event.reply('ffmpeg-error', error.message);
-    } else {
-      if (stdout) {
-        stdout.split('\n').forEach((line) => {
-          if (line.trim()) {
-            event.reply('ffmpeg-output', line);
-          }
-        });
-      }
-      event.reply('ffmpeg-complete');
+  const ffmpegProcess = spawn(ffmpegPath, args, { shell: true });
 
-      if (outputFile) {
-        // 根据操作系统类型来决定是否需要规范化路径
-        const normalizedOutputFile =
-          process.platform === 'win32'
-            ? outputFile.replace(/\//g, '\\')
-            : outputFile;
-        // Show dialog after process completes
-        dialog
-          .showMessageBox(mainWindow!, {
-            type: 'info',
-            title: 'Conversion Complete',
-            message: 'FFmpeg process has completed successfully.',
-            buttons: ['OK', 'Open Folder'],
-            defaultId: 0,
-            cancelId: 0,
-          })
-          .then((result) => {
-            if (result.response === 1) {
-              shell.showItemInFolder(normalizedOutputFile);
-            }
-          });
-      }
+  ffmpegProcess.stdout.on('data', (data) => {
+    const output = data.toString().trim();
+    if (output) {
+      console.log('FFmpeg stdout:', output);
+      // 只有当输出非空时才发送到渲染进程
+      event.reply('ffmpeg-output', `${output}`);
     }
   });
 
@@ -385,14 +414,46 @@ function executeFFmpegCommand(
     }
   });
 
-  ffmpegProcess.on('exit', (code) => {
+  ffmpegProcess.on('close', (code) => {
+    console.log('FFmpeg process closed with code:', code);
     if (code === 0) {
       event.reply('ffmpeg-complete');
     } else {
       event.reply('ffmpeg-error', `FFmpeg process exited with code ${code}`);
     }
   });
+
+  ffmpegProcess.on('error', (err) => {
+    console.error('FFmpeg process error:', err);
+    event.reply('ffmpeg-error', `FFmpeg process error: ${err.message}`);
+  });
 }
+
+ipcMain.on('start-ffmpeg', async (event, command) => {
+  console.log('Received FFmpeg command:', command);
+  const args = parseFFmpegCommand(command);
+
+  // 检查命令是否为空
+  if (args.length === 0) {
+    event.reply(
+      'ffmpeg-error',
+      'Empty command. Please provide a valid FFmpeg command.',
+    );
+    return;
+  }
+
+  let outputFile: string | undefined;
+
+  // 查找可能的输出文件
+  for (let i = args.length - 1; i >= 0; i--) {
+    if (!args[i].startsWith('-') && i > 0 && args[i - 1] !== '-i') {
+      outputFile = args[i].replace(/^"|"$/g, ''); // 移除可能的引号
+      break;
+    }
+  }
+
+  executeFFmpegCommand(command, event, outputFile);
+});
 
 ipcMain.on('stop-ffmpeg', () => {
   if (ffmpegProcess) {

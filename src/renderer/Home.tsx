@@ -69,7 +69,13 @@ function App() {
       setLogs(
         (prevLogs) =>
           prevLogs +
-          `<div class="log-entry log-${type}"><span class="log-icon">${type === 'info' ? '🔵' : type === 'error' ? '🔴' : '🟢'}</span>${message}</div>`,
+          message
+            .split('\n')
+            .map(
+              (line) =>
+                `<div class="log-entry log-${type} mb-1"><span class="log-icon">${type === 'info' ? '➡️' : type === 'error' ? '😧' : '😺'}</span>${line}</div>`,
+            )
+            .join(''),
       );
     },
     [],
@@ -298,7 +304,7 @@ function App() {
           </div>
           <div
             ref={logsRef}
-            className="h-full overflow-y-auto font-mono text-sm bg-gray-100 p-4 rounded"
+            className="h-full overflow-y-auto font-mono text-sm bg-gray-100 p-4 rounded whitespace-pre-wrap"
             dangerouslySetInnerHTML={{ __html: logs }}
           />
         </div>
