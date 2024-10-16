@@ -598,11 +598,10 @@ const createWindow = async () => {
 
   mainWindow.loadURL(resolveHtmlPath('index.html'));
 
-  // 检查 FFmpeg 是否存在
-  const ffmpegExists = await checkFFmpegExists();
-
   // 等待页面加载完成后发送 FFmpeg 状态
-  mainWindow.webContents.on('did-finish-load', () => {
+  mainWindow.webContents.on('did-finish-load', async () => {
+    // 检查 FFmpeg 是否存在
+    const ffmpegExists = await checkFFmpegExists();
     mainWindow?.webContents.send('ffmpeg-status', ffmpegExists);
   });
 
