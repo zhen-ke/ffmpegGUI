@@ -9,7 +9,14 @@
  * `./src/main.js` using webpack. This gives us some performance wins.
  */
 import path from 'path';
-import { app, BrowserWindow, shell, ipcMain, dialog } from 'electron';
+import {
+  app,
+  BrowserWindow,
+  shell,
+  ipcMain,
+  dialog,
+  Notification,
+} from 'electron';
 import { autoUpdater } from 'electron-updater';
 import log from 'electron-log';
 import MenuBuilder from './menu';
@@ -361,7 +368,7 @@ function executeFFmpegCommand(
         } else {
           // 用户选择 "Yes"，添加 -y 参数并执行命令
           args.unshift('-y');
-          runFFmpegCommand(ffmpegPath, args, event);
+          runFFmpegCommand(ffmpegPath, args, event, outputFile);
         }
       });
   } else {
@@ -374,10 +381,11 @@ function runFFmpegCommand(
   ffmpegPath: string,
   args: string[],
   event: Electron.IpcMainEvent,
+  outputFile?: string,
 ) {
   ffmpegProcess = spawn(ffmpegPath, args, { shell: true });
 
-  ffmpegProcess.stdout.on('data', (data) => {
+  ffmpegProcess.stdout?.on('data', (data) => {
     const output = data.toString().trim();
     if (output) {
       console.log('FFmpeg stdout:', output);
@@ -418,6 +426,35 @@ function runFFmpegCommand(
     console.log('FFmpeg process closed with code:', code);
     if (code === 0) {
       event.reply('ffmpeg-complete');
+
+      if (outputFile) {
+        // 创建系统通知
+        const notification = new Notification({
+          title: 'FFmpeg Process Complete',
+          body: 'The FFmpeg process has completed successfully.',
+          silent: false,
+          sound: process.platform === 'darwin' ? 'Ping' : undefined, // macOS 特有的通知声音
+        });
+
+        if (process.platform === 'darwin') {
+          // macOS 特有的通知操作
+          notification.actions = [{ type: 'button', text: 'Open Folder' }];
+        }
+
+        // 当用户点击通知或选择操作时打开输出文件夹
+        notification.on('click', () => {
+          shell.showItemInFolder(outputFile);
+        });
+
+        notification.on('action', (event) => {
+          if (event === 'Open Folder') {
+            shell.showItemInFolder(outputFile);
+          }
+        });
+
+        // 显示通知
+        notification.show();
+      }
     } else {
       event.reply('ffmpeg-error', `FFmpeg process exited with code ${code}`);
     }
