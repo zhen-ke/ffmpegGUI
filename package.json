@@ -215,6 +215,18 @@
         "nsis"
       ]
     },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico",
+      "installerHeaderIcon": "assets/icon.ico",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "perMachine": true,
+      "deleteAppDataOnUninstall": true,
+      "shortcutName": "FFmpegGUI"
+    },
     "linux": {
       "target": [
         "AppImage"
