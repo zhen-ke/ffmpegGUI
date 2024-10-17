@@ -48,7 +48,7 @@ const commandTemplates = [
   {
     name: 'Convert to GIF',
     command:
-      '-i input.mp4 -vf "fps=10,scale=320:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" output.gif',
+      '-i input.mp4 -vf "fps=10,scale=320:-1:flags=lanczos" -c:v gif output.gif',
     description: 'Convert video to GIF with optimized palette.',
   },
   {
