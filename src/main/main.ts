@@ -343,9 +343,10 @@ function executeFFmpegCommand(
   event: Electron.IpcMainEvent,
   outputFile?: string,
 ) {
-  const ffmpegPath = getFfmpegPath();
+  const ffmpegPath = `"${getFfmpegPath()}"`; // 用引号括起来 FFmpeg 路径
   const args = parseFFmpegCommand(command);
 
+  console.log('FFmpeg path:', ffmpegPath);
   console.log('Parsed FFmpeg arguments:', args);
 
   // 检查文件是否存在
@@ -373,7 +374,7 @@ function executeFFmpegCommand(
       });
   } else {
     // 文件不存在，直接执行命令
-    runFFmpegCommand(ffmpegPath, args, event);
+    runFFmpegCommand(ffmpegPath, args, event, outputFile);
   }
 }
 
@@ -383,7 +384,10 @@ function runFFmpegCommand(
   event: Electron.IpcMainEvent,
   outputFile?: string,
 ) {
-  ffmpegProcess = spawn(ffmpegPath, args, { shell: true });
+  // 构建完整的命令字符串
+  const fullCommand = `${ffmpegPath} ${args.join(' ')}`;
+
+  ffmpegProcess = spawn(fullCommand, [], { shell: true });
 
   ffmpegProcess.stdout?.on('data', (data) => {
     const output = data.toString().trim();
@@ -440,7 +444,6 @@ function runFFmpegCommand(
           // macOS 特有的通知操作
           notification.actions = [{ type: 'button', text: 'Open Folder' }];
         }
-
         // 当用户点击通知或选择操作时打开输出文件夹
         notification.on('click', () => {
           shell.showItemInFolder(outputFile);
