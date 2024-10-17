@@ -16,32 +16,76 @@ declare global {
 
 const commandTemplates = [
   {
-    name: 'Convert video',
-    command: '-i input.mp4 -c:v libx264 -c:a aac output.mp4',
+    name: 'Convert video (H.264)',
+    command:
+      '-i input.mp4 -c:v libx264 -preset medium -crf 23 -c:a aac -b:a 128k output.mp4',
+    description: 'Convert video to H.264 with good quality and compression.',
+  },
+  {
+    name: 'Convert video (H.265/HEVC)',
+    command:
+      '-i input.mp4 -c:v libx265 -preset medium -crf 28 -c:a aac -b:a 128k output.mp4',
+    description:
+      'Convert video to H.265/HEVC for better compression at the same quality.',
   },
   {
     name: 'Extract audio',
-    command: '-i input.mp4 -vn -acodec libmp3lame output.mp3',
+    command: '-i input.mp4 -vn -c:a libmp3lame -b:a 192k output.mp3',
+    description: 'Extract audio from video and save as MP3 with good quality.',
   },
   {
-    name: 'Resize video',
-    command: '-i input.mp4 -vf scale=1280:720 output.mp4',
+    name: 'Resize video (720p)',
+    command:
+      '-i input.mp4 -vf "scale=-1:720" -c:v libx264 -crf 23 -c:a copy output_720p.mp4',
+    description: 'Resize video to 720p while maintaining aspect ratio.',
   },
   {
     name: 'Trim video',
-    command: '-i input.mp4 -ss 00:00:10 -to 00:00:20 -c copy output.mp4',
+    command: '-ss 00:00:10 -i input.mp4 -t 00:00:30 -c copy output_trimmed.mp4',
+    description:
+      'Trim video from 10 seconds to 40 seconds (30 seconds duration).',
   },
   {
     name: 'Convert to GIF',
     command:
-      '-i input.mp4 -vf "fps=10,scale=320:-1:flags=lanczos" -c:v gif output.gif',
+      '-i input.mp4 -vf "fps=10,scale=320:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" output.gif',
+    description: 'Convert video to GIF with optimized palette.',
   },
   {
-    name: 'Convert to High Quality GIF',
-    command:
-      '-i input.mp4 -vf "fps=15,scale=480:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" output.gif',
+    name: 'High Quality GIF with Palette',
+    command: `-i input.mp4 -vf "fps=15,scale=480:-1:flags=lanczos,split[s0][s1];[s0]palettegen=stats_mode=diff[p];[s1][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle" output.gif`,
     description:
-      'Creates a higher quality GIF with optimized color palette and smoother animation.',
+      'Create a high quality GIF using palette generation for optimal colors and dithering.',
+  },
+  {
+    name: 'Add subtitles',
+    command:
+      '-i input.mp4 -i subtitles.srt -c copy -c:s mov_text output_with_subtitles.mp4',
+    description: 'Add subtitles to a video file.',
+  },
+  {
+    name: 'Compress video',
+    command:
+      '-i input.mp4 -vf "scale=iw*0.5:ih*0.5" -c:v libx264 -crf 28 -preset slower -c:a aac -b:a 96k output_compressed.mp4',
+    description: 'Compress video by reducing resolution and bitrate.',
+  },
+  {
+    name: 'Fast Compress Video',
+    command:
+      '-i input.mp4 -c:v libx264 -tag:v avc1 -movflags faststart -crf 30 -preset superfast -c:a aac -b:a 128k output_fast_compressed.mp4',
+    description:
+      'Quickly compress video with good balance between speed, file size, and quality. Suitable for fast processing needs.',
+  },
+  {
+    name: 'Convert to WebM',
+    command:
+      '-i input.mp4 -c:v libvpx-vp9 -crf 30 -b:v 0 -b:a 128k -c:a libopus output.webm',
+    description: 'Convert video to WebM format (VP9 + Opus) for web use.',
+  },
+  {
+    name: 'Create video thumbnail',
+    command: '-i input.mp4 -ss 00:00:05 -vframes 1 thumbnail.jpg',
+    description: 'Create a thumbnail image from the video at 5 seconds.',
   },
 ];
 
@@ -166,10 +210,16 @@ function App() {
     };
   }, [updateProgress, addLog]);
 
+  const scrollToBottom = useCallback(() => {
+    requestAnimationFrame(() => {
+      if (logsRef.current) {
+        logsRef.current.scrollTop = logsRef.current.scrollHeight;
+      }
+    });
+  }, []);
+
   useEffect(() => {
-    if (logsRef.current) {
-      logsRef.current.scrollTop = logsRef.current.scrollHeight;
-    }
+    scrollToBottom();
   }, [logs]);
 
   const handleStart = () => {
