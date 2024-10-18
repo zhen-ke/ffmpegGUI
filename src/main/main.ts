@@ -440,19 +440,9 @@ function runFFmpegCommand(
           sound: process.platform === 'darwin' ? 'Ping' : undefined, // macOS 特有的通知声音
         });
 
-        if (process.platform === 'darwin') {
-          // macOS 特有的通知操作
-          notification.actions = [{ type: 'button', text: 'Open Folder' }];
-        }
         // 当用户点击通知或选择操作时打开输出文件夹
         notification.on('click', () => {
           shell.showItemInFolder(outputFile);
-        });
-
-        notification.on('action', (event) => {
-          if (event === 'Open Folder') {
-            shell.showItemInFolder(outputFile);
-          }
         });
 
         // 显示通知
