@@ -315,7 +315,7 @@ function App() {
       </div>
 
       <div className="flex-grow flex flex-col overflow-hidden">
-        {isRunning && (
+        {isRunning && progress > 0 && (
           <div className="flex-shrink-0 bg-white p-4">
             <div className="mb-2 font-semibold text-gray-700">Progress</div>
             <div className="w-full bg-gray-200 rounded-full h-2.5">
