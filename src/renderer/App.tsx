@@ -1,17 +1,17 @@
-import { MemoryRouter as Router, Routes, Route } from 'react-router-dom';
+import { LanguageProvider } from './LanguageContext';
 import Home from './Home';
 
 import './App.css';
 
-export default function App() {
+function App() {
   return (
-    <div className="app">
-      <div className="drag-handle"></div>
-      <Router>
-        <Routes>
-          <Route path="/" element={<Home />} />
-        </Routes>
-      </Router>
-    </div>
+    <LanguageProvider>
+      <div className="app">
+        <div className="drag-handle"></div>
+        <Home />
+      </div>
+    </LanguageProvider>
   );
 }
+
+export default App;
