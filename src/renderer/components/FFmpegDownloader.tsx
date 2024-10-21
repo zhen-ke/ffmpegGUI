@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FFmpegAsset, fetchFFmpegAssets } from '../utils/fetchFFmpegAssets';
+import { FFmpegAsset, fetchFFmpegAssets } from '../../utils/fetchFFmpegAssets';
 
 const FFmpegDownloader: React.FC = () => {
   const [assets, setAssets] = useState<FFmpegAsset[]>([]);

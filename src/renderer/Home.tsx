@@ -6,8 +6,9 @@ import React, {
   DragEvent,
 } from 'react';
 import { Play, Square } from 'lucide-react';
-import FFmpegDownloader from './FFmpegDownloader';
+import FFmpegDownloader from './components/FFmpegDownloader';
 import { useLanguage } from './LanguageContext';
+import Dropdown, { DropdownOption } from './components/Dropdown';
 
 declare global {
   interface Window {
@@ -596,6 +597,8 @@ function App() {
   const [totalDuration, setTotalDuration] = useState(0);
   const [ffmpegExists, setFfmpegExists] = useState<boolean | null>(null);
   const { language, setLanguage, t } = useLanguage();
+  const [selectedTemplate, setSelectedTemplate] =
+    useState<DropdownOption | null>(null);
 
   const updateProgress = useCallback(
     (currentTime: number) => {
@@ -653,13 +656,9 @@ function App() {
     setLanguage(language === 'en' ? 'zh' : 'en');
   };
 
-  const handleTemplateChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const selectedTemplate = commandTemplates.find(
-      (template) => template.command === e.target.value,
-    );
-    if (selectedTemplate) {
-      setCommand(selectedTemplate.command);
-    }
+  const handleTemplateChange = (template: DropdownOption) => {
+    setSelectedTemplate(template);
+    setCommand(template.command);
   };
 
   const checkFFmpegStatus = async () => {
@@ -772,22 +771,16 @@ function App() {
               {language === 'en' ? 'CN' : 'EN'}
             </span>
           </label>
-          <select
-            id="command-template"
+          <Dropdown
+            options={commandTemplates.map((template) => ({
+              ...template,
+              name: template.name[language],
+              description: template.description[language],
+            }))}
             onChange={handleTemplateChange}
-            className="w-full p-2 border border-gray-300 rounded text-sm"
-          >
-            <option value="">{t('Select a template')}</option>
-            {commandTemplates.map((template, index) => (
-              <option
-                key={index}
-                value={template.command}
-                title={template.description[language]}
-              >
-                {template.name[language]}
-              </option>
-            ))}
-          </select>
+            value={selectedTemplate}
+            placeholder={t('Select a template')}
+          />
         </div>
         <div className="mb-4">
           <label
