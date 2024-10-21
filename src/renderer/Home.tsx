@@ -769,7 +769,7 @@ function App() {
               onClick={toggleLanguage}
               className="text-xs text-gray-500 ml-2 cursor-pointer"
             >
-              {language === 'en' ? 'CN' : 'En'}
+              {language === 'en' ? 'CN' : 'EN'}
             </span>
           </label>
           <select
