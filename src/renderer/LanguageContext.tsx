@@ -1,4 +1,10 @@
-import React, { createContext, useState, useContext, ReactNode } from 'react';
+import React, {
+  createContext,
+  useState,
+  useContext,
+  ReactNode,
+  useEffect,
+} from 'react';
 
 type Language = 'en' | 'zh';
 
@@ -12,7 +18,7 @@ const LanguageContext = createContext<LanguageContextType | undefined>(
   undefined,
 );
 
-export const translations = {
+export const translations: Record<Language, Record<string, string>> = {
   en: {
     'Command Template': 'Command Template',
     'Select a template': 'Select a template',
@@ -44,7 +50,14 @@ export const translations = {
 export const LanguageProvider: React.FC<{ children: ReactNode }> = ({
   children,
 }) => {
-  const [language, setLanguage] = useState<Language>('en');
+  const [language, setLanguage] = useState<Language>(() => {
+    const savedLanguage = localStorage.getItem('language') as Language | null;
+    return savedLanguage || 'en';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('language', language);
+  }, [language]);
 
   const t = (key: string): string => {
     return translations[language][key] || key;
