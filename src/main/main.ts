@@ -486,14 +486,18 @@ ipcMain.on('start-ffmpeg', async (event, command) => {
 });
 
 ipcMain.on('stop-ffmpeg', () => {
-  if (ffmpegProcess) {
-    try {
-      ffmpegProcess.kill();
-    } catch (error) {
-      throw new Error(`Failed to kill FFmpeg process:', ${error}`);
-    }
+  if (ffmpegProcess && ffmpegProcess.stdin) {
+    ffmpegProcess.stdin.write('q');
+
+    // 设置一个超时，如果 FFmpeg 没有在 5 秒内退出，则强制终止
+    setTimeout(() => {
+      if (ffmpegProcess) {
+        console.warn('FFmpeg did not exit gracefully, force killing...');
+        ffmpegProcess.kill('SIGKILL');
+      }
+    }, 5000);
   } else {
-    throw new Error(`No FFmpeg process to kill`);
+    console.warn('No FFmpeg process to stop or stdin is not available');
   }
 });
 
