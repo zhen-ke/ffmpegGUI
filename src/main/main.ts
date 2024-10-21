@@ -628,11 +628,10 @@ const createWindow = async () => {
 
   mainWindow.loadURL(resolveHtmlPath('index.html'));
 
-  // 等待页面加载完成后发送 FFmpeg 状态
-  mainWindow.webContents.on('did-finish-load', async () => {
-    // 检查 FFmpeg 是否存在
+  // IPC 监听器来处理 FFmpeg 状态请求
+  ipcMain.handle('check-ffmpeg-status', async () => {
     const ffmpegExists = await checkFFmpegExists();
-    mainWindow?.webContents.send('ffmpeg-status', ffmpegExists);
+    return ffmpegExists;
   });
 
   mainWindow.on('ready-to-show', () => {

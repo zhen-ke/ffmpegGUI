@@ -154,7 +154,17 @@ function App() {
     setCommand(e.target.value);
   };
 
+  // 检查 FFmpeg 状态
+  const checkFFmpegStatus = async () => {
+    const exists = await window.electron.ipcRenderer.invoke(
+      'check-ffmpeg-status',
+    );
+    setFfmpegExists(exists);
+  };
+
   useEffect(() => {
+    checkFFmpegStatus();
+
     const removeFFmpegIsExistsListener = window.electron.ipcRenderer.on(
       'ffmpeg-status',
       (exists: boolean) => {
