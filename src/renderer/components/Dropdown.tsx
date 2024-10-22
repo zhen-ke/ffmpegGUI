@@ -49,7 +49,7 @@ const Dropdown: React.FC<DropdownProps> = ({
         <ChevronDown size={18} />
       </button>
       <div
-        className={`absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded shadow-lg max-h-72 overflow-auto ${isOpen ? '' : 'hidden'}`}
+        className={`absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded shadow-lg max-h-96 overflow-auto ${isOpen ? '' : 'hidden'}`}
       >
         {options.map((option, index) => (
           <div
