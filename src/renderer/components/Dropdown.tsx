@@ -22,7 +22,6 @@ const Dropdown: React.FC<DropdownProps> = ({
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const optionsRef = useRef<HTMLDivElement>(null);
 
   const handleClickOutside = useCallback((event: MouseEvent) => {
     if (
@@ -40,17 +39,6 @@ const Dropdown: React.FC<DropdownProps> = ({
     };
   }, [handleClickOutside]);
 
-  useEffect(() => {
-    if (isOpen && optionsRef.current && value) {
-      const selectedOption = optionsRef.current.querySelector(
-        `[data-value="${value.name}"]`,
-      );
-      if (selectedOption) {
-        selectedOption.scrollIntoView({ block: 'nearest' });
-      }
-    }
-  }, [isOpen, value]);
-
   return (
     <div className="relative" ref={dropdownRef}>
       <button
@@ -60,29 +48,25 @@ const Dropdown: React.FC<DropdownProps> = ({
         <span>{value ? value.name : placeholder}</span>
         <ChevronDown size={18} />
       </button>
-      {isOpen && (
-        <div
-          ref={optionsRef}
-          className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded shadow-lg max-h-72 overflow-auto"
-        >
-          {options.map((option, index) => (
-            <div
-              key={index}
-              data-value={option.name}
-              onClick={() => {
-                onChange(option);
-                setIsOpen(false);
-              }}
-              className={`p-2 hover:bg-gray-100 cursor-pointer ${
-                value && value.name === option.name ? 'bg-blue-100' : ''
-              }`}
-            >
-              <div className="font-semibold">{option.name}</div>
-              <div className="text-xs text-gray-500">{option.description}</div>
-            </div>
-          ))}
-        </div>
-      )}
+      <div
+        className={`absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded shadow-lg max-h-72 overflow-auto ${isOpen ? '' : 'hidden'}`}
+      >
+        {options.map((option, index) => (
+          <div
+            key={index}
+            onClick={() => {
+              onChange(option);
+              setIsOpen(false);
+            }}
+            className={`p-2 hover:bg-gray-100 cursor-pointer ${
+              value && value.name === option.name ? 'bg-blue-100' : ''
+            }`}
+          >
+            <div className="font-semibold">{option.name}</div>
+            <div className="text-xs text-gray-500">{option.description}</div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 };
