@@ -19,6 +19,42 @@ declare global {
 const commandTemplates = [
   {
     name: {
+      en: 'Trim audio by timestamp (Copy stream)',
+      zh: '按时间点剪切音频（复制流）',
+    },
+    command:
+      '-i input.mp3 -ss 00:00:00.000 -to 00:00:30.000 -c:a copy output_trimmed.mp3',
+    description: {
+      en: 'Trim audio using precise start and end timestamps (HH:MM:SS.mmm format). Fast trimming without re-encoding.',
+      zh: '使用精确的开始和结束时间点剪切音频（时:分:秒.毫秒 格式）。无需重新编码，快速剪切。',
+    },
+  },
+  {
+    name: {
+      en: 'Fast trim MP3 (Copy stream)',
+      zh: '快速剪切 MP3（复制流）',
+    },
+    command:
+      '-i input.mp3 -ss 00:00:10 -to 00:00:40 -c:a copy output_trimmed.mp3',
+    description: {
+      en: 'Quickly trim MP3 by copying audio stream without re-encoding. Fast and lossless.',
+      zh: '通过直接复制音频流快速剪切 MP3，无需重新编码，无损且快速。',
+    },
+  },
+  {
+    name: {
+      en: 'Convert and trim audio by timestamp (Universal)',
+      zh: '按时间点剪切音频（通用格式）',
+    },
+    command:
+      '-i input.flac -ss 00:00:00.000 -to 00:00:30.000 -c:a libmp3lame -ar 44100 -ab 192k -map_metadata 0 -id3v2_version 3 output.mp3',
+    description: {
+      en: 'Convert and trim any audio format to MP3 with high quality (192k). Supports FLAC, M4A, WAV, OGG, etc.',
+      zh: '转换并剪切任意音频格式到高质量 MP3（192k）。支持 FLAC、M4A、WAV、OGG 等格式。',
+    },
+  },
+  {
+    name: {
       en: 'Convert video (H.264)',
       zh: '转换视频（H.264）',
     },
