@@ -655,7 +655,7 @@ function App() {
             .split('\n')
             .map(
               (line) =>
-                `<div class="log-entry log-${type} mb-1"><span class="log-icon">${type === 'info' ? '➡️' : type === 'error' ? '😧' : '😺'}</span>${line}</div>`,
+                `<div class="log-entry log-${type} mb-1"><span class="log-icon">${type === 'info' ? '➜' : type === 'error' ? '😡' : '😉'}</span>${line}</div>`,
             )
             .join(''),
       );
