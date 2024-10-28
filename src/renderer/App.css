@@ -38,3 +38,10 @@ select,
 :focus {
   outline: none;
 }
+
+/* 暗模式样式 */
+@media (prefers-color-scheme: dark) {
+  body {
+    filter: invert(1) hue-rotate(180deg);
+  }
+}
