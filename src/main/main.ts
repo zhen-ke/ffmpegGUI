@@ -28,6 +28,15 @@ import extract from 'extract-zip';
 import { extractFull } from 'node-7z';
 import sevenBin from '7zip-bin';
 
+// 在文件开头添加类型声明扩展
+declare global {
+  namespace Electron {
+    interface App {
+      isQuitting?: boolean;
+    }
+  }
+}
+
 class AppUpdater {
   constructor() {
     log.transports.file.level = 'info';
@@ -595,6 +604,30 @@ const installExtensions = async () => {
     .catch(console.log);
 };
 
+// 处理窗口隐藏和显示的逻辑
+function handleWindowHideShow() {
+  if (!mainWindow) return;
+
+  // 处理窗口关闭按钮点击事件
+  mainWindow.on('close', (event) => {
+    // 只在 macOS 平台实现隐藏窗口的行为
+    if (process.platform === 'darwin' && !app.isQuitting) {
+      event.preventDefault();
+      mainWindow?.hide();
+      return false;
+    }
+    // Windows 和 Linux 平台直接关闭退出
+    return true;
+  });
+
+  // 处理 dock 图标点击（仅 macOS）
+  if (process.platform === 'darwin') {
+    app.on('activate', () => {
+      mainWindow?.show();
+    });
+  }
+}
+
 const createWindow = async () => {
   if (isDebug) {
     await installExtensions();
@@ -665,19 +698,30 @@ const createWindow = async () => {
   // Remove this if your app does not use auto updates
   // eslint-disable-next-line
   new AppUpdater();
+
+  // 添加处理窗口隐藏和显示的逻辑
+  handleWindowHideShow();
 };
 
 /**
  * Add event listeners...
  */
 
+// 修改 window-all-closed 事件处理
 app.on('window-all-closed', () => {
-  // Respect the OSX convention of having the application in memory even
-  // after all windows have been closed
+  // 在 macOS 上，除非用户使用 Cmd + Q 或从菜单栏选择退出
+  // 否则保持应用程序运行
   if (process.platform !== 'darwin') {
     app.quit();
   }
 });
+
+// 在退出前设置 isQuitting 标志（仅 macOS 需要）
+if (process.platform === 'darwin') {
+  app.on('before-quit', () => {
+    app.isQuitting = true;
+  });
+}
 
 // 确保应用程序只有一个实例
 const gotTheLock = app.requestSingleInstanceLock();
