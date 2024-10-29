@@ -34,8 +34,9 @@ interface ElectronHandler {
 // 定义更具体的类型
 type LogType = 'info' | 'error' | 'success';
 
-interface TransformedTemplate extends DropdownOption {
-  command: string;
+interface TransformedTemplate extends Template {
+  name: string;
+  description: string;
 }
 
 function App() {
@@ -110,20 +111,42 @@ function App() {
     setLanguage(language === 'en' ? 'zh' : 'en');
   };
 
-  // 优化模板转换函数
+  // 修改 transformTemplate 函数
   const transformTemplate = useCallback(
-    (template: CommandTemplate): TransformedTemplate => ({
-      ...template,
-      name: template.name[language],
-      description: template.description[language],
-    }),
+    (template: Template | CommandTemplate): TransformedTemplate => {
+      const isCommandTemplate =
+        'name' in template &&
+        typeof template.name === 'object' &&
+        'en' in template.name;
+
+      return {
+        ...template,
+        id: (template as Template).id || '', // 为内置模板提供空 id
+        name: isCommandTemplate
+          ? template.name[language]
+          : (template as TransformedTemplate).name,
+        description: isCommandTemplate
+          ? template.description[language]
+          : (template as TransformedTemplate).description,
+        isCustom: !!(template as Template).isCustom,
+      };
+    },
     [language],
   );
 
-  // 修改模板变更处理函数
+  // 修改 handleTemplateChange 函数
   const handleTemplateChange = (template: TransformedTemplate) => {
     setSelectedTemplate(template);
     setCommand(template.command);
+  };
+
+  // 修改编辑处理函数
+  const handleEdit = (template: Template) => {
+    const originalTemplate = customTemplates.find((t) => t.id === template.id);
+    if (originalTemplate) {
+      setEditingTemplate(originalTemplate);
+      setIsTemplateDialogOpen(true);
+    }
   };
 
   const checkFFmpegStatus = async () => {
@@ -204,16 +227,38 @@ function App() {
         id: editingTemplate.id,
         isCustom: true,
       });
+      // 刷新自定义模板列表
+      setCustomTemplates(templateService.getCustomTemplates());
+      // 如果当前选中的是被编辑的模板，更新选中的模板
+      if (selectedTemplate && selectedTemplate.id === editingTemplate.id) {
+        const updatedTemplate = {
+          ...template,
+          id: editingTemplate.id,
+          isCustom: true,
+          name: template.name[language],
+          description: template.description[language],
+        };
+        setSelectedTemplate(updatedTemplate);
+        setCommand(updatedTemplate.command);
+      }
     } else {
       // 添加新模板
       const newTemplate = templateService.saveCustomTemplate(template);
-      setCustomTemplates((prev) => [...prev, newTemplate]);
+      setCustomTemplates(templateService.getCustomTemplates());
     }
+    // 关闭对话框
+    setIsTemplateDialogOpen(false);
+    setEditingTemplate(undefined);
   };
 
   const handleDeleteTemplate = (templateId: string) => {
     templateService.deleteCustomTemplate(templateId);
-    setCustomTemplates((prev) => prev.filter((t) => t.id !== templateId));
+    setCustomTemplates(templateService.getCustomTemplates());
+    // 如果删除的是当前选中的模板，清除选中状态
+    if (selectedTemplate && selectedTemplate.id === templateId) {
+      setSelectedTemplate(null);
+      setCommand('');
+    }
   };
 
   const scrollToBottom = useCallback(() => {
@@ -280,10 +325,7 @@ function App() {
             onChange={handleTemplateChange}
             value={selectedTemplate}
             placeholder={t('Select a template')}
-            onEdit={(template) => {
-              setEditingTemplate(template);
-              setIsTemplateDialogOpen(true);
-            }}
+            onEdit={handleEdit}
             onDelete={handleDeleteTemplate}
           />
         </div>

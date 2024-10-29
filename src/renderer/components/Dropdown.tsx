@@ -1,10 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { ChevronDown, Edit2, Trash2 } from 'lucide-react';
-import { CommandTemplate } from '../constants/commandTemplates';
 import { Template } from '../types/template';
 
-export interface DropdownOption
-  extends Omit<CommandTemplate, 'name' | 'description'> {
+export interface DropdownOption extends Omit<Template, 'name' | 'description'> {
   name: string;
   description: string;
 }
@@ -55,11 +53,13 @@ const Dropdown: React.FC<DropdownProps> = ({
         <ChevronDown size={18} />
       </button>
       <div
-        className={`absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded shadow-lg max-h-96 overflow-auto ${isOpen ? '' : 'hidden'}`}
+        className={`absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded shadow-lg max-h-96 overflow-auto ${
+          isOpen ? '' : 'hidden'
+        }`}
       >
         {options.map((option, index) => (
           <div
-            key={index}
+            key={option.id || `template-${index}`}
             className={`p-2 hover:bg-gray-100 cursor-pointer ${
               value && value.name === option.name ? 'bg-blue-100' : ''
             }`}
@@ -82,7 +82,15 @@ const Dropdown: React.FC<DropdownProps> = ({
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      onEdit?.(option);
+                      const template: Template = {
+                        ...option,
+                        name: { en: option.name, zh: option.name },
+                        description: {
+                          en: option.description,
+                          zh: option.description,
+                        },
+                      };
+                      onEdit?.(template);
                     }}
                     className="p-1 hover:bg-blue-100 rounded"
                   >
