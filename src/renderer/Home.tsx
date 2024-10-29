@@ -23,10 +23,10 @@ const commandTemplates = [
       zh: '按时间点剪切音频（复制流）',
     },
     command:
-      '-i input.mp3 -ss 00:00:00.000 -to 00:00:30.000 -c:a copy output_trimmed.mp3',
+      '-i input.mp3 -ss 00:00:00.000 -to 00:00:30.000 -c:a copy -map_metadata 0 output_trimmed.mp3',
     description: {
-      en: 'Trim audio using precise start and end timestamps (HH:MM:SS.mmm format). Fast trimming without re-encoding.',
-      zh: '使用精确的开始和结束时间点剪切音频（时:分:秒.毫秒 格式）。无需重新编码，快速剪切。',
+      en: 'Trim audio using precise start and end timestamps (HH:MM:SS.mmm format). Fast trimming without re-encoding. Preserves metadata.',
+      zh: '使用精确的开始和结束时间点剪切音频（时:分:秒.毫秒 格式）。无需重新编码，快速剪切。保留元数据。',
     },
   },
   {
@@ -35,10 +35,10 @@ const commandTemplates = [
       zh: '快速剪切 MP3（复制流）',
     },
     command:
-      '-i input.mp3 -ss 00:00:10 -to 00:00:40 -c:a copy output_trimmed.mp3',
+      '-i input.mp3 -ss 00:00:10 -to 00:00:40 -c:a copy -map_metadata 0 output_trimmed.mp3',
     description: {
-      en: 'Quickly trim MP3 by copying audio stream without re-encoding. Fast and lossless.',
-      zh: '通过直接复制音频流快速剪切 MP3，无需重新编码，无损且快速。',
+      en: 'Quickly trim MP3 by copying audio stream without re-encoding. Fast and lossless. Preserves metadata.',
+      zh: '通过直接复制音频流快速剪切 MP3，无需重新编码，无损且快速。保留元数据。',
     },
   },
   {
