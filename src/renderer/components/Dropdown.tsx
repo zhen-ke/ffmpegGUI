@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, Edit2, Trash2 } from 'lucide-react';
 import { CommandTemplate } from '../constants/commandTemplates';
+import { Template } from '../types/template';
 
 export interface DropdownOption
   extends Omit<CommandTemplate, 'name' | 'description'> {
@@ -13,6 +14,8 @@ interface DropdownProps {
   onChange: (option: DropdownOption) => void;
   value: DropdownOption | null;
   placeholder: string;
+  onEdit?: (template: Template) => void;
+  onDelete?: (templateId: string) => void;
 }
 
 const Dropdown: React.FC<DropdownProps> = ({
@@ -20,6 +23,8 @@ const Dropdown: React.FC<DropdownProps> = ({
   onChange,
   value,
   placeholder,
+  onEdit,
+  onDelete,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -55,16 +60,46 @@ const Dropdown: React.FC<DropdownProps> = ({
         {options.map((option, index) => (
           <div
             key={index}
-            onClick={() => {
-              onChange(option);
-              setIsOpen(false);
-            }}
             className={`p-2 hover:bg-gray-100 cursor-pointer ${
               value && value.name === option.name ? 'bg-blue-100' : ''
             }`}
           >
-            <div className="font-semibold">{option.name}</div>
-            <div className="text-xs text-gray-500">{option.description}</div>
+            <div className="flex justify-between items-center">
+              <div
+                onClick={() => {
+                  onChange(option);
+                  setIsOpen(false);
+                }}
+                className="flex-1"
+              >
+                <div className="font-semibold">{option.name}</div>
+                <div className="text-xs text-gray-500">
+                  {option.description}
+                </div>
+              </div>
+              {option.isCustom && (
+                <div className="flex space-x-2 ml-2">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEdit?.(option);
+                    }}
+                    className="p-1 hover:bg-blue-100 rounded"
+                  >
+                    <Edit2 size={16} className="text-blue-600" />
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDelete?.(option.id);
+                    }}
+                    className="p-1 hover:bg-red-100 rounded"
+                  >
+                    <Trash2 size={16} className="text-red-600" />
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         ))}
       </div>

@@ -5,7 +5,7 @@ import React, {
   useCallback,
   DragEvent,
 } from 'react';
-import { Play, Square } from 'lucide-react';
+import { Play, Square, PlusCircle } from 'lucide-react';
 import FFmpegDownloader from './components/FFmpegDownloader';
 import { useLanguage } from './LanguageContext';
 import Dropdown, { DropdownOption } from './components/Dropdown';
@@ -13,6 +13,9 @@ import {
   commandTemplates,
   CommandTemplate,
 } from './constants/commandTemplates';
+import { templateService } from './services/templateService';
+import { TemplateDialog } from './components/TemplateDialog';
+import { Template } from './types/template';
 
 declare global {
   interface Window {
@@ -46,6 +49,11 @@ function App() {
   const { language, setLanguage, t } = useLanguage();
   const [selectedTemplate, setSelectedTemplate] =
     useState<TransformedTemplate | null>(null);
+  const [isTemplateDialogOpen, setIsTemplateDialogOpen] = useState(false);
+  const [editingTemplate, setEditingTemplate] = useState<
+    Template | undefined
+  >();
+  const [customTemplates, setCustomTemplates] = useState<Template[]>([]);
 
   const updateProgress = useCallback(
     (currentTime: number) => {
@@ -183,6 +191,31 @@ function App() {
     };
   }, [updateProgress, addLog]);
 
+  useEffect(() => {
+    // 加载自定义模板
+    setCustomTemplates(templateService.getCustomTemplates());
+  }, []);
+
+  const handleSaveTemplate = (template: Omit<Template, 'id' | 'isCustom'>) => {
+    if (editingTemplate) {
+      // 更新现有模板
+      templateService.updateCustomTemplate({
+        ...template,
+        id: editingTemplate.id,
+        isCustom: true,
+      });
+    } else {
+      // 添加新模板
+      const newTemplate = templateService.saveCustomTemplate(template);
+      setCustomTemplates((prev) => [...prev, newTemplate]);
+    }
+  };
+
+  const handleDeleteTemplate = (templateId: string) => {
+    templateService.deleteCustomTemplate(templateId);
+    setCustomTemplates((prev) => prev.filter((t) => t.id !== templateId));
+  };
+
   const scrollToBottom = useCallback(() => {
     requestAnimationFrame(() => {
       if (logsRef.current) {
@@ -216,23 +249,42 @@ function App() {
     <div className="h-screen flex flex-col bg-gray-100 overflow-hidden pt-[35px]">
       <div className="flex-shrink-0 bg-white shadow-md p-4">
         <div className="mb-4">
-          <label
-            htmlFor="command-template"
-            className="flex items-center justify-between block font-semibold text-gray-700 mb-2"
-          >
-            {t('Command Template')}
-            <span
-              onClick={toggleLanguage}
-              className="text-xs text-gray-500 ml-2 cursor-pointer"
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center">
+              <label className="font-semibold text-gray-700 mr-2">
+                {t('Command Template')}
+              </label>
+              <button
+                onClick={toggleLanguage}
+                className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 rounded transition-colors duration-200"
+              >
+                {language === 'en' ? '中文' : 'EN'}
+              </button>
+            </div>
+            <button
+              onClick={() => {
+                setEditingTemplate(undefined);
+                setIsTemplateDialogOpen(true);
+              }}
+              className="flex items-center px-3 py-1.5 text-sm bg-blue-500 hover:bg-blue-600 text-white rounded transition-colors duration-200"
             >
-              {language === 'en' ? 'CN' : 'EN'}
-            </span>
-          </label>
+              <PlusCircle size={16} className="mr-1" />
+              {t('Add Template')}
+            </button>
+          </div>
           <Dropdown
-            options={commandTemplates.map(transformTemplate)}
+            options={[
+              ...customTemplates.map(transformTemplate),
+              ...commandTemplates.map(transformTemplate),
+            ]}
             onChange={handleTemplateChange}
             value={selectedTemplate}
             placeholder={t('Select a template')}
+            onEdit={(template) => {
+              setEditingTemplate(template);
+              setIsTemplateDialogOpen(true);
+            }}
+            onDelete={handleDeleteTemplate}
           />
         </div>
         <div className="mb-4">
@@ -282,6 +334,16 @@ function App() {
           </button>
         </div>
       </div>
+
+      <TemplateDialog
+        isOpen={isTemplateDialogOpen}
+        onClose={() => {
+          setIsTemplateDialogOpen(false);
+          setEditingTemplate(undefined);
+        }}
+        onSave={handleSaveTemplate}
+        initialTemplate={editingTemplate}
+      />
 
       <div className="flex-grow flex flex-col overflow-hidden">
         {isRunning && progress > 0 && (
