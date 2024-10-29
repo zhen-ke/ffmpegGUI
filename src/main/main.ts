@@ -28,13 +28,24 @@ import extract from 'extract-zip';
 import { extractFull } from 'node-7z';
 import sevenBin from '7zip-bin';
 
-// 在文件开头添加类型声明扩展
 declare global {
   namespace Electron {
     interface App {
       isQuitting?: boolean;
     }
   }
+}
+
+interface ExtractError extends Error {
+  code?: string;
+}
+
+interface FFmpegProgress {
+  time: number;
+}
+
+interface FFmpegDuration {
+  duration: number;
 }
 
 class AppUpdater {
@@ -109,9 +120,10 @@ async function extractArchive(
     } else {
       throw new Error(`Unsupported archive format: ${ext}`);
     }
-  } catch (error) {
-    console.error(`Error during extraction: ${error.message}`);
-    throw error;
+  } catch (error: unknown) {
+    const err = error as Error;
+    console.error(`Error during extraction: ${err.message}`);
+    throw err;
   }
 
   const ffmpegName = isWindows ? 'ffmpeg.exe' : 'ffmpeg';
@@ -148,13 +160,14 @@ async function findFFmpegExecutable(
 async function moveFile(source: string, destination: string): Promise<void> {
   try {
     await fs.promises.rename(source, destination);
-  } catch (error) {
-    if (error.code === 'EXDEV') {
+  } catch (error: unknown) {
+    const err = error as ExtractError;
+    if (err.code === 'EXDEV') {
       // 如果是跨设备错误，则使用复制然后删除的方法
       await fs.promises.copyFile(source, destination);
       await fs.promises.unlink(source);
     } else {
-      throw error;
+      throw err;
     }
   }
 }
@@ -216,8 +229,9 @@ async function downloadFile(
             } else {
               reject(new Error('Downloaded file is empty'));
             }
-          } catch (error) {
-            reject(new Error(`Error processing file: ${error.message}`));
+          } catch (error: unknown) {
+            const err = error as Error;
+            reject(new Error(`Error processing file: ${err.message}`));
           }
         } else {
           reject(new Error(`Download failed with code ${code}`));
@@ -407,20 +421,22 @@ function runFFmpegCommand(
     }
   });
 
-  ffmpegProcess.stderr?.on('data', (data) => {
+  ffmpegProcess.stderr?.on('data', (data: Buffer) => {
     const output = data.toString();
-    output.split('\n').forEach((line) => {
+    output.split('\n').forEach((line: string) => {
       if (line.trim()) {
         event.reply('ffmpeg-output', line);
       }
     });
+
     // 解析进度信息
     const progressMatch = output.match(/time=(\d{2}):(\d{2}):(\d{2}\.\d{2})/);
     if (progressMatch) {
       const [, hours, minutes, seconds] = progressMatch;
       const currentTime =
         parseInt(hours) * 3600 + parseInt(minutes) * 60 + parseFloat(seconds);
-      event.reply('ffmpeg-progress', { time: currentTime });
+      const progress: FFmpegProgress = { time: currentTime };
+      event.reply('ffmpeg-progress', progress);
     }
 
     // 解析总时长信息
@@ -431,7 +447,8 @@ function runFFmpegCommand(
       const [, hours, minutes, seconds] = durationMatch;
       const totalDuration =
         parseInt(hours) * 3600 + parseInt(minutes) * 60 + parseFloat(seconds);
-      event.reply('ffmpeg-duration', { duration: totalDuration });
+      const duration: FFmpegDuration = { duration: totalDuration };
+      event.reply('ffmpeg-duration', duration);
     }
   });
 
@@ -567,9 +584,10 @@ ipcMain.on('download-ffmpeg', async (event, url: string) => {
     // 清理临时文件
     await fs.promises.rm(downloadPath, { recursive: true, force: true });
     await fs.promises.rm(extractPath, { recursive: true, force: true });
-  } catch (error) {
-    console.error('Error during FFmpeg installation:', error);
-    event.reply('ffmpeg-install-error', error.message);
+  } catch (error: unknown) {
+    const err = error as Error;
+    console.error('Error during FFmpeg installation:', err);
+    event.reply('ffmpeg-install-error', err.message);
   }
 });
 

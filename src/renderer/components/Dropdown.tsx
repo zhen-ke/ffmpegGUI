@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { ChevronDown } from 'lucide-react';
+import { CommandTemplate } from '../constants/commandTemplates';
 
-export interface DropdownOption {
+export interface DropdownOption
+  extends Omit<CommandTemplate, 'name' | 'description'> {
   name: string;
-  command: string;
   description: string;
 }
 

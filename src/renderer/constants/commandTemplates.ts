@@ -1,16 +1,15 @@
-interface CommandTemplate {
-  name: {
-    en: string;
-    zh: string;
-  };
-  command: string;
-  description: {
-    en: string;
-    zh: string;
-  };
+export interface LocalizedString {
+  en: string;
+  zh: string;
 }
 
-export const commandTemplates: CommandTemplate[] = [
+export interface CommandTemplate {
+  name: LocalizedString;
+  command: string;
+  description: LocalizedString;
+}
+
+export const commandTemplates: readonly CommandTemplate[] = [
   {
     name: {
       en: 'Trim audio by timestamp (Copy stream)',
@@ -233,7 +232,7 @@ export const commandTemplates: CommandTemplate[] = [
       '-i input.mp4 -c:v h264_nvenc -preset slow -cq 23 -b:a 256k output.mp4',
     description: {
       en: 'H.264 encoding using NVIDIA hardware acceleration.',
-      zh: '使用 NVIDIA 硬件加速的 H.264 编码。',
+      zh: '使用 NVIDIA 硬件加的 H.264 编码。',
     },
   },
   {
@@ -485,7 +484,7 @@ export const commandTemplates: CommandTemplate[] = [
     command: '-i input.mp4 -filter:v "crop=w:h:x:y" output_cropped.mp4',
     description: {
       en: 'Crop the video frame to specified dimensions. Replace w, h, x, y with actual values.',
-      zh: '将视频帧裁剪到指定尺寸。使用时请替换 w, h, x, y 为实际值。',
+      zh: '将视频帧裁剪指定尺寸。用时请替换 w, h, x, y 为实际值。',
     },
   },
   {
@@ -616,4 +615,4 @@ export const commandTemplates: CommandTemplate[] = [
       zh: '将两个音频流合并到一个文件中。',
     },
   },
-];
+] as const;

@@ -9,7 +9,10 @@ import { Play, Square } from 'lucide-react';
 import FFmpegDownloader from './components/FFmpegDownloader';
 import { useLanguage } from './LanguageContext';
 import Dropdown, { DropdownOption } from './components/Dropdown';
-import { commandTemplates } from './constants/commandTemplates';
+import {
+  commandTemplates,
+  CommandTemplate,
+} from './constants/commandTemplates';
 
 declare global {
   interface Window {
@@ -25,6 +28,13 @@ interface ElectronHandler {
   };
 }
 
+// 定义更具体的类型
+type LogType = 'info' | 'error' | 'success';
+
+interface TransformedTemplate extends DropdownOption {
+  command: string;
+}
+
 function App() {
   const [command, setCommand] = useState('');
   const [isRunning, setIsRunning] = useState(false);
@@ -35,7 +45,7 @@ function App() {
   const [ffmpegExists, setFfmpegExists] = useState<boolean | null>(null);
   const { language, setLanguage, t } = useLanguage();
   const [selectedTemplate, setSelectedTemplate] =
-    useState<DropdownOption | null>(null);
+    useState<TransformedTemplate | null>(null);
 
   const updateProgress = useCallback(
     (currentTime: number) => {
@@ -47,22 +57,21 @@ function App() {
     [totalDuration],
   );
 
-  const addLog = useCallback(
-    (type: 'info' | 'error' | 'success', message: string) => {
-      setLogs(
-        (prevLogs) =>
-          prevLogs +
-          message
-            .split('\n')
-            .map(
-              (line) =>
-                `<div class="log-entry log-${type} mb-1"><span class="log-icon">${type === 'info' ? '➜' : type === 'error' ? '😡' : '😉'}</span>${line}</div>`,
-            )
-            .join(''),
-      );
-    },
-    [],
-  );
+  const addLog = useCallback((type: LogType, message: string) => {
+    setLogs(
+      (prevLogs) =>
+        prevLogs +
+        message
+          .split('\n')
+          .map(
+            (line) =>
+              `<div class="log-entry log-${type} mb-1"><span class="log-icon">${
+                type === 'info' ? '➜' : type === 'error' ? '😡' : '😉'
+              }</span>${line}</div>`,
+          )
+          .join(''),
+    );
+  }, []);
 
   const handleDragOver = (e: DragEvent<HTMLTextAreaElement>) => {
     e.preventDefault();
@@ -93,7 +102,18 @@ function App() {
     setLanguage(language === 'en' ? 'zh' : 'en');
   };
 
-  const handleTemplateChange = (template: DropdownOption) => {
+  // 优化模板转换函数
+  const transformTemplate = useCallback(
+    (template: CommandTemplate): TransformedTemplate => ({
+      ...template,
+      name: template.name[language],
+      description: template.description[language],
+    }),
+    [language],
+  );
+
+  // 修改模板变更处理函数
+  const handleTemplateChange = (template: TransformedTemplate) => {
     setSelectedTemplate(template);
     setCommand(template.command);
   };
@@ -184,7 +204,7 @@ function App() {
   };
 
   const handleStop = () => {
-    window.electron.ipcRenderer.sendMessage('stop-ffmpeg');
+    window.electron.ipcRenderer.sendMessage('stop-ffmpeg', null);
     setIsRunning(false);
   };
 
@@ -209,11 +229,7 @@ function App() {
             </span>
           </label>
           <Dropdown
-            options={commandTemplates.map((template) => ({
-              ...template,
-              name: template.name[language],
-              description: template.description[language],
-            }))}
+            options={commandTemplates.map(transformTemplate)}
             onChange={handleTemplateChange}
             value={selectedTemplate}
             placeholder={t('Select a template')}
