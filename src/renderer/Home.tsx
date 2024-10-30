@@ -301,7 +301,7 @@ function App() {
               </label>
               <button
                 onClick={toggleLanguage}
-                className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 rounded transition-colors duration-200"
+                className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 rounded transition-colors duration-200 dark:bg-background-textarea dark:text-text-lightDark dark:hover:bg-background-textarea focus:outline-none focus:shadow-outline"
               >
                 {language === 'en' ? '中文' : 'EN'}
               </button>

@@ -690,6 +690,7 @@ const createWindow = async () => {
       height: 35,
     });
   });
+
   mainWindow.loadURL(resolveHtmlPath('index.html'));
 
   // IPC 监听器来处理 FFmpeg 状态请求
