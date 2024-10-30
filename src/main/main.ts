@@ -668,13 +668,16 @@ const createWindow = async () => {
     minHeight: 728,
     icon: getAssetPath('icon.png'),
     frame: true,
-    titleBarStyle: 'hidden', // 隐藏  标题栏，但保留交通灯按钮
-    titleBarOverlay: {
-      color: nativeTheme.shouldUseDarkColors ? '#1E293B' : '#f0f4f8',
-      symbolColor: nativeTheme.shouldUseDarkColors ? '#ffffff' : '#4a90e2',
-      height: 35,
-    },
-    trafficLightPosition: { x: 15, y: 10 }, // 调整交通灯按钮的位置
+    titleBarStyle: 'hidden',
+    // 根据平台设置标题栏样式
+    ...(process.platform === 'win32' && {
+      titleBarOverlay: {
+        color: nativeTheme.shouldUseDarkColors ? '#1E293B' : '#f0f4f8',
+        symbolColor: nativeTheme.shouldUseDarkColors ? '#ffffff' : '#4a90e2',
+        height: 35,
+      },
+    }),
+    trafficLightPosition: { x: 15, y: 10 },
     webPreferences: {
       preload: app.isPackaged
         ? path.join(__dirname, 'preload.js')
@@ -684,11 +687,18 @@ const createWindow = async () => {
 
   // 监听系统主题变化
   nativeTheme.on('updated', () => {
-    mainWindow?.setTitleBarOverlay({
-      color: nativeTheme.shouldUseDarkColors ? '#1E293B' : '#f0f4f8',
-      symbolColor: nativeTheme.shouldUseDarkColors ? '#ffffff' : '#4a90e2',
-      height: 35,
-    });
+    // 检查平台和方法是否可用
+    if (process.platform === 'win32' && mainWindow?.setTitleBarOverlay) {
+      try {
+        mainWindow.setTitleBarOverlay({
+          color: nativeTheme.shouldUseDarkColors ? '#1E293B' : '#f0f4f8',
+          symbolColor: nativeTheme.shouldUseDarkColors ? '#ffffff' : '#4a90e2',
+          height: 35,
+        });
+      } catch (error) {
+        console.warn('Failed to set title bar overlay:', error);
+      }
+    }
   });
 
   mainWindow.loadURL(resolveHtmlPath('index.html'));
