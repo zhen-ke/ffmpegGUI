@@ -47,21 +47,23 @@ const Dropdown: React.FC<DropdownProps> = ({
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full p-2 border border-gray-300 rounded text-sm flex justify-between items-center bg-white"
+        className="w-full p-2 border border-gray-300 rounded text-sm flex justify-between items-center bg-white dark:bg-background-textarea dark:border-border-dark dark:text-text-lightDark"
       >
         <span>{value ? value.name : placeholder}</span>
         <ChevronDown size={18} />
       </button>
       <div
-        className={`absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded shadow-lg max-h-96 overflow-auto ${
+        className={`dark:bg-background-dark dark:border-border-dark absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded shadow-lg max-h-96 overflow-auto ${
           isOpen ? '' : 'hidden'
         }`}
       >
         {options.map((option, index) => (
           <div
             key={option.id || `template-${index}`}
-            className={`p-2 hover:bg-gray-100 cursor-pointer ${
-              value && value.name === option.name ? 'bg-blue-100' : ''
+            className={`dark:hover:bg-background-textarea dark:text-text-lightDark p-2 hover:bg-gray-100 cursor-pointer ${
+              value && value.name === option.name
+                ? 'bg-blue-100 dark:bg-background-textarea'
+                : ''
             }`}
           >
             <div className="flex justify-between items-center">

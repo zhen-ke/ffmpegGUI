@@ -2,18 +2,19 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC',
-    'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  text-rendering: optimizeLegibility;
+@layer base {
+  body {
+    @apply bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100;
+    font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC',
+      'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
 }
 
 .app {
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
+  @apply h-screen flex flex-col;
 }
 
 .drag-handle {
@@ -21,7 +22,7 @@ body {
   top: 0;
   left: 0;
   right: 0;
-  height: 35px; /* 调整拖动区域的高度 */
+  height: 35px;
   -webkit-app-region: drag;
   z-index: 1000;
 }
@@ -36,12 +37,21 @@ select,
 
 /* 移除默认的 outline 并为所有交互元素添加自定义焦点样式 */
 :focus {
-  outline: none;
+  @apply outline-none ring-2 ring-primary ring-opacity-50;
 }
 
-/* 暗模式样式 */
-@media (prefers-color-scheme: dark) {
-  body {
-    filter: invert(1) hue-rotate(180deg);
+/* 定义一些通用的暗模式组件样式 */
+@layer components {
+  .card {
+    @apply bg-white dark:bg-gray-800 rounded-lg shadow-md;
+  }
+
+  .btn {
+    @apply px-4 py-2 rounded-md bg-primary hover:bg-primary-dark text-white transition-colors;
+  }
+
+  .input {
+    @apply bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700
+           rounded-md px-3 py-2 focus:ring-2 focus:ring-primary focus:ring-opacity-50;
   }
 }

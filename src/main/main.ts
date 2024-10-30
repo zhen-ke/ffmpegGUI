@@ -16,6 +16,7 @@ import {
   ipcMain,
   dialog,
   Notification,
+  nativeTheme,
 } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import log from 'electron-log';
@@ -669,8 +670,8 @@ const createWindow = async () => {
     frame: true,
     titleBarStyle: 'hidden', // 隐藏  标题栏，但保留交通灯按钮
     titleBarOverlay: {
-      color: '#f0f4f8',
-      symbolColor: '#4a90e2',
+      color: nativeTheme.shouldUseDarkColors ? '#1E293B' : '#f0f4f8',
+      symbolColor: nativeTheme.shouldUseDarkColors ? '#ffffff' : '#4a90e2',
       height: 35,
     },
     trafficLightPosition: { x: 15, y: 10 }, // 调整交通灯按钮的位置
@@ -681,6 +682,14 @@ const createWindow = async () => {
     },
   });
 
+  // 监听系统主题变化
+  nativeTheme.on('updated', () => {
+    mainWindow?.setTitleBarOverlay({
+      color: nativeTheme.shouldUseDarkColors ? '#1E293B' : '#f0f4f8',
+      symbolColor: nativeTheme.shouldUseDarkColors ? '#ffffff' : '#4a90e2',
+      height: 35,
+    });
+  });
   mainWindow.loadURL(resolveHtmlPath('index.html'));
 
   // IPC 监听器来处理 FFmpeg 状态请求

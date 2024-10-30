@@ -52,15 +52,15 @@ export const TemplateDialog: React.FC<TemplateDialogProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-5 w-full max-w-2xl">
-        <h2 className="text-lg font-bold mb-3">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 dark:bg-background-dialog backdrop-blur-sm">
+      <div className="bg-white rounded-lg p-5 w-full max-w-2xl dark:bg-background-textarea">
+        <h2 className="text-lg font-bold mb-3 dark:text-text-dark">
           {initialTemplate ? t('Edit Template') : t('Add New Template')}
         </h2>
         <form onSubmit={handleSubmit} className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-text-dark">
                 {t('Name (English)')}
               </label>
               <input
@@ -72,13 +72,13 @@ export const TemplateDialog: React.FC<TemplateDialogProps> = ({
                     name: { ...prev.name!, en: e.target.value },
                   }))
                 }
-                className="mt-1 block w-full px-3 py-1.5 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="dark:bg-background-textarea dark:border-border-dark mt-1 block w-full px-3 py-1.5 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:text-text-lightDark"
                 required
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-text-dark">
                 {t('Name (Chinese)')}
               </label>
               <input
@@ -90,13 +90,13 @@ export const TemplateDialog: React.FC<TemplateDialogProps> = ({
                     name: { ...prev.name!, zh: e.target.value },
                   }))
                 }
-                className="mt-1 block w-full px-3 py-1.5 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="dark:bg-background-textarea dark:border-border-dark mt-1 block w-full px-3 py-1.5 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:text-text-lightDark"
                 required
               />
             </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-text-dark">
               {t('Command')}
             </label>
             <textarea
@@ -107,7 +107,8 @@ export const TemplateDialog: React.FC<TemplateDialogProps> = ({
                   command: e.target.value,
                 }))
               }
-              className="mt-1 block w-full px-3 py-1.5 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono resize-none text-sm"
+              spellCheck="false"
+              className="dark:bg-background-textarea dark:border-border-dark mt-1 block w-full px-3 py-1.5 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono resize-none text-sm dark:text-text-lightDark"
               rows={4}
               required
             />
@@ -115,7 +116,7 @@ export const TemplateDialog: React.FC<TemplateDialogProps> = ({
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-text-dark">
                 {t('Description (English)')}
               </label>
               <textarea
@@ -126,13 +127,14 @@ export const TemplateDialog: React.FC<TemplateDialogProps> = ({
                     description: { ...prev.description!, en: e.target.value },
                   }))
                 }
-                className="mt-1 block w-full px-3 py-1.5 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none text-sm"
+                spellCheck="false"
+                className="dark:bg-background-textarea dark:border-border-dark mt-1 block w-full px-3 py-1.5 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none text-sm dark:text-text-lightDark"
                 rows={4}
                 required
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-text-dark">
                 {t('Description (Chinese)')}
               </label>
               <textarea
@@ -143,7 +145,8 @@ export const TemplateDialog: React.FC<TemplateDialogProps> = ({
                     description: { ...prev.description!, zh: e.target.value },
                   }))
                 }
-                className="mt-1 block w-full px-3 py-1.5 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none text-sm"
+                spellCheck="false"
+                className="dark:bg-background-textarea dark:border-border-dark mt-1 block w-full px-3 py-1.5 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none text-sm dark:text-text-lightDark"
                 rows={4}
                 required
               />

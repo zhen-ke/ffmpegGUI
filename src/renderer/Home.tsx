@@ -291,12 +291,12 @@ function App() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-gray-100 overflow-hidden pt-[35px]">
-      <div className="flex-shrink-0 bg-white shadow-md p-4">
+    <div className="h-screen flex flex-col bg-gray-100 overflow-hidden pt-[35px] dark:bg-background-header ">
+      <div className="flex-shrink-0 bg-white shadow-md p-4 dark:bg-background-dark">
         <div className="mb-4">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center">
-              <label className="font-semibold text-gray-700 mr-2">
+              <label className="font-semibold text-gray-700 mr-2 dark:text-text-dark">
                 {t('Command Template')}
               </label>
               <button
@@ -311,7 +311,7 @@ function App() {
                 setEditingTemplate(undefined);
                 setIsTemplateDialogOpen(true);
               }}
-              className="flex items-center px-3 py-1.5 text-sm bg-blue-500 hover:bg-blue-600 text-white rounded transition-colors duration-200"
+              className="flex items-center px-3 py-1.5 text-sm bg-blue-500 hover:bg-blue-600 text-white rounded transition-colors duration-200 dark:text-text-dark"
             >
               <PlusCircle size={16} className="mr-1" />
               {t('Add Template')}
@@ -332,7 +332,7 @@ function App() {
         <div className="mb-4">
           <label
             htmlFor="ffmpeg-command"
-            className="block font-semibold text-gray-700 mb-2"
+            className="block font-semibold text-gray-700 mb-2 dark:text-text-dark"
           >
             {t('FFmpeg Command')}
           </label>
@@ -343,7 +343,7 @@ function App() {
             onDragOver={handleDragOver}
             onDrop={handleDrop}
             placeholder={t('Enter FFmpeg command or drag & drop files here')}
-            className="w-full p-2 border border-gray-300 rounded resize-none font-mono text-sm"
+            className="w-full p-2 border border-gray-300 rounded resize-none font-mono text-sm dark:bg-background-textarea dark:border-border-dark dark:text-text-lightDark"
             rows={3}
             spellCheck="false"
             style={{ minHeight: '4.5rem' }}
@@ -355,7 +355,7 @@ function App() {
             disabled={isRunning || !command}
             className={`flex items-center px-4 py-2 rounded ${
               isRunning || !command
-                ? 'bg-gray-300 cursor-not-allowed'
+                ? 'bg-gray-300 cursor-not-allowed dark:bg-background-textarea'
                 : 'bg-green-500 hover:bg-green-600 text-white'
             }`}
           >
@@ -367,7 +367,7 @@ function App() {
             disabled={!isRunning}
             className={`flex items-center px-4 py-2 rounded ${
               !isRunning
-                ? 'bg-gray-300 cursor-not-allowed'
+                ? 'bg-gray-300 cursor-not-allowed dark:bg-background-textarea'
                 : 'bg-red-500 hover:bg-red-600 text-white'
             }`}
           >
@@ -389,7 +389,7 @@ function App() {
 
       <div className="flex-grow flex flex-col overflow-hidden">
         {isRunning && progress > 0 && (
-          <div className="flex-shrink-0 bg-white p-4">
+          <div className="flex-shrink-0 bg-white p-4 dark:bg-background-dark">
             <div className="mb-2 font-semibold text-gray-700">Progress</div>
             <div className="w-full bg-gray-200 rounded-full h-2.5">
               <div
@@ -403,7 +403,7 @@ function App() {
           </div>
         )}
 
-        <div className="flex-grow overflow-hidden bg-white p-4 pb-6">
+        <div className="flex-grow overflow-hidden bg-white p-4 pb-6 dark:bg-background-dark">
           <div className="flex items-center justify-between mb-3">
             <h2 className="font-bold text-lg text-blue-400">Logs</h2>
             <div className="flex space-x-2">
@@ -427,7 +427,7 @@ function App() {
           </div>
           <div
             ref={logsRef}
-            className="h-full overflow-y-auto font-mono text-sm bg-gray-100 p-4 rounded whitespace-pre-wrap"
+            className="border dark:border-border-dark h-full overflow-y-auto font-mono text-sm bg-gray-100 p-4 rounded whitespace-pre-wrap dark:bg-background-textarea dark:text-text-lightDark"
             dangerouslySetInnerHTML={{ __html: logs }}
           />
         </div>

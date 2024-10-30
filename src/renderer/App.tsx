@@ -6,8 +6,8 @@ import './App.css';
 function App() {
   return (
     <LanguageProvider>
-      <div className="app">
-        <div className="drag-handle"></div>
+      <div className="app bg-white dark:bg-gray-900">
+        <div className="drag-handle" />
         <Home />
       </div>
     </LanguageProvider>
