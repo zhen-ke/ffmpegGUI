@@ -319,18 +319,13 @@ function parseFFmpegCommand(command: string): string[] {
       escapeNext = false;
     } else if (char === '\\') {
       if (i + 1 < command.length && command[i + 1] === '"') {
-        // 处理转义的引号
         currentArg += '"';
-        i++; // 跳过下一个字符
+        i++;
       } else {
         currentArg += char;
       }
     } else if (char === '"') {
       inQuotes = !inQuotes;
-      if (!inQuotes && currentArg) {
-        args.push(currentArg);
-        currentArg = '';
-      }
     } else if (char === ' ' && !inQuotes) {
       if (currentArg) {
         args.push(currentArg);
@@ -347,17 +342,14 @@ function parseFFmpegCommand(command: string): string[] {
 
   // 处理路径
   return args.map((arg) => {
-    if (isWindows) {
-      // Windows 路径处理
-      if (arg.includes(':') && !arg.startsWith('"')) {
-        return `"${arg}"`;
-      }
-    } else {
-      // macOS 路径处理
-      if (arg.startsWith('/') && arg.includes(' ') && !arg.startsWith('"')) {
-        return `"${arg}"`;
-      }
+    // 如果是选项标志，直接返回
+    if (arg.startsWith('-')) return arg;
+
+    // 如果路径包含空格且没有被引号包围，添加引号
+    if (arg.includes(' ') && !arg.startsWith('"')) {
+      return `"${arg}"`;
     }
+
     return arg;
   });
 }
@@ -487,29 +479,32 @@ function runFFmpegCommand(
 }
 
 ipcMain.on('start-ffmpeg', async (event, command) => {
-  console.log('Received FFmpeg command:', command);
-  const args = parseFFmpegCommand(command);
-
-  // 检查命令是否为空
-  if (args.length === 0) {
-    event.reply(
-      'ffmpeg-error',
-      'Empty command. Please provide a valid FFmpeg command.',
-    );
-    return;
-  }
-
-  let outputFile: string | undefined;
-
-  // 查找可能的输出文件
-  for (let i = args.length - 1; i >= 0; i--) {
-    if (!args[i].startsWith('-') && i > 0 && args[i - 1] !== '-i') {
-      outputFile = args[i].replace(/^"|"$/g, ''); // 移除可能的引号
-      break;
+  try {
+    // 检查命令是否为空
+    if (!command) {
+      event.reply(
+        'ffmpeg-error',
+        'Empty command. Please provide a valid FFmpeg command.',
+      );
+      return;
     }
-  }
 
-  executeFFmpegCommand(command, event, outputFile);
+    const args = parseFFmpegCommand(command);
+
+    // 查找可能的输出文件
+    let outputFile: string | undefined;
+    for (let i = args.length - 1; i >= 0; i--) {
+      if (!args[i].startsWith('-') && i > 0 && args[i - 1] !== '-i') {
+        outputFile = args[i].replace(/^"|"$/g, '').trim(); // 移除引号和多余的空白字符
+        break;
+      }
+    }
+
+    executeFFmpegCommand(command, event, outputFile);
+  } catch (error) {
+    console.error('Error processing FFmpeg command:', error);
+    event.reply('ffmpeg-error', `Error processing command: ${error.message}`);
+  }
 });
 
 ipcMain.on('stop-ffmpeg', () => {
