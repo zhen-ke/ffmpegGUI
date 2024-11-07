@@ -857,7 +857,7 @@ function openTerminalAtPath(dirPath: string) {
     case 'darwin': {
       try {
         const script = `tell application "Terminal"
-          do script "cd \\"${dirPath}\\" && ffmpeg -version && echo \\"\\nCurrent directory: $(pwd)\\""
+          do script "clear && cd \\"${dirPath}\\" > /dev/null 2>&1 && echo \\"FFmpeg version information:\\" && ./ffmpeg -version && echo \\"\\nWorking directory: binaries\\""
           activate
         end tell`;
 
