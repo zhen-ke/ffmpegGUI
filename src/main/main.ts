@@ -802,44 +802,60 @@ function openTerminalAtPath(dirPath: string) {
         // 转义路径中的特殊字符
         const escapedPath = dirPath.replace(/"/g, '\\"');
 
-        // 构建 FFmpeg 命令，使用单引号避免过度转义
+        // 构建 FFmpeg 命令
         const ffmpegCommand = `clear && cd '${escapedPath}' && echo 'FFmpeg version information:' && ./ffmpeg -version`;
 
-        // 构建 AppleScript，改进窗口 ID 的检查逻辑
+        // 构建AppleScript，处理自动创建的窗口
         const script = `
           tell application "Terminal"
-            try
-              if "${terminalWindowId}" is not "" then
-                -- 尝试访问已存在的窗口
-                set existingWindow to window id ${terminalWindowId}
-                do script "${ffmpegCommand}" in existingWindow
-              end if
-            on error
-              -- 如果窗口不存在或出错，创建新窗口
-              set newWindow to do script "${ffmpegCommand}"
-              set windowId to id of window 1
+            -- 如果 Terminal 没有运行，这会启动它并等待
+            if not running then
+              activate
+              delay 1
+              
+              -- 使用自动创建的第一个窗口
+              set currentWindow to window 1
+              do script "${ffmpegCommand}" in currentWindow
+              set windowId to id of currentWindow
               return windowId
-            end try
+            else
+              -- Terminal 已经运行，检查是否有保存的窗口 ID
+              if "${terminalWindowId}" is not "" then
+                try
+                  -- 尝试在现有窗口中执行命令
+                  do script "${ffmpegCommand}" in window id ${terminalWindowId}
+                  return "${terminalWindowId}"
+                on error
+                  -- 如果窗口不存在，创建新窗口
+                  set newWindow to do script "${ffmpegCommand}"
+                  set windowId to id of window 1
+                  return windowId
+                end try
+              else
+                -- 创建新窗口
+                set newWindow to do script "${ffmpegCommand}"
+                set windowId to id of window 1
+                return windowId
+              end if
+            end if
+            
             activate
           end tell`;
 
+        // 执行脚本
         terminalProcess = spawn('osascript', ['-e', script]);
 
-        // 捕获新窗口的 ID
-        terminalProcess.stdout?.on('data', (data) => {
-          const windowId = data.toString().trim();
+        // 捕获窗口 ID
+        terminalProcess.stdout?.on('data', (outputData) => {
+          const windowId = outputData.toString().trim();
           if (windowId && !Number.isNaN(Number(windowId))) {
             terminalWindowId = windowId;
             console.log('Terminal window ID:', terminalWindowId);
           }
         });
 
-        terminalProcess.stderr?.on('data', (data) => {
-          console.error('AppleScript stderr:', data.toString());
-          // 如果出现错误，重置窗口 ID
-          if (data.toString().includes('error')) {
-            terminalWindowId = null;
-          }
+        terminalProcess.stderr?.on('data', (errorData) => {
+          console.error('AppleScript stderr:', errorData.toString());
         });
 
         terminalProcess.on('error', (error) => {
