@@ -812,7 +812,7 @@ function openTerminalAtPath(dirPath: string) {
             if not running then
               activate
               delay 1
-              
+
               -- 使用自动创建的第一个窗口
               set currentWindow to window 1
               do script "${ffmpegCommand}" in currentWindow
@@ -838,7 +838,7 @@ function openTerminalAtPath(dirPath: string) {
                 return windowId
               end if
             end if
-            
+
             activate
           end tell`;
 
@@ -878,6 +878,13 @@ function openTerminalAtPath(dirPath: string) {
       break;
     }
     case 'win32': {
+      // 如果已经有终端进程在运行，直接返回
+      if (terminalProcess) {
+        console.log('Terminal process already running');
+        return;
+      }
+
+      terminalStarted = false;
       try {
         // 使用 CMD
         const ffmpegExe = getFfmpegPath();
@@ -1019,10 +1026,8 @@ ipcMain.handle('open-terminal', async () => {
   return true;
 });
 
-// 添加一个清理进程的函数
+// 清理进程的函数
 function cleanupProcesses() {
-  console.log('Cleaning up processes...');
-
   // 清理终端进程
   if (terminalProcess) {
     try {
