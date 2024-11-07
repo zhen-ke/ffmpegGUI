@@ -63,6 +63,8 @@ let ffmpegProcess: ChildProcess | null = null;
 
 let terminalProcess: ChildProcess | null = null;
 
+let terminalStarted = false;
+
 const isWindows = process.platform === 'win32';
 
 const get7zaPath = () => {
@@ -789,17 +791,76 @@ if (!gotTheLock) {
     .catch(console.log);
 }
 
+// 在文件顶部添加新的变量来跟踪终端窗口
+let terminalWindowId: string | null = null;
+
 // 修改 openTerminalAtPath 函数
 function openTerminalAtPath(dirPath: string) {
-  // 如果已经有终端进程在运行，直接返回
-  if (terminalProcess) {
-    console.log('Terminal process already running');
-    return;
-  }
-
-  let terminalStarted = false;
-
   switch (process.platform) {
+    case 'darwin': {
+      try {
+        // 转义路径中的特殊字符
+        const escapedPath = dirPath.replace(/"/g, '\\"');
+
+        // 构建 FFmpeg 命令，使用单引号避免过度转义
+        const ffmpegCommand = `clear && cd '${escapedPath}' && echo 'FFmpeg version information:' && ./ffmpeg -version`;
+
+        // 构建 AppleScript，改进窗口 ID 的检查逻辑
+        const script = `
+          tell application "Terminal"
+            try
+              if "${terminalWindowId}" is not "" then
+                -- 尝试访问已存在的窗口
+                set existingWindow to window id ${terminalWindowId}
+                do script "${ffmpegCommand}" in existingWindow
+              end if
+            on error
+              -- 如果窗口不存在或出错，创建新窗口
+              set newWindow to do script "${ffmpegCommand}"
+              set windowId to id of window 1
+              return windowId
+            end try
+            activate
+          end tell`;
+
+        terminalProcess = spawn('osascript', ['-e', script]);
+
+        // 捕获新窗口的 ID
+        terminalProcess.stdout?.on('data', (data) => {
+          const windowId = data.toString().trim();
+          if (windowId && !Number.isNaN(Number(windowId))) {
+            terminalWindowId = windowId;
+            console.log('Terminal window ID:', terminalWindowId);
+          }
+        });
+
+        terminalProcess.stderr?.on('data', (data) => {
+          console.error('AppleScript stderr:', data.toString());
+          // 如果出现错误，重置窗口 ID
+          if (data.toString().includes('error')) {
+            terminalWindowId = null;
+          }
+        });
+
+        terminalProcess.on('error', (error) => {
+          console.error('Failed to execute AppleScript:', error);
+          terminalWindowId = null;
+        });
+
+        terminalProcess.on('exit', (code) => {
+          console.log(`Terminal AppleScript exited with code ${code}`);
+          if (code !== 0) {
+            console.error('AppleScript execution failed');
+            terminalWindowId = null;
+          }
+          terminalProcess = null;
+        });
+      } catch (error) {
+        console.error('Failed to open macOS terminal:', error);
+        terminalWindowId = null;
+      }
+      break;
+    }
     case 'win32': {
       try {
         // 使用 CMD
@@ -851,20 +912,6 @@ function openTerminalAtPath(dirPath: string) {
         } catch (psError) {
           console.error('Failed to start PowerShell:', psError);
         }
-      }
-      break;
-    }
-    case 'darwin': {
-      try {
-        const script = `tell application "Terminal"
-          do script "clear && cd \\"${dirPath}\\" > /dev/null 2>&1 && echo \\"FFmpeg version information:\\" && ./ffmpeg -version && echo \\"\\nWorking directory: binaries\\""
-          activate
-        end tell`;
-
-        terminalProcess = spawn('osascript', ['-e', script]);
-        terminalStarted = true;
-      } catch (error) {
-        console.error('Failed to open macOS terminal:', error);
       }
       break;
     }
@@ -971,6 +1018,7 @@ function cleanupProcesses() {
         terminalProcess.kill('SIGTERM');
       }
       terminalProcess = null;
+      terminalWindowId = null; // 重置终端窗口 ID
       console.log('Terminal process cleaned up');
     } catch (error) {
       console.error('Error cleaning up terminal process:', error);
