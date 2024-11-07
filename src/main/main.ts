@@ -901,7 +901,7 @@ function openTerminalAtPath(dirPath: string) {
         ],
       ];
 
-      for (const [terminal, args] of terminals) {
+      terminals.some(([terminal, args]) => {
         try {
           terminalProcess = spawn(terminal as string, args as string[], {
             stdio: 'inherit',
@@ -909,12 +909,12 @@ function openTerminalAtPath(dirPath: string) {
           });
           terminalStarted = true;
           console.log(`Linux terminal (${terminal}) spawn successful`);
-          break;
+          return true; // Exit the loop if successful
         } catch (error) {
           console.error(`Failed to open ${terminal}:`, error);
-          continue;
+          return false; // Continue to the next iteration
         }
-      }
+      });
     }
   }
 
