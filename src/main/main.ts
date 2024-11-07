@@ -61,6 +61,8 @@ let mainWindow: BrowserWindow | null = null;
 
 let ffmpegProcess: ChildProcess | null = null;
 
+let terminalProcess: ChildProcess | null = null;
+
 const isWindows = process.platform === 'win32';
 
 const get7zaPath = () => {
@@ -712,6 +714,7 @@ const createWindow = async () => {
       mainWindow.minimize();
     } else {
       mainWindow.show();
+      mainWindow.setEnabled(true);
     }
   });
 
@@ -742,8 +745,7 @@ const createWindow = async () => {
 
 // 修改 window-all-closed 事件处理
 app.on('window-all-closed', () => {
-  // 在 macOS 上，除非用户使用 Cmd + Q 或从菜单栏选择退出
-  // 否则保持应用程序运行
+  cleanupProcesses();
   if (process.platform !== 'darwin') {
     app.quit();
   }
@@ -752,7 +754,9 @@ app.on('window-all-closed', () => {
 // 在退出前设置 isQuitting 标志（仅 macOS 需要）
 if (process.platform === 'darwin') {
   app.on('before-quit', () => {
+    console.log('Application is quitting...');
     app.isQuitting = true;
+    cleanupProcesses();
   });
 }
 
@@ -787,12 +791,20 @@ if (!gotTheLock) {
 
 // 修改 openTerminalAtPath 函数
 function openTerminalAtPath(dirPath: string) {
+  // 如果已经有终端进程在运行，直接返回
+  if (terminalProcess) {
+    console.log('Terminal process already running');
+    return;
+  }
+
+  let terminalStarted = false;
+
   switch (process.platform) {
     case 'win32': {
-      // 优先使用 CMD
       try {
+        // 使用 CMD
         const ffmpegExe = getFfmpegPath();
-        spawn('start', ['cmd', '/K', `"${ffmpegExe}" -version`], {
+        terminalProcess = spawn('cmd', ['/K', `"${ffmpegExe}" -version`], {
           shell: true,
           cwd: dirPath,
           windowsVerbatimArguments: true,
@@ -800,44 +812,63 @@ function openTerminalAtPath(dirPath: string) {
             ...process.env,
             PATH: `${dirPath}${path.delimiter}${process.env.PATH || ''}`,
           },
+          stdio: 'inherit',
+          detached: true,
         });
+        terminalStarted = true;
       } catch (cmdError) {
-        // 尝试使用 PowerShell
-        spawn(
-          'start',
-          [
-            'powershell',
-            '-NoExit',
-            '-Command',
-            `Set-Location '${dirPath}'; ffmpeg -version; Write-Host "\nCurrent directory: $PWD"`,
-          ],
-          {
-            shell: true,
-            stdio: 'inherit',
-            cwd: dirPath,
-          },
-        );
+        try {
+          // 使用 powershell
+          terminalProcess = spawn(
+            'cmd.exe',
+            [
+              '/c',
+              'start',
+              '/wait',
+              'powershell.exe',
+              '-NoExit',
+              '-Command',
+              `cd "${dirPath}" ; ffmpeg -version`,
+            ],
+            {
+              shell: true,
+              detached: false, // 不分离进程
+              stdio: 'ignore',
+            },
+          );
+
+          // 在 Windows 上使用 taskkill 确保子进程被终止
+          terminalProcess.on('exit', () => {
+            try {
+              exec(`taskkill /F /T /PID ${terminalProcess?.pid}`);
+            } catch (error) {
+              console.error('Error killing terminal process:', error);
+            }
+            terminalProcess = null;
+          });
+
+          terminalStarted = true;
+        } catch (psError) {
+          console.error('Failed to start PowerShell:', psError);
+        }
       }
       break;
     }
     case 'darwin': {
-      // macOS - 使用 Terminal.app
       try {
         const script = `tell application "Terminal"
-      do script "cd \\"${dirPath}\\" && ffmpeg -version && echo \\"\\nCurrent directory: $(pwd)\\""
-      activate
-    end tell`;
+          do script "cd \\"${dirPath}\\" && ffmpeg -version && echo \\"\\nCurrent directory: $(pwd)\\""
+          activate
+        end tell`;
 
-        spawn('osascript', ['-e', script], {
-          stdio: 'inherit',
-        });
+        terminalProcess = spawn('osascript', ['-e', script]);
+        terminalStarted = true;
       } catch (error) {
         console.error('Failed to open macOS terminal:', error);
       }
       break;
     }
     default: {
-      // Linux - 尝试常见的终端模拟器
       const terminals = [
         [
           'gnome-terminal',
@@ -872,10 +903,11 @@ function openTerminalAtPath(dirPath: string) {
 
       for (const [terminal, args] of terminals) {
         try {
-          spawn(terminal, args, {
+          terminalProcess = spawn(terminal as string, args as string[], {
             stdio: 'inherit',
-            detached: true, // 添加这个选项
-          }).unref(); // 添加这个方法调用
+            detached: true,
+          });
+          terminalStarted = true;
           console.log(`Linux terminal (${terminal}) spawn successful`);
           break;
         } catch (error) {
@@ -885,12 +917,74 @@ function openTerminalAtPath(dirPath: string) {
       }
     }
   }
+
+  if (terminalStarted && terminalProcess) {
+    if (mainWindow) {
+      mainWindow.setAlwaysOnTop(false);
+    }
+
+    terminalProcess.on('exit', () => {
+      console.log('Terminal process exited');
+      if (mainWindow) {
+        mainWindow.focus();
+      }
+      terminalProcess = null;
+    });
+
+    terminalProcess.on('error', (error) => {
+      console.error('Terminal process error:', error);
+      if (mainWindow) {
+        mainWindow.focus();
+      }
+      terminalProcess = null;
+    });
+
+    // Windows 平台特殊处理
+    if (process.platform === 'win32') {
+      terminalProcess.unref();
+    }
+  } else {
+    console.error('Failed to start terminal');
+    terminalProcess = null;
+  }
 }
 
-// 添加 IPC 处理器
+// 修改 IPC 处理器
 ipcMain.handle('open-terminal', async () => {
   const ffmpegPath = path.dirname(getFfmpegPath());
-
   openTerminalAtPath(ffmpegPath);
   return true;
 });
+
+// 添加一个清理进程的函数
+function cleanupProcesses() {
+  console.log('Cleaning up processes...');
+
+  // 清理终端进程
+  if (terminalProcess) {
+    try {
+      // 对于 Windows，使用 taskkill 来确保子进程也被终止
+      if (process.platform === 'win32') {
+        exec(`taskkill /pid ${terminalProcess.pid} /T /F`);
+      } else {
+        // 对于 Unix 系统，发送 SIGTERM 信号
+        terminalProcess.kill('SIGTERM');
+      }
+      terminalProcess = null;
+      console.log('Terminal process cleaned up');
+    } catch (error) {
+      console.error('Error cleaning up terminal process:', error);
+    }
+  }
+
+  // 清理 FFmpeg 进程
+  if (ffmpegProcess) {
+    try {
+      ffmpegProcess.kill('SIGTERM');
+      ffmpegProcess = null;
+      console.log('FFmpeg process cleaned up');
+    } catch (error) {
+      console.error('Error cleaning up FFmpeg process:', error);
+    }
+  }
+}
