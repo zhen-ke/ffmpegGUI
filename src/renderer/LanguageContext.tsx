@@ -44,6 +44,7 @@ export const translations: Record<Language, Record<string, string>> = {
   },
   zh: {
     'Add Template': '添加模板',
+    Terminal: '终端',
     'Command Template': '命令模板',
     'Select a template': '选择模板',
     'FFmpeg Command': 'FFmpeg 命令',

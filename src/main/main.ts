@@ -22,7 +22,7 @@ import { autoUpdater } from 'electron-updater';
 import log from 'electron-log';
 import MenuBuilder from './menu';
 import { resolveHtmlPath } from './util';
-import { ChildProcess, spawn, exec } from 'child_process';
+import { ChildProcess, spawn, exec, execFile } from 'child_process';
 import fs from 'fs';
 import axios from 'axios';
 import extract from 'extract-zip';
@@ -784,3 +784,113 @@ if (!gotTheLock) {
     })
     .catch(console.log);
 }
+
+// 修改 openTerminalAtPath 函数
+function openTerminalAtPath(dirPath: string) {
+  switch (process.platform) {
+    case 'win32': {
+      // 优先使用 CMD
+      try {
+        const ffmpegExe = getFfmpegPath();
+        spawn('start', ['cmd', '/K', `"${ffmpegExe}" -version`], {
+          shell: true,
+          cwd: dirPath,
+          windowsVerbatimArguments: true,
+          env: {
+            ...process.env,
+            PATH: `${dirPath}${path.delimiter}${process.env.PATH || ''}`,
+          },
+        });
+      } catch (cmdError) {
+        // 尝试使用 PowerShell
+        spawn(
+          'start',
+          [
+            'powershell',
+            '-NoExit',
+            '-Command',
+            `Set-Location '${dirPath}'; ffmpeg -version; Write-Host "\nCurrent directory: $PWD"`,
+          ],
+          {
+            shell: true,
+            stdio: 'inherit',
+            cwd: dirPath,
+          },
+        );
+      }
+      break;
+    }
+    case 'darwin': {
+      // macOS - 使用 Terminal.app
+      try {
+        const script = `tell application "Terminal"
+      do script "cd \\"${dirPath}\\" && ffmpeg -version && echo \\"\\nCurrent directory: $(pwd)\\""
+      activate
+    end tell`;
+
+        spawn('osascript', ['-e', script], {
+          stdio: 'inherit',
+        });
+      } catch (error) {
+        console.error('Failed to open macOS terminal:', error);
+      }
+      break;
+    }
+    default: {
+      // Linux - 尝试常见的终端模拟器
+      const terminals = [
+        [
+          'gnome-terminal',
+          [
+            '--working-directory',
+            dirPath,
+            '--',
+            'bash',
+            '-c',
+            'ffmpeg -version; echo "\nCurrent directory: $(pwd)"; exec bash',
+          ],
+        ],
+        [
+          'konsole',
+          [
+            '--workdir',
+            dirPath,
+            '-e',
+            'bash',
+            '-c',
+            'ffmpeg -version; echo "\nCurrent directory: $(pwd)"; exec bash',
+          ],
+        ],
+        [
+          'xterm',
+          [
+            '-e',
+            `cd "${dirPath}" && ffmpeg -version && echo "\nCurrent directory: $(pwd)" && exec bash`,
+          ],
+        ],
+      ];
+
+      for (const [terminal, args] of terminals) {
+        try {
+          spawn(terminal, args, {
+            stdio: 'inherit',
+            detached: true, // 添加这个选项
+          }).unref(); // 添加这个方法调用
+          console.log(`Linux terminal (${terminal}) spawn successful`);
+          break;
+        } catch (error) {
+          console.error(`Failed to open ${terminal}:`, error);
+          continue;
+        }
+      }
+    }
+  }
+}
+
+// 添加 IPC 处理器
+ipcMain.handle('open-terminal', async () => {
+  const ffmpegPath = path.dirname(getFfmpegPath());
+
+  openTerminalAtPath(ffmpegPath);
+  return true;
+});

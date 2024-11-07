@@ -5,7 +5,7 @@ import React, {
   useCallback,
   DragEvent,
 } from 'react';
-import { Play, Square, PlusCircle } from 'lucide-react';
+import { Play, Square, PlusCircle, Terminal } from 'lucide-react';
 import FFmpegDownloader from './components/FFmpegDownloader';
 import { useLanguage } from './LanguageContext';
 import Dropdown, { DropdownOption } from './components/Dropdown';
@@ -154,6 +154,16 @@ function App() {
       'check-ffmpeg-status',
     );
     setFfmpegExists(exists);
+  };
+
+  const handleOpenTerminal = async () => {
+    try {
+      console.log('Opening terminal...');
+      const result = await window.electron.ipcRenderer.invoke('open-terminal');
+      console.log('Terminal open result:', result);
+    } catch (error) {
+      console.error('Failed to open terminal:', error);
+    }
   };
 
   useEffect(() => {
@@ -334,7 +344,17 @@ function App() {
             htmlFor="ffmpeg-command"
             className="block font-semibold text-gray-700 mb-2 dark:text-text-dark"
           >
-            {t('FFmpeg Command')}
+            <div className="flex items-center justify-between">
+              <span>{t('FFmpeg Command')}</span>
+              <button
+                onClick={handleOpenTerminal}
+                className="flex items-center px-3 py-1.5 text-sm bg-blue-500 hover:bg-blue-600 text-white rounded transition-colors duration-200 dark:text-text-dark"
+                title={t('Open Terminal at FFmpeg location')}
+              >
+                <Terminal size={16} className="mr-1.5" />
+                {t('Terminal')}
+              </button>
+            </div>
           </label>
           <textarea
             id="ffmpeg-command"

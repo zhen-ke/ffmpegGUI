@@ -15,7 +15,9 @@ export type Channels =
   | 'ffmpeg-extract-progress'
   | 'ffmpeg-install-complete'
   | 'ffmpeg-install-error'
-  | 'ffmpeg-complete';
+  | 'ffmpeg-complete'
+  | 'open-terminal'
+  | 'check-ffmpeg-status';
 
 const electronHandler = {
   ipcRenderer: {
@@ -34,7 +36,7 @@ const electronHandler = {
     once(channel: Channels, func: (...args: unknown[]) => void) {
       ipcRenderer.once(channel, (_event, ...args) => func(...args));
     },
-    invoke: (channel: string, ...args: any[]) => {
+    invoke: (channel: Channels, ...args: unknown[]) => {
       return ipcRenderer.invoke(channel, ...args);
     },
   },
