@@ -803,7 +803,7 @@ function openTerminalAtPath(dirPath: string) {
         const escapedPath = dirPath.replace(/"/g, '\\"');
 
         // 构建 FFmpeg 命令
-        const ffmpegCommand = `clear && cd '${escapedPath}' && echo 'FFmpeg version information:' && ./ffmpeg -version`;
+        const ffmpegCommand = `clear && cd '${escapedPath}' && ./ffmpeg -version`;
 
         // 构建AppleScript，处理自动创建的窗口
         const script = `
