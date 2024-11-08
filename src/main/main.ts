@@ -879,62 +879,60 @@ function openTerminalAtPath(dirPath: string) {
     }
     case 'win32': {
       // 如果已经有终端进程在运行，直接返回
-      if (terminalProcess) {
+      if (terminalStarted) {
         console.log('Terminal process already running');
         return;
       }
-
-      terminalStarted = false;
+      terminalStarted = true;
       try {
         // 使用 CMD
         const ffmpegExe = getFfmpegPath();
-        terminalProcess = spawn('cmd', ['/K', `"${ffmpegExe}" -version`], {
-          shell: true,
-          cwd: dirPath,
-          windowsVerbatimArguments: true,
-          env: {
-            ...process.env,
-            PATH: `${dirPath}${path.delimiter}${process.env.PATH || ''}`,
-          },
-          stdio: 'inherit',
-          detached: true,
-        });
-        terminalStarted = true;
-      } catch (cmdError) {
-        try {
-          // 使用 powershell
-          terminalProcess = spawn(
+
+        const monitorProcess = spawn(
+          'cmd.exe',
+          [
+            '/c',
+            'start',
+            '/wait', // 等待新窗口关闭
             'cmd.exe',
-            [
-              '/c',
-              'start',
-              '/wait',
-              'powershell.exe',
-              '-NoExit',
-              '-Command',
-              `cd "${dirPath}" ; ffmpeg -version`,
-            ],
-            {
-              shell: true,
-              detached: false, // 不分离进程
-              stdio: 'ignore',
+            '/F:ON',
+            '/V:ON',
+            '/k',
+            `"${ffmpegExe}" -version`,
+          ],
+          {
+            shell: true,
+            cwd: dirPath,
+            windowsVerbatimArguments: true,
+            env: {
+              ...process.env,
+              PATH: `${dirPath}${path.delimiter}${process.env.PATH || ''}`,
             },
+          },
+        );
+
+        // 监听监视进程的退出
+        monitorProcess.on('exit', (code) => {
+          console.log(
+            'Terminal window closed, monitor process exited with code:',
+            code,
           );
+          terminalStarted = false; // 重置标志
+          terminalProcess = null;
+        });
 
-          // 在 Windows 上使用 taskkill 确保子进程被终止
-          terminalProcess.on('exit', () => {
-            try {
-              exec(`taskkill /F /T /PID ${terminalProcess?.pid}`);
-            } catch (error) {
-              console.error('Error killing terminal process:', error);
-            }
-            terminalProcess = null;
-          });
+        monitorProcess.on('error', (error: Error) => {
+          console.error('Monitor process error:', error);
+          terminalStarted = false;
+          terminalProcess = null;
+        });
 
-          terminalStarted = true;
-        } catch (psError) {
-          console.error('Failed to start PowerShell:', psError);
-        }
+        terminalProcess = monitorProcess;
+      } catch (error: unknown) {
+        const err = error as Error;
+        console.error('Failed to start CMD:', err.message);
+        terminalStarted = false;
+        terminalProcess = null;
       }
       break;
     }
