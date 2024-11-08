@@ -366,6 +366,7 @@ function App() {
             className="w-full p-2 border border-gray-300 rounded resize-none font-mono text-sm dark:bg-background-textarea dark:border-border-dark dark:text-text-lightDark"
             rows={3}
             spellCheck="false"
+            autoComplete="off"
             style={{ minHeight: '4.5rem' }}
           />
         </div>
