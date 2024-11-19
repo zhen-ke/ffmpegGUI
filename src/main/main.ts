@@ -63,7 +63,10 @@ let ffmpegProcess: ChildProcess | null = null;
 
 let terminalProcess: ChildProcess | null = null;
 
-let terminalStarted = false;
+let terminalStarted: boolean = false;
+
+// 跟踪终端窗口
+let terminalWindowId: string | null = null;
 
 const isWindows = process.platform === 'win32';
 
@@ -791,9 +794,6 @@ if (!gotTheLock) {
     .catch(console.log);
 }
 
-// 在文件顶部添加新的变量来跟踪终端窗口
-let terminalWindowId: string | null = null;
-
 // 修改 openTerminalAtPath 函数
 function openTerminalAtPath(dirPath: string) {
   switch (process.platform) {
@@ -1055,3 +1055,14 @@ function cleanupProcesses() {
     }
   }
 }
+
+// Fetch FFmpeg binaries from OSXExperts.net, which provides optimized builds for Apple Silicon Macs
+ipcMain.handle('fetch-osx-experts-html', async () => {
+  try {
+    const response = await axios.get('http://www.osxexperts.net/');
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching OSXExperts HTML:', error);
+    throw error;
+  }
+});

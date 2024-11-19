@@ -26,15 +26,62 @@ export async function fetchFFmpegAssets(
         downloadUrl: asset.browser_download_url,
       }));
     } else if (platform === 'darwin') {
-      // For Mac, we don't need to fetch any data
-      return [
-        {
-          version: 'latest', // We don't know the exact version without making a request
-          name: 'ffmpeg-mac.zip',
-          size: 0, // We don't know the size without making a request
-          downloadUrl: MAC_DOWNLOAD_URL,
-        },
-      ];
+      // 通过主进程获取 HTML 内容
+      const html = await window.electron.ipcRenderer.invoke(
+        'fetch-osx-experts-html',
+      );
+
+      const isArm64 = window.electron.arch === 'arm64'; // 使用从 preload 获取的架构信息
+
+      if (isArm64) {
+        const linkMatch = html.match(
+          /href="(https:\/\/www\.osxexperts\.net\/ffmpeg.*?arm\.zip)"/,
+        );
+        if (!linkMatch) {
+          throw new Error('Could not find FFmpeg ARM download link');
+        }
+
+        const versionMatch = html.match(
+          /ffmpeg\s*(\d+\.\d+)\s*\(Apple Silicon\)/i,
+        );
+        const version = versionMatch ? versionMatch[1] : 'latest';
+
+        return [
+          {
+            version: `${version} (OSXExperts)`,
+            name: `ffmpeg-mac-arm-${version}.zip`,
+            size: 0,
+            downloadUrl: linkMatch[1],
+          },
+        ];
+      } else {
+        const osxExpertsLinkMatch = html.match(
+          /href="(https:\/\/www\.osxexperts\.net\/ffmpeg\d+intel\.zip)"/,
+        );
+
+        const assets = [
+          {
+            version: 'latest (Evermeet)',
+            name: 'ffmpeg-mac-intel.zip',
+            size: 0,
+            downloadUrl: MAC_DOWNLOAD_URL,
+          },
+        ];
+
+        if (osxExpertsLinkMatch) {
+          const versionMatch = html.match(/ffmpeg\s*(\d+\.\d+)\s*\(Intel\)/i);
+          const version = versionMatch ? versionMatch[1] : 'latest';
+
+          assets.push({
+            version: `${version} (OSXExperts)`,
+            name: `ffmpeg-mac-intel-${version}.zip`,
+            size: 0,
+            downloadUrl: osxExpertsLinkMatch[1],
+          });
+        }
+
+        return assets;
+      }
     } else {
       throw new Error('Unsupported platform');
     }

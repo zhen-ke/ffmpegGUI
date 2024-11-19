@@ -219,9 +219,23 @@ const FFmpegDownloader: React.FC = () => {
                       onChange={() => handleAssetSelect(asset)}
                       className="form-radio h-5 w-5 text-indigo-600"
                     />
-                    <span className="text-gray-700 font-medium">
-                      {`${asset.name} (${(asset.size / 1024 / 1024).toFixed(2)} MB)`}
-                    </span>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-gray-700 font-medium">
+                        {asset.name}
+                      </span>
+                      <span className="text-sm text-gray-500">
+                        {asset.version.includes('OSXExperts')
+                          ? `v${asset.version.replace(' (OSXExperts)', '')} · OSXExperts`
+                          : asset.version.includes('Evermeet')
+                            ? 'Latest · Evermeet'
+                            : `v${asset.version}`}
+                      </span>
+                      {+asset.size > 0 && (
+                        <span className="text-sm text-gray-500">
+                          · {(asset.size / 1024 / 1024).toFixed(2)} MB
+                        </span>
+                      )}
+                    </div>
                   </label>
                 </li>
               ))}

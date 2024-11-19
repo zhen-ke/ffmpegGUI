@@ -17,7 +17,8 @@ export type Channels =
   | 'ffmpeg-install-error'
   | 'ffmpeg-complete'
   | 'open-terminal'
-  | 'check-ffmpeg-status';
+  | 'check-ffmpeg-status'
+  | 'fetch-osx-experts-html';
 
 const electronHandler = {
   ipcRenderer: {
@@ -41,6 +42,7 @@ const electronHandler = {
     },
   },
   platform: process.platform,
+  arch: process.arch,
 };
 
 contextBridge.exposeInMainWorld('electron', electronHandler);
