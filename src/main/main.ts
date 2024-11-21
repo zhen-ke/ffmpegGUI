@@ -316,44 +316,79 @@ function parseFFmpegCommand(command: string): string[] {
   const args: string[] = [];
   let currentArg = '';
   let inQuotes = false;
+  let inSingleQuotes = false;
   let escapeNext = false;
+
+  // 移除命令开头的 ffmpeg 如果存在
+  command = command.trim();
+  if (command.toLowerCase().startsWith('ffmpeg ')) {
+    command = command.substring(7);
+  }
 
   for (let i = 0; i < command.length; i++) {
     const char = command[i];
 
     if (escapeNext) {
-      currentArg += char;
+      currentArg += '\\' + char;
       escapeNext = false;
-    } else if (char === '\\') {
-      if (i + 1 < command.length && command[i + 1] === '"') {
-        currentArg += '"';
-        i++;
-      } else {
-        currentArg += char;
-      }
-    } else if (char === '"') {
+      continue;
+    }
+
+    if (char === '\\') {
+      escapeNext = true;
+      continue;
+    }
+
+    // 处理双引号
+    if (char === '"' && !inSingleQuotes) {
       inQuotes = !inQuotes;
-    } else if (char === ' ' && !inQuotes) {
+      currentArg += char;
+      continue;
+    }
+
+    // 处理单引号
+    if (char === "'" && !inQuotes) {
+      inSingleQuotes = !inSingleQuotes;
+      currentArg += char;
+      continue;
+    }
+
+    // 处理空格
+    if (char === ' ' && !inQuotes && !inSingleQuotes) {
       if (currentArg) {
-        args.push(currentArg);
+        // 处理特殊情况：数字后的冒号不应被分割 (例如 scale=480:-1)
+        if (args.length > 0 && currentArg === ':' && /^\d+$/.test(args[args.length - 1])) {
+          args[args.length - 1] += ':';
+        } else {
+          args.push(currentArg);
+        }
         currentArg = '';
       }
-    } else {
-      currentArg += char;
+      continue;
     }
+
+    currentArg += char;
   }
 
   if (currentArg) {
     args.push(currentArg);
   }
 
-  // 处理路径
-  return args.map((arg) => {
-    // 如果是选项标志，直接返回
-    if (arg.startsWith('-')) return arg;
+  // 验证引号是否配对
+  if (inQuotes || inSingleQuotes) {
+    console.warn('Warning: Unmatched quotes in command');
+  }
 
-    // 如果路径包含空格且没有被引号包围，添加引号
-    if (arg.includes(' ') && !arg.startsWith('"')) {
+  // 处理空参数
+  return args.filter(arg => arg.length > 0).map(arg => {
+    // 如果参数是一个选项标志，保持原样
+    if (arg.startsWith('-')) {
+      return arg;
+    }
+
+    // 如果参数包含特殊字符但没有引号，添加双引号
+    if (!arg.startsWith('"') && !arg.startsWith("'") && 
+        (arg.includes(' ') || arg.includes(';') || arg.includes('|'))) {
       return `"${arg}"`;
     }
 
