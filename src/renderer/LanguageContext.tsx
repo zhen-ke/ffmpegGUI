@@ -41,6 +41,8 @@ export const translations: Record<Language, Record<string, string>> = {
     'Description (Chinese)': 'Description (Chinese)',
     Cancel: 'Cancel',
     Save: 'Save',
+    'Select Input File': 'Select Input File',
+    'Select Output Folder': 'Select Output Folder',
   },
   zh: {
     'Add Template': '添加模板',
@@ -65,6 +67,8 @@ export const translations: Record<Language, Record<string, string>> = {
     'Description (Chinese)': '描述（中文）',
     Cancel: '取消',
     Save: '保存',
+    'Select Input File': '选择输入文件',
+    'Select Output Folder': '选择输出文件夹',
   },
 };
 

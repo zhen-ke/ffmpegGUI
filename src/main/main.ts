@@ -746,6 +746,40 @@ const createWindow = async () => {
     return ffmpegExists;
   });
 
+  // IPC 监听器来处理输入文件选择
+  ipcMain.handle('select-input-file', async () => {
+    if (!mainWindow) {
+      throw new Error('Main window is not defined');
+    }
+
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: 'Select Input File',
+      filters: [
+        { name: 'All Files', extensions: ['*'] },
+        { name: 'Video Files', extensions: ['mp4', 'avi', 'mkv', 'mov', 'wmv', 'flv', 'webm'] },
+        { name: 'Audio Files', extensions: ['mp3', 'wav', 'flac', 'aac', 'ogg', 'm4a'] },
+        { name: 'Image Files', extensions: ['jpg', 'jpeg', 'png', 'gif', 'bmp'] },
+      ],
+      properties: ['openFile'],
+    });
+
+    return result;
+  });
+
+  // IPC 监听器来处理输出文件夹选择
+  ipcMain.handle('select-output-folder', async () => {
+    if (!mainWindow) {
+      throw new Error('Main window is not defined');
+    }
+
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: 'Select Output Folder',
+      properties: ['openDirectory', 'createDirectory'],
+    });
+
+    return result;
+  });
+
   mainWindow.on('ready-to-show', () => {
     if (!mainWindow) {
       throw new Error('"mainWindow" is not defined');
