@@ -68,20 +68,41 @@ function App() {
     [totalDuration],
   );
 
+  // 优化后的日志生成函数：添加时间戳、图标和更好的样式结构
   const addLog = useCallback((type: LogType, message: string) => {
-    setLogs(
-      (prevLogs) =>
-        prevLogs +
-        message
-          .split('\n')
-          .map(
-            (line) =>
-              `<div class="log-entry log-${type} mb-1"><span class="log-icon">${
-                type === 'info' ? '➜' : type === 'error' ? '😡' : '😉'
-              }</span>${line}</div>`,
-          )
-          .join(''),
-    );
+    const time = new Date().toLocaleTimeString('en-US', { hour12: false });
+
+    // 定义样式配置
+    const config = {
+      error: {
+        color: 'text-red-600 dark:text-red-400',
+        bg: 'bg-red-50 dark:bg-red-900/10 border-red-100 dark:border-red-900/20',
+        icon: '✕',
+      },
+      success: {
+        color: 'text-emerald-600 dark:text-emerald-400',
+        bg: 'bg-emerald-50 dark:bg-emerald-900/10 border-emerald-100 dark:border-emerald-900/20',
+        icon: '✓',
+      },
+      info: {
+        color: 'text-slate-700 dark:text-slate-300',
+        bg: 'hover:bg-gray-50 dark:hover:bg-white/5 border-transparent',
+        icon: '➜',
+      },
+    };
+
+    const style = config[type] || config.info;
+
+    // 生成结构化的 HTML
+    const logHtml = `
+      <div class="group flex items-start gap-3 px-4 py-2 text-sm font-mono border-b border-dashed border-gray-200 dark:border-gray-800 last:border-0 transition-colors ${style.bg}">
+        <span class="flex-shrink-0 w-5 text-center ${style.color} opacity-70 font-bold select-none">${style.icon}</span>
+        <span class="flex-shrink-0 text-xs text-gray-400 select-none pt-0.5 group-hover:text-gray-500 dark:group-hover:text-gray-300 transition-colors">[${time}]</span>
+        <span class="flex-1 break-all whitespace-pre-wrap leading-relaxed ${style.color}">${message}</span>
+      </div>
+    `;
+
+    setLogs((prevLogs) => prevLogs + logHtml);
   }, []);
 
   const handleDragOver = (e: DragEvent<HTMLTextAreaElement>) => {
@@ -116,7 +137,8 @@ function App() {
   // 处理输入文件选择
   const handleSelectInputFile = async () => {
     try {
-      const result = await window.electron.ipcRenderer.invoke('select-input-file');
+      const result =
+        await window.electron.ipcRenderer.invoke('select-input-file');
       if (result && !result.canceled) {
         const filePath = result.filePaths[0];
         setInputFile(filePath);
@@ -133,7 +155,9 @@ function App() {
   // 处理输出文件夹选择
   const handleSelectOutputFolder = async () => {
     try {
-      const result = await window.electron.ipcRenderer.invoke('select-output-folder');
+      const result = await window.electron.ipcRenderer.invoke(
+        'select-output-folder',
+      );
       if (result && !result.canceled) {
         const folderPath = result.filePaths[0];
         setOutputFolder(folderPath);
@@ -154,7 +178,10 @@ function App() {
     // 替换输入文件路径
     if (input) {
       // 匹配并替换 -i 后的输入文件
-      newCommand = newCommand.replace(/-i\s+["']?[^"'\s]+["']?/g, `-i "${input}"`);
+      newCommand = newCommand.replace(
+        /-i\s+["']?[^"'\s]+["']?/g,
+        `-i "${input}"`,
+      );
       // 如果命令中没有 -i 参数，则在开头添加
       if (!newCommand.includes('-i')) {
         newCommand = `-i "${input}" ${newCommand}`;
@@ -169,7 +196,11 @@ function App() {
 
       // 尝试从原命令中提取输出文件名
       const lastPart = parts[parts.length - 1];
-      if (lastPart && !lastPart.startsWith('-') && !lastPart.includes('input')) {
+      if (
+        lastPart &&
+        !lastPart.startsWith('-') &&
+        !lastPart.includes('input')
+      ) {
         // 提取文件名和扩展名
         const match = lastPart.match(/([^/\\]+\.[a-zA-Z0-9]+)$/);
         if (match) {
@@ -219,7 +250,10 @@ function App() {
       // 替换输入文件路径
       if (inputFile) {
         // 匹配并替换 -i 后的输入文件
-        newCommand = newCommand.replace(/-i\s+["']?[^"'\s]+["']?/g, `-i "${inputFile}"`);
+        newCommand = newCommand.replace(
+          /-i\s+["']?[^"'\s]+["']?/g,
+          `-i "${inputFile}"`,
+        );
         // 如果命令中没有 -i 参数，则在开头添加
         if (!newCommand.includes('-i')) {
           newCommand = `-i "${inputFile}" ${newCommand}`;
@@ -234,7 +268,11 @@ function App() {
 
         // 尝试从模板命令中提取输出文件名
         const lastPart = parts[parts.length - 1];
-        if (lastPart && !lastPart.startsWith('-') && !lastPart.includes('input')) {
+        if (
+          lastPart &&
+          !lastPart.startsWith('-') &&
+          !lastPart.includes('input')
+        ) {
           // 提取文件名和扩展名
           const match = lastPart.match(/([^/\\]+\.[a-zA-Z0-9]+)$/);
           if (match) {
@@ -411,17 +449,19 @@ function App() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-gray-100 overflow-hidden pt-[35px] dark:bg-background-header ">
-      <div className="flex-shrink-0 bg-white shadow-md p-4 dark:bg-background-dark">
-        <div className="mb-4">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center">
-              <label className="font-semibold text-gray-700 mr-2 dark:text-text-dark">
-                {t('Command Template')}
-              </label>
+    <div className="h-screen flex flex-col bg-gray-50 overflow-hidden dark:bg-[#0d1117] text-gray-900 dark:text-gray-100 font-sans">
+      {/* ================= 上半部分：控制区 (固定高度，不滚动) ================= */}
+      <div className="flex-shrink-0 bg-white dark:bg-[#161b22] border-b border-gray-200 dark:border-gray-800 shadow-sm z-20">
+        <div className="max-w-7xl mx-auto w-full p-4 space-y-4">
+          {/* Header Row: Title & Language & Add Template */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+                FFmpeg Tool
+              </h1>
               <button
                 onClick={toggleLanguage}
-                className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 rounded transition-colors duration-200 dark:bg-background-textarea dark:text-text-lightDark dark:hover:bg-background-textarea focus:outline-none focus:shadow-outline"
+                className="px-2 py-0.5 text-xs font-medium bg-gray-100 hover:bg-gray-200 text-gray-600 rounded dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700 transition-colors"
               >
                 {language === 'en' ? '中文' : 'EN'}
               </button>
@@ -431,382 +471,240 @@ function App() {
                 setEditingTemplate(undefined);
                 setIsTemplateDialogOpen(true);
               }}
-              className="flex items-center px-3 py-1.5 text-sm bg-blue-500 hover:bg-blue-600 text-white rounded transition-colors duration-200 dark:text-text-dark"
+              className="flex items-center px-3 py-1.5 text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors dark:bg-blue-900/20 dark:text-blue-400 dark:hover:bg-blue-900/30"
             >
-              <PlusCircle size={16} className="mr-1" />
+              <PlusCircle size={16} className="mr-1.5" />
               {t('Add Template')}
             </button>
           </div>
-          <Dropdown
-            options={[
-              ...customTemplates.map(transformTemplate),
-              ...commandTemplates.map(transformTemplate),
-            ]}
-            onChange={handleTemplateChange}
-            value={selectedTemplate}
-            placeholder={t('Select a template')}
-            onEdit={handleEdit}
-            onDelete={handleDeleteTemplate}
-          />
-        </div>
 
-        {/* 输入文件和输出文件夹选择 - 卡片式设计 */}
-        <div className="mb-4 grid grid-cols-1 md:grid-cols-2 gap-3">
-          {/* 输入文件选择卡片 */}
-          <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-gray-800 dark:to-gray-700 rounded-lg p-4 border-2 border-dashed border-blue-200 dark:border-gray-600 hover:border-blue-400 dark:hover:border-blue-500 transition-colors duration-200">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center">
-                <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center mr-3">
-                  <svg
-                    className="w-5 h-5 text-white"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                    xmlns="http://www.w3.org/2000/svg"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
-                    />
-                  </svg>
-                </div>
-                <div>
-                  <h3 className="font-semibold text-sm text-gray-800 dark:text-gray-200">
-                    {t('Select Input File')}
-                  </h3>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Choose your media file</p>
-                </div>
-              </div>
-              {inputFile && (
+          {/* Dropdown & File Inputs Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+            {/* 模板选择 (占满宽或占一部分) */}
+            <div className="lg:col-span-4">
+              <Dropdown
+                options={[
+                  ...customTemplates.map(transformTemplate),
+                  ...commandTemplates.map(transformTemplate),
+                ]}
+                onChange={handleTemplateChange}
+                value={selectedTemplate}
+                placeholder={t('Select a template')}
+                onEdit={handleEdit}
+                onDelete={handleDeleteTemplate}
+              />
+            </div>
+
+            {/* 输入文件 */}
+            <div className="lg:col-span-4">
+              <div className="relative flex items-center">
                 <button
-                  onClick={() => setInputFile('')}
-                  className="text-gray-400 hover:text-red-500 transition-colors duration-200"
-                  title="Clear"
+                  onClick={handleSelectInputFile}
+                  className={`w-full flex items-center justify-between px-3 py-2 text-sm border rounded-lg transition-all duration-200 ${
+                    inputFile
+                      ? 'bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-900/20 dark:border-blue-800 dark:text-blue-300'
+                      : 'bg-white border-gray-300 hover:border-gray-400 text-gray-600 dark:bg-[#0d1117] dark:border-gray-700 dark:text-gray-400'
+                  }`}
                 >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              )}
-            </div>
-            <button
-              onClick={handleSelectInputFile}
-              className="w-full flex items-center justify-center px-4 py-2.5 text-sm bg-blue-500 hover:bg-blue-600 text-white rounded-md transition-colors duration-200 shadow-sm"
-            >
-              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              {inputFile ? 'Change File' : t('Select Input File')}
-            </button>
-            {inputFile && (
-              <div className="mt-2 p-2 bg-white dark:bg-gray-800 rounded-md border border-gray-200 dark:border-gray-600">
-                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Selected:</p>
-                <p className="text-xs font-mono text-gray-700 dark:text-gray-300 truncate" title={inputFile}>
-                  {inputFile.split('/').pop()}
-                </p>
-                <p className="text-xs text-gray-400 dark:text-gray-500 truncate mt-1" title={inputFile}>
-                  {inputFile.substring(0, inputFile.lastIndexOf('/'))}
-                </p>
-              </div>
-            )}
-          </div>
-
-          {/* 输出文件夹选择卡片 */}
-          <div className="bg-gradient-to-br from-orange-50 to-amber-50 dark:from-gray-800 dark:to-gray-700 rounded-lg p-4 border-2 border-dashed border-orange-200 dark:border-gray-600 hover:border-orange-400 dark:hover:border-orange-500 transition-colors duration-200">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center">
-                <div className="w-10 h-10 rounded-full bg-orange-500 flex items-center justify-center mr-3">
-                  <svg
-                    className="w-5 h-5 text-white"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                    xmlns="http://www.w3.org/2000/svg"
+                  <span
+                    className="truncate flex-1 text-left mr-2"
+                    title={inputFile || t('Select Input File')}
                   >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z"
-                    />
-                  </svg>
-                </div>
-                <div>
-                  <h3 className="font-semibold text-sm text-gray-800 dark:text-gray-200">
-                    {t('Select Output Folder')}
-                  </h3>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Choose destination folder</p>
-                </div>
-              </div>
-              {outputFolder && (
-                <button
-                  onClick={() => setOutputFolder('')}
-                  className="text-gray-400 hover:text-red-500 transition-colors duration-200"
-                  title="Clear"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
+                    {inputFile
+                      ? inputFile.split(/[/\\]/).pop()
+                      : t('Select Input File')}
+                  </span>
+                  {inputFile ? (
+                    <span
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setInputFile('');
+                      }}
+                      className="p-1 hover:bg-blue-200 dark:hover:bg-blue-800 rounded-full cursor-pointer"
+                    >
+                      <svg
+                        className="w-3 h-3"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M6 18L18 6M6 6l12 12"
+                        />
+                      </svg>
+                    </span>
+                  ) : (
+                    <svg
+                      className="w-4 h-4 opacity-50"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                      />
+                    </svg>
+                  )}
                 </button>
-              )}
-            </div>
-            <button
-              onClick={handleSelectOutputFolder}
-              className="w-full flex items-center justify-center px-4 py-2.5 text-sm bg-orange-500 hover:bg-orange-600 text-white rounded-md transition-colors duration-200 shadow-sm"
-            >
-              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              {outputFolder ? 'Change Folder' : t('Select Output Folder')}
-            </button>
-            {outputFolder && (
-              <div className="mt-2 p-2 bg-white dark:bg-gray-800 rounded-md border border-gray-200 dark:border-gray-600">
-                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Selected:</p>
-                <p className="text-xs font-mono text-gray-700 dark:text-gray-300 truncate" title={outputFolder}>
-                  {outputFolder.split('/').pop()}
-                </p>
-                <p className="text-xs text-gray-400 dark:text-gray-500 truncate mt-1" title={outputFolder}>
-                  {outputFolder}
-                </p>
               </div>
-            )}
-          </div>
-        </div>
+            </div>
 
-        {/* FFmpeg 命令输入区域 - 现代化设计 */}
-        <div className="mb-4">
-          {/* 标题栏 */}
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center">
-              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center mr-3 shadow-md">
-                <Terminal size={20} className="text-white" />
+            {/* 输出文件夹 */}
+            <div className="lg:col-span-4">
+              <div className="relative flex items-center">
+                <button
+                  onClick={handleSelectOutputFolder}
+                  className={`w-full flex items-center justify-between px-3 py-2 text-sm border rounded-lg transition-all duration-200 ${
+                    outputFolder
+                      ? 'bg-amber-50 border-amber-200 text-amber-700 dark:bg-amber-900/20 dark:border-amber-800 dark:text-amber-300'
+                      : 'bg-white border-gray-300 hover:border-gray-400 text-gray-600 dark:bg-[#0d1117] dark:border-gray-700 dark:text-gray-400'
+                  }`}
+                >
+                  <span
+                    className="truncate flex-1 text-left mr-2"
+                    title={outputFolder || t('Select Output Folder')}
+                  >
+                    {outputFolder
+                      ? outputFolder.split(/[/\\]/).pop()
+                      : t('Select Output Folder')}
+                  </span>
+                  {outputFolder ? (
+                    <span
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOutputFolder('');
+                      }}
+                      className="p-1 hover:bg-amber-200 dark:hover:bg-amber-800 rounded-full cursor-pointer"
+                    >
+                      <svg
+                        className="w-3 h-3"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M6 18L18 6M6 6l12 12"
+                        />
+                      </svg>
+                    </span>
+                  ) : (
+                    <svg
+                      className="w-4 h-4 opacity-50"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z"
+                      />
+                    </svg>
+                  )}
+                </button>
               </div>
-              <div>
-                <h3 className="font-bold text-lg text-gray-800 dark:text-gray-200">
-                  {t('FFmpeg Command')}
-                </h3>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Enter your command or drag & drop files here
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              {/* 复制按钮 */}
-              <button
-                onClick={() => {
-                  if (command) navigator.clipboard.writeText(command);
-                }}
-                disabled={!command}
-                className={`flex items-center px-3 py-1.5 text-sm rounded-md transition-all duration-200 ${
-                  command
-                    ? 'bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
-                    : 'bg-gray-50 cursor-not-allowed text-gray-400 dark:bg-gray-800 dark:text-gray-600'
-                }`}
-                title="Copy command"
-              >
-                <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                </svg>
-                Copy
-              </button>
-              {/* 清空按钮 */}
-              <button
-                onClick={() => setCommand('')}
-                disabled={!command}
-                className={`flex items-center px-3 py-1.5 text-sm rounded-md transition-all duration-200 ${
-                  command
-                    ? 'bg-red-50 hover:bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400 dark:hover:bg-red-900/50'
-                    : 'bg-gray-50 cursor-not-allowed text-gray-400 dark:bg-gray-800 dark:text-gray-600'
-                }`}
-                title="Clear command"
-              >
-                <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                </svg>
-                Clear
-              </button>
-              {/* 终端按钮 */}
-              <button
-                onClick={handleOpenTerminal}
-                className="flex items-center px-3 py-1.5 text-sm bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-md transition-all duration-200 shadow-sm"
-                title={t('Open Terminal at FFmpeg location')}
-              >
-                <Terminal size={16} className="mr-1.5" />
-                {t('Terminal')}
-              </button>
             </div>
           </div>
 
-          {/* 命令输入框 */}
+          {/* Command Input Area */}
           <div className="relative group">
-            <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 to-purple-500/20 rounded-lg blur-sm transition-opacity duration-300 group-hover:opacity-100 opacity-50"></div>
-            <div className="relative">
+            <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl opacity-0 group-hover:opacity-20 transition duration-500 blur"></div>
+            <div className="relative bg-white dark:bg-[#0d1117] rounded-lg border border-gray-300 dark:border-gray-700 shadow-sm">
+              {/* Toolbar */}
+              <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/30 rounded-t-lg">
+                <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                  <Terminal size={14} />
+                  <span className="font-mono">FFmpeg Command</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() =>
+                      command && navigator.clipboard.writeText(command)
+                    }
+                    className="text-xs px-2 py-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 transition-colors"
+                  >
+                    Copy
+                  </button>
+                  <button
+                    onClick={() => setCommand('')}
+                    className="text-xs px-2 py-1 rounded hover:bg-red-100 text-gray-500 hover:text-red-500 dark:hover:bg-red-900/30 transition-colors"
+                  >
+                    Clear
+                  </button>
+                  <button
+                    onClick={handleOpenTerminal}
+                    className="text-xs px-2 py-1 rounded bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 transition-colors"
+                  >
+                    Terminal
+                  </button>
+                </div>
+              </div>
+
               <textarea
-                id="ffmpeg-command"
                 value={command}
                 onChange={(e) => setCommand(e.target.value)}
                 onDragOver={handleDragOver}
                 onDrop={handleDrop}
-                placeholder={t('Enter FFmpeg command or drag & drop files here')}
-                className="relative w-full p-4 border-2 border-gray-200 dark:border-gray-700 rounded-lg resize-none font-mono text-sm bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm text-gray-800 dark:text-gray-200 transition-all duration-200 focus:outline-none focus:border-blue-500 dark:focus:border-blue-400 focus:ring-4 focus:ring-blue-500/20 dark:focus:ring-blue-400/20 hover:border-gray-300 dark:hover:border-gray-600"
-                rows={4}
+                placeholder={t(
+                  'Enter FFmpeg command or drag & drop files here',
+                )}
+                className="w-full p-3 bg-transparent border-none resize-none font-mono text-sm text-gray-800 dark:text-gray-200 focus:ring-0 min-h-[5rem]"
+                rows={3}
                 spellCheck="false"
-                autoComplete="off"
-                style={{ minHeight: '6rem' }}
               />
-              {/* 拖拽提示 */}
-              <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                <div className="flex items-center px-2 py-1 bg-blue-500 text-white text-xs rounded-md">
-                  <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                  </svg>
-                  Drop files here
-                </div>
-              </div>
             </div>
           </div>
 
-          {/* 命令统计信息 */}
-          {command && (
-            <div className="mt-2 flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
-              <div className="flex items-center">
-                <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
-                </svg>
-                {command.split(' ').length} words
-              </div>
-              <div className="flex items-center">
-                <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                {command.length} characters
-              </div>
-              {command.includes('-i') && (
-                <div className="flex items-center">
-                  <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  Has input file
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* 控制按钮区域 - 现代化设计 */}
-        <div className="mt-6">
-          {/* 状态指示器 */}
-          {isRunning && (
-            <div className="mb-4 p-3 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center">
-                  <div className="relative">
-                    <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
-                    <div className="absolute inset-0 w-3 h-3 bg-green-500 rounded-full animate-ping opacity-75"></div>
-                  </div>
-                  <span className="ml-3 text-sm font-medium text-gray-700 dark:text-gray-300">
-                    FFmpeg is running...
-                  </span>
-                </div>
-                {progress > 0 && (
-                  <div className="text-xs text-gray-500 dark:text-gray-400 font-mono">
-                    {progress.toFixed(1)}%
-                  </div>
-                )}
-              </div>
-              {progress > 0 && (
-                <div className="mt-2 w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
-                  <div
-                    className="h-full bg-gradient-to-r from-blue-500 to-purple-600 rounded-full transition-all duration-300 ease-out"
-                    style={{ width: `${progress}%` }}
-                  >
-                    <div className="h-full w-full bg-white/20 animate-pulse"></div>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* 主要控制按钮 */}
+          {/* Main Action Buttons */}
           <div className="flex items-center justify-center gap-4">
-            {/* 开始按钮 */}
             <button
               onClick={handleStart}
               disabled={isRunning || !command}
-              className={`group relative flex items-center justify-center px-8 py-3.5 rounded-xl font-semibold text-white shadow-lg transition-all duration-300 transform ${
+              className={`min-w-[140px] px-6 py-2.5 rounded-lg font-semibold text-sm shadow-md transition-all duration-200 flex items-center justify-center ${
                 isRunning || !command
-                  ? 'bg-gray-300 cursor-not-allowed dark:bg-gray-700 scale-95'
-                  : 'bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 hover:scale-105 hover:shadow-xl active:scale-95'
+                  ? 'bg-gray-100 text-gray-400 cursor-not-allowed dark:bg-gray-800 dark:text-gray-600'
+                  : 'bg-blue-600 hover:bg-blue-700 text-white hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0'
               }`}
             >
-              <div className="absolute inset-0 bg-white/20 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
               <Play
-                size={20}
-                className={`mr-3 transition-transform duration-300 ${
-                  !isRunning && command ? 'group-hover:scale-110' : ''
-                }`}
+                size={16}
+                className="mr-2"
+                fill={isRunning || !command ? 'none' : 'currentColor'}
               />
-              <span className="text-base">{t('Start')}</span>
-              {!command && (
-                <span className="absolute -top-2 -right-2 w-5 h-5 bg-yellow-500 rounded-full flex items-center justify-center">
-                  <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                  </svg>
-                </span>
-              )}
+              {t('Start')}
             </button>
 
-            {/* 分隔线 */}
-            <div className="h-12 w-px bg-gray-300 dark:bg-gray-600"></div>
-
-            {/* 停止按钮 */}
             <button
               onClick={handleStop}
               disabled={!isRunning}
-              className={`group relative flex items-center justify-center px-8 py-3.5 rounded-xl font-semibold text-white shadow-lg transition-all duration-300 transform ${
+              className={`min-w-[140px] px-6 py-2.5 rounded-lg font-semibold text-sm shadow-md transition-all duration-200 flex items-center justify-center ${
                 !isRunning
-                  ? 'bg-gray-300 cursor-not-allowed dark:bg-gray-700 scale-95'
-                  : 'bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 hover:scale-105 hover:shadow-xl active:scale-95'
+                  ? 'bg-gray-100 text-gray-400 cursor-not-allowed dark:bg-gray-800 dark:text-gray-600'
+                  : 'bg-white border border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 dark:bg-transparent dark:border-red-900 dark:text-red-400 dark:hover:bg-red-900/20'
               }`}
             >
-              <div className="absolute inset-0 bg-white/20 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
               <Square
-                size={20}
-                className={`mr-3 transition-transform duration-300 ${
-                  isRunning ? 'group-hover:scale-110' : ''
-                }`}
+                size={16}
+                className="mr-2"
+                fill={isRunning ? 'currentColor' : 'none'}
               />
-              <span className="text-base">{t('Stop')}</span>
-              {!isRunning && (
-                <span className="absolute -top-2 -right-2 w-5 h-5 bg-gray-400 rounded-full flex items-center justify-center">
-                  <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 012 0v6a1 1 0 11-2 0V7zM12 7a1 1 0 012 0v6a1 1 0 11-2 0V7z" clipRule="evenodd" />
-                  </svg>
-                </span>
-              )}
+              {t('Stop')}
             </button>
-          </div>
-
-          {/* 按钮底部提示信息 */}
-          <div className="mt-4 text-center">
-            {!isRunning && !command && (
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                {!command
-                  ? '⚠️ Please enter an FFmpeg command to start'
-                  : 'Ready to start processing'}
-              </p>
-            )}
-            {isRunning && (
-              <p className="text-sm text-green-600 dark:text-green-400 font-medium">
-                ✓ Processing your media file... Please wait
-              </p>
-            )}
           </div>
         </div>
       </div>
 
+      {/* Template Dialog */}
       <TemplateDialog
         isOpen={isTemplateDialogOpen}
         onClose={() => {
@@ -817,49 +715,113 @@ function App() {
         initialTemplate={editingTemplate}
       />
 
-      <div className="flex-grow flex flex-col overflow-hidden">
-        {isRunning && progress > 0 && (
-          <div className="flex-shrink-0 bg-white p-4 dark:bg-background-dark">
-            <div className="mb-2 font-semibold text-gray-700">Progress</div>
-            <div className="w-full bg-gray-200 rounded-full h-2.5">
+      {/* ================= 下半部分：Logs & Progress (自适应剩余空间) ================= */}
+      {/* 关键修复：使用 min-h-0 允许子元素在 flex 容器内正确滚动 */}
+      <div className="flex-1 flex flex-col min-h-0 relative bg-gray-100 dark:bg-black">
+        {/* 1. 进度条 (作为 Logs 上方的独立块，不会被 Logs 滚动掩盖) */}
+        <div
+          className={`flex-shrink-0 transition-all duration-300 ease-in-out border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-[#0d1117] ${isRunning && progress > 0 ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2 pointer-events-none absolute w-full'}`}
+        >
+          <div className="max-w-7xl mx-auto px-4 py-3">
+            <div className="flex items-center justify-between text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></div>
+                <span>Processing...</span>
+              </div>
+              <span>{progress.toFixed(1)}%</span>
+            </div>
+            <div className="h-1.5 w-full bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
               <div
-                className="bg-blue-600 h-2.5 rounded-full"
+                className="h-full bg-blue-500 rounded-full transition-all duration-300 ease-out shadow-[0_0_8px_rgba(59,130,246,0.6)]"
                 style={{ width: `${progress}%` }}
-              ></div>
-            </div>
-            <div className="mt-2 text-right text-sm text-gray-600">
-              {progress.toFixed(2)}%
+              />
             </div>
           </div>
-        )}
+        </div>
 
-        <div className="flex-grow overflow-hidden bg-white p-4 pb-6 dark:bg-background-dark">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="font-bold text-lg text-blue-400">Logs</h2>
-            <div className="flex space-x-2">
+        {/* 2. Logs 终端窗口 (占据剩余所有空间) */}
+        <div className="flex-1 relative flex flex-col max-w-7xl mx-auto w-full">
+          {/* 终端 Header */}
+          <div className="flex-shrink-0 flex items-center justify-between px-4 py-2 bg-gray-200 dark:bg-[#161b22] border-b border-gray-300 dark:border-gray-800">
+            <div className="flex items-center gap-2">
+              <div className="flex gap-1.5">
+                <div className="w-3 h-3 rounded-full bg-red-500/80"></div>
+                <div className="w-3 h-3 rounded-full bg-yellow-500/80"></div>
+                <div className="w-3 h-3 rounded-full bg-green-500/80"></div>
+              </div>
+              <span className="ml-3 text-xs font-mono text-gray-600 dark:text-gray-400">
+                Console Output
+              </span>
+            </div>
+            <div className="flex gap-2">
               <button
-                disabled={!logs?.length}
-                onClick={() => setLogs('')}
-                className="px-3 py-1 text-sm bg-blue-500 hover:bg-blue-600 text-white rounded-md transition-colors duration-300"
+                onClick={() =>
+                  navigator.clipboard.writeText(logs.replace(/<[^>]+>/g, ''))
+                }
+                className="p-1 hover:bg-gray-300 dark:hover:bg-gray-700 rounded text-gray-500 dark:text-gray-400 transition-colors"
+                title="Copy raw text"
               >
-                {t('Clear')}
+                <svg
+                  className="w-3.5 h-3.5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                  />
+                </svg>
               </button>
               <button
-                disabled={!logs?.length}
-                onClick={() => {
-                  navigator.clipboard.writeText(logs);
-                }}
-                className="px-3 py-1 text-sm bg-green-500 hover:bg-green-600 text-white rounded-md transition-colors duration-300"
+                onClick={() => setLogs('')}
+                className="p-1 hover:bg-gray-300 dark:hover:bg-gray-700 rounded text-gray-500 dark:text-gray-400 transition-colors"
+                title="Clear console"
               >
-                {t('Copy')}
+                <svg
+                  className="w-3.5 h-3.5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"
+                  />
+                </svg>
               </button>
             </div>
           </div>
-          <div
-            ref={logsRef}
-            className="border dark:border-border-dark h-full overflow-y-auto font-mono text-sm bg-gray-100 p-4 rounded whitespace-pre-wrap dark:bg-background-textarea dark:text-text-lightDark"
-            dangerouslySetInnerHTML={{ __html: logs }}
-          />
+
+          {/* 终端内容 (滚动区域) */}
+          <div className="flex-1 relative bg-white dark:bg-[#0d1117]">
+            {/* absolute inset-0 确保滚动条只在这里出现 */}
+            <div
+              ref={logsRef}
+              className="absolute inset-0 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-700 scrollbar-track-transparent"
+            >
+              {logs ? (
+                <div
+                  className="pb-10"
+                  dangerouslySetInnerHTML={{ __html: logs }}
+                />
+              ) : (
+                <div className="h-full flex flex-col items-center justify-center opacity-20 pointer-events-none select-none">
+                  <Terminal
+                    size={64}
+                    className="text-gray-400 dark:text-gray-600 mb-4"
+                  />
+                  <p className="text-gray-500 dark:text-gray-500 font-mono text-sm">
+                    Ready to process...
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </div>
