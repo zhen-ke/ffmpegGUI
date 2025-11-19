@@ -357,7 +357,11 @@ function parseFFmpegCommand(command: string): string[] {
     if (char === ' ' && !inQuotes && !inSingleQuotes) {
       if (currentArg) {
         // 处理特殊情况：数字后的冒号不应被分割 (例如 scale=480:-1)
-        if (args.length > 0 && currentArg === ':' && /^\d+$/.test(args[args.length - 1])) {
+        if (
+          args.length > 0 &&
+          currentArg === ':' &&
+          /^\d+$/.test(args[args.length - 1])
+        ) {
           args[args.length - 1] += ':';
         } else {
           args.push(currentArg);
@@ -380,20 +384,25 @@ function parseFFmpegCommand(command: string): string[] {
   }
 
   // 处理空参数
-  return args.filter(arg => arg.length > 0).map(arg => {
-    // 如果参数是一个选项标志，保持原样
-    if (arg.startsWith('-')) {
+  return args
+    .filter((arg) => arg.length > 0)
+    .map((arg) => {
+      // 如果参数是一个选项标志，保持原样
+      if (arg.startsWith('-')) {
+        return arg;
+      }
+
+      // 如果参数包含特殊字符但没有引号，添加双引号
+      if (
+        !arg.startsWith('"') &&
+        !arg.startsWith("'") &&
+        (arg.includes(' ') || arg.includes(';') || arg.includes('|'))
+      ) {
+        return `"${arg}"`;
+      }
+
       return arg;
-    }
-
-    // 如果参数包含特殊字符但没有引号，添加双引号
-    if (!arg.startsWith('"') && !arg.startsWith("'") && 
-        (arg.includes(' ') || arg.includes(';') || arg.includes('|'))) {
-      return `"${arg}"`;
-    }
-
-    return arg;
-  });
+    });
 }
 
 function executeFFmpegCommand(
@@ -746,36 +755,93 @@ const createWindow = async () => {
     return ffmpegExists;
   });
 
-  // IPC 监听器来处理输入文件选择
-  ipcMain.handle('select-input-file', async () => {
-    if (!mainWindow) {
-      throw new Error('Main window is not defined');
+  // 辅助函数：将路径统一转换为正斜杠 (跨平台兼容 FFmpeg 命令)
+  const normalizePath = (filePath) => {
+    return filePath.split(path.sep).join('/');
+  };
+
+  // IPC 监听器：选择输入文件
+  // 接收 arg: 当前已选的文件路径（如果有），用于打开对话框时定位到该目录
+  ipcMain.handle('select-input-file', async (event, currentPath) => {
+    if (!mainWindow) return { canceled: true, filePaths: [] };
+
+    // 计算默认打开路径
+    let defaultPath = undefined;
+    if (currentPath && typeof currentPath === 'string') {
+      // 如果传入了文件路径，打开它所在的文件夹
+      defaultPath = path.dirname(currentPath);
     }
 
     const result = await dialog.showOpenDialog(mainWindow, {
       title: 'Select Input File',
+      defaultPath: defaultPath, // 关键优化：定位到上次目录
       filters: [
+        // 优化：优先显示媒体文件，用户体验更好
+        {
+          name: 'Media Files',
+          extensions: [
+            'mp4',
+            'mkv',
+            'avi',
+            'mov',
+            'flv',
+            'wmv',
+            'mp3',
+            'wav',
+            'flac',
+            'aac',
+            'm4a',
+          ],
+        },
+        {
+          name: 'Video Files',
+          extensions: [
+            'mp4',
+            'mkv',
+            'avi',
+            'mov',
+            'wmv',
+            'flv',
+            'webm',
+            'ts',
+            'm4v',
+          ],
+        },
+        {
+          name: 'Audio Files',
+          extensions: ['mp3', 'wav', 'flac', 'aac', 'ogg', 'm4a', 'wma'],
+        },
+        {
+          name: 'Image Files',
+          extensions: ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'],
+        },
         { name: 'All Files', extensions: ['*'] },
-        { name: 'Video Files', extensions: ['mp4', 'avi', 'mkv', 'mov', 'wmv', 'flv', 'webm'] },
-        { name: 'Audio Files', extensions: ['mp3', 'wav', 'flac', 'aac', 'ogg', 'm4a'] },
-        { name: 'Image Files', extensions: ['jpg', 'jpeg', 'png', 'gif', 'bmp'] },
       ],
       properties: ['openFile'],
     });
 
+    // 优化：标准化路径格式 (Windows Backslash Fix)
+    if (!result.canceled && result.filePaths.length > 0) {
+      result.filePaths = result.filePaths.map(normalizePath);
+    }
+
     return result;
   });
 
-  // IPC 监听器来处理输出文件夹选择
-  ipcMain.handle('select-output-folder', async () => {
-    if (!mainWindow) {
-      throw new Error('Main window is not defined');
-    }
+  // IPC 监听器：选择输出文件夹
+  ipcMain.handle('select-output-folder', async (event, currentPath) => {
+    if (!mainWindow) return { canceled: true, filePaths: [] };
 
     const result = await dialog.showOpenDialog(mainWindow, {
       title: 'Select Output Folder',
+      defaultPath: currentPath || undefined, // 关键优化：定位到上次目录
       properties: ['openDirectory', 'createDirectory'],
     });
+
+    // 优化：标准化路径格式
+    if (!result.canceled && result.filePaths.length > 0) {
+      result.filePaths = result.filePaths.map(normalizePath);
+    }
 
     return result;
   });

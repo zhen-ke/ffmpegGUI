@@ -95,7 +95,7 @@ function App() {
 
     // 生成结构化的 HTML
     const logHtml = `
-      <div class="group flex items-start gap-3 px-4 py-2 text-sm font-mono border-b border-dashed border-gray-200 dark:border-gray-800 last:border-0 transition-colors ${style.bg}">
+      <div class="group flex items-start gap-3 px-4 text-sm font-mono border-b border-dashed border-gray-200 dark:border-gray-800 last:border-0 transition-colors ${style.bg}">
         <span class="flex-shrink-0 w-5 text-center ${style.color} opacity-70 font-bold select-none">${style.icon}</span>
         <span class="flex-shrink-0 text-xs text-gray-400 select-none pt-0.5 group-hover:text-gray-500 dark:group-hover:text-gray-300 transition-colors">[${time}]</span>
         <span class="flex-1 break-all whitespace-pre-wrap leading-relaxed ${style.color}">${message}</span>
@@ -137,13 +137,23 @@ function App() {
   // 处理输入文件选择
   const handleSelectInputFile = async () => {
     try {
-      const result =
-        await window.electron.ipcRenderer.invoke('select-input-file');
-      if (result && !result.canceled) {
+      // 优化：传入当前的 inputFile，这样对话框打开时会直接定位到该文件所在的目录
+      const result = await window.electron.ipcRenderer.invoke(
+        'select-input-file',
+        inputFile,
+      );
+
+      if (result && !result.canceled && result.filePaths.length > 0) {
         const filePath = result.filePaths[0];
         setInputFile(filePath);
-        // 如果输出文件夹已选择，则自动更新命令
-        if (outputFolder) {
+
+        // 智能联动：如果还没选输出目录，自动将输出目录设置为输入文件所在的目录
+        if (!outputFolder) {
+          // 提取目录路径 (简单处理，因为后端已经保证是正斜杠了)
+          const fileDir = filePath.substring(0, filePath.lastIndexOf('/'));
+          setOutputFolder(fileDir);
+          updateCommandWithInputOutput(filePath, fileDir);
+        } else {
           updateCommandWithInputOutput(filePath, outputFolder);
         }
       }
@@ -155,13 +165,16 @@ function App() {
   // 处理输出文件夹选择
   const handleSelectOutputFolder = async () => {
     try {
+      // 优化：传入当前的 outputFolder，方便用户修改
       const result = await window.electron.ipcRenderer.invoke(
         'select-output-folder',
+        outputFolder,
       );
-      if (result && !result.canceled) {
+
+      if (result && !result.canceled && result.filePaths.length > 0) {
         const folderPath = result.filePaths[0];
         setOutputFolder(folderPath);
-        // 如果输入文件已选择，则自动更新命令
+
         if (inputFile) {
           updateCommandWithInputOutput(inputFile, folderPath);
         }
