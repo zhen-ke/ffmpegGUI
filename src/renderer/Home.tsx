@@ -111,13 +111,13 @@ function App() {
    */
   const handleInputFileSelect = useCallback(async () => {
     await handleSelectInputFile((input, output) => {
-      updateCommandWithPaths(command);
+      updateCommandWithPaths(command, input, output);
     });
   }, [handleSelectInputFile, command, updateCommandWithPaths]);
 
   const handleOutputFolderSelect = useCallback(async () => {
     await handleSelectOutputFolder((input, output) => {
-      updateCommandWithPaths(command);
+      updateCommandWithPaths(command, input, output);
     });
   }, [handleSelectOutputFolder, command, updateCommandWithPaths]);
 
@@ -162,7 +162,7 @@ function App() {
 
     const removeFFmpegStatusListener = window.electron.ipcRenderer.on(
       'ffmpeg-status',
-      (exists: boolean) => {
+      (exists: any) => {
         setFfmpegExists(exists);
       },
     );
@@ -183,14 +183,30 @@ function App() {
     <div className="h-screen flex flex-col bg-gray-50 overflow-hidden dark:bg-[#0d1117] text-gray-900 dark:text-gray-100 font-sans">
       {/* ================= 上半部分：控制区 ================= */}
       <div className="flex-shrink-0 bg-white dark:bg-[#161b22] border-b border-gray-200 dark:border-gray-800 shadow-sm z-20">
-        <div className="max-w-7xl mx-auto w-full p-4 space-y-4">
+        <div className="max-w-7xl mx-auto w-full px-4 py-8 space-y-4">
           {/* Header Row */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+              <div className="p-2 bg-blue-600 rounded-lg shadow-lg shadow-blue-600/20">
+                <svg
+                  className="w-6 h-6 text-white"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2.5}
+                    d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+                  />
+                </svg>
+              </div>
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">
                 FFmpeg Tool
               </h1>
               <button
+                type="button"
                 onClick={toggleLanguage}
                 className="px-2 py-0.5 text-xs font-medium bg-gray-100 hover:bg-gray-200 text-gray-600 rounded dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700 transition-colors"
               >
@@ -198,6 +214,7 @@ function App() {
               </button>
             </div>
             <button
+              type="button"
               onClick={openNewTemplateDialog}
               className="flex items-center px-3 py-1.5 text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors dark:bg-blue-900/20 dark:text-blue-400 dark:hover:bg-blue-900/30"
             >

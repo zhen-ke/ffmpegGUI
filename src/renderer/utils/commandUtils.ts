@@ -15,7 +15,9 @@ export function parseOutputFileName(command: string): string {
   // 检查最后一个参数是否是有效的输出文件名
   if (lastPart && !lastPart.startsWith('-') && !lastPart.includes('input')) {
     // 提取文件名和扩展名
-    const match = lastPart.match(/([^/\\]+\.[a-zA-Z0-9]+)$/);
+    // 移除可能的引号
+    const cleanLastPart = lastPart.replace(/["']/g, '');
+    const match = cleanLastPart.match(/([^/\\]+\.[a-zA-Z0-9]+)$/);
     if (match) {
       return match[1];
     }
@@ -43,8 +45,9 @@ export function updateCommandPaths(
   // 替换输入文件路径
   if (inputFile) {
     // 匹配并替换 -i 后的输入文件
+    // 支持带引号的路径（包含空格）和不带引号的路径
     newCommand = newCommand.replace(
-      /-i\s+["']?[^"'\s]+["']?/g,
+      /-i\s+(?:"[^"]*"|'[^']*'|[^\s]+)/g,
       `-i "${inputFile}"`,
     );
     // 如果命令中没有 -i 参数，则在开头添加
@@ -59,8 +62,12 @@ export function updateCommandPaths(
     const outputFileName = parseOutputFileName(newCommand);
     const outputPath = `${outputFolder}/${outputFileName}`;
 
-    // 替换最后一个不是参数的部分作为输出文件
-    newCommand = newCommand.replace(/\s+[^-\s][^\s]*$/, ` "${outputPath}"`);
+    // 替换最后一个参数作为输出文件
+    // 匹配最后一个可能是文件路径的参数（支持引号）
+    newCommand = newCommand.replace(
+      /\s+(?:"[^"]*"|'[^']*'|[^\s]+)$/,
+      ` "${outputPath}"`,
+    );
   }
 
   return newCommand;

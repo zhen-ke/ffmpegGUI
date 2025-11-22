@@ -31,12 +31,19 @@ export function useCommandManager({
    * 基于输入输出文件更新命令路径
    */
   const updateCommandWithPaths = useCallback(
-    (baseCommand?: string) => {
+    (
+      baseCommand?: string,
+      overrideInputFile?: string,
+      overrideOutputFolder?: string,
+    ) => {
       const cmdToUpdate = baseCommand ?? command;
+      const finalInputFile = overrideInputFile ?? inputFile;
+      const finalOutputFolder = overrideOutputFolder ?? outputFolder;
+
       const updatedCommand = updateCommandPaths(
         cmdToUpdate,
-        inputFile,
-        outputFolder,
+        finalInputFile,
+        finalOutputFolder,
       );
       setCommand(updatedCommand);
     },
