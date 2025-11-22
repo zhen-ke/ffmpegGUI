@@ -17,7 +17,7 @@ export async function fetchFFmpegAssets(
   try {
     if (platform === 'win32') {
       const response = await axios.get(WINDOWS_URL);
-      const data = response.data;
+      const { data } = response;
 
       return data.assets.map((asset: any) => ({
         version: data.tag_name,
@@ -25,7 +25,8 @@ export async function fetchFFmpegAssets(
         size: asset.size,
         downloadUrl: asset.browser_download_url,
       }));
-    } else if (platform === 'darwin') {
+    }
+    if (platform === 'darwin') {
       // 通过主进程获取 HTML 内容
       const html = await window.electron.ipcRenderer.invoke(
         'fetch-osx-experts-html',
@@ -54,37 +55,35 @@ export async function fetchFFmpegAssets(
             downloadUrl: linkMatch[1],
           },
         ];
-      } else {
-        const osxExpertsLinkMatch = html.match(
-          /href="(https:\/\/www\.osxexperts\.net\/ffmpeg\d+intel\.zip)"/,
-        );
-
-        const assets = [
-          {
-            version: 'latest (Evermeet)',
-            name: 'ffmpeg-mac-intel.zip',
-            size: 0,
-            downloadUrl: MAC_DOWNLOAD_URL,
-          },
-        ];
-
-        if (osxExpertsLinkMatch) {
-          const versionMatch = html.match(/ffmpeg\s*(\d+\.\d+)\s*\(Intel\)/i);
-          const version = versionMatch ? versionMatch[1] : 'latest';
-
-          assets.push({
-            version: `${version} (OSXExperts)`,
-            name: `ffmpeg-mac-intel-${version}.zip`,
-            size: 0,
-            downloadUrl: osxExpertsLinkMatch[1],
-          });
-        }
-
-        return assets;
       }
-    } else {
-      throw new Error('Unsupported platform');
+      const osxExpertsLinkMatch = html.match(
+        /href="(https:\/\/www\.osxexperts\.net\/ffmpeg\d+intel\.zip)"/,
+      );
+
+      const assets = [
+        {
+          version: 'latest (Evermeet)',
+          name: 'ffmpeg-mac-intel.zip',
+          size: 0,
+          downloadUrl: MAC_DOWNLOAD_URL,
+        },
+      ];
+
+      if (osxExpertsLinkMatch) {
+        const versionMatch = html.match(/ffmpeg\s*(\d+\.\d+)\s*\(Intel\)/i);
+        const version = versionMatch ? versionMatch[1] : 'latest';
+
+        assets.push({
+          version: `${version} (OSXExperts)`,
+          name: `ffmpeg-mac-intel-${version}.zip`,
+          size: 0,
+          downloadUrl: osxExpertsLinkMatch[1],
+        });
+      }
+
+      return assets;
     }
+    throw new Error('Unsupported platform');
   } catch (error) {
     console.error('Error fetching FFmpeg assets:', error);
     throw error;

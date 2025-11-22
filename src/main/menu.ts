@@ -122,7 +122,9 @@ export default class MenuBuilder {
         {
           label: 'Report an Issue',
           click() {
-            shell.openExternal('https://github.com/yourusername/ffmpeg-gui/issues');
+            shell.openExternal(
+              'https://github.com/yourusername/ffmpeg-gui/issues',
+            );
           },
         },
       ],

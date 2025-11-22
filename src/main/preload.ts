@@ -18,7 +18,9 @@ export type Channels =
   | 'ffmpeg-complete'
   | 'open-terminal'
   | 'check-ffmpeg-status'
-  | 'fetch-osx-experts-html';
+  | 'fetch-osx-experts-html'
+  | 'select-input-file'
+  | 'select-output-folder';
 
 const electronHandler = {
   ipcRenderer: {

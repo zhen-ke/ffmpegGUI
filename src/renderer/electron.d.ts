@@ -1,14 +1,10 @@
-interface IElectronAPI {
-  // ... existing types ...
-  platform: string;
-  arch: string;
-  fetchOsxExpertsHtml: () => Promise<string>;
-}
+import { ElectronHandler } from '../main/preload';
 
 declare global {
   interface Window {
-    electron: IElectronAPI;
+    electron: ElectronHandler;
   }
 }
 
-export {};
+export { };
+

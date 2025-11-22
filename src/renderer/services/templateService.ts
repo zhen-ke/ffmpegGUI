@@ -1,5 +1,5 @@
-import { Template } from '../types/template';
 import { v4 as uuidv4 } from 'uuid';
+import { Template } from '../types/template';
 
 const CUSTOM_TEMPLATES_KEY = 'custom_ffmpeg_templates';
 
