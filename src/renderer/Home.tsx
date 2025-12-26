@@ -3,7 +3,7 @@
  * 使用模块化的 hooks 和组件构建
  */
 
-import { PlusCircle } from 'lucide-react';
+import { Loader2, PlusCircle } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import Dropdown from './components/Dropdown';
 import FFmpegDownloader from './components/FFmpegDownloader';
@@ -16,7 +16,10 @@ import { useCommandManager } from './hooks/useCommandManager';
 import { useFFmpegState } from './hooks/useFFmpegState';
 import { useFileSelection } from './hooks/useFileSelection';
 import { useLogs } from './hooks/useLogs';
-import { useTemplateManager } from './hooks/useTemplateManager';
+import {
+  TransformedTemplate,
+  useTemplateManager,
+} from './hooks/useTemplateManager';
 
 // 导入 UI 组件
 import { CommandInput } from './components/CommandInput';
@@ -70,10 +73,9 @@ function App() {
     closeTemplateDialog,
   } = useTemplateManager();
 
-  // FFmpeg 状态管理
+  // FFmpeg 状态管理（onProgressUpdate 现在是可选的，无需传递空函数）
   const { isRunning, progress, handleStart, handleStop } = useFFmpegState({
     onLog: addLog,
-    onProgressUpdate: () => {}, // 可以在这里添加额外的进度处理逻辑
   });
 
   // ========== 组件逻辑 ==========
@@ -81,30 +83,30 @@ function App() {
   /**
    * 检查 FFmpeg 是否存在
    */
-  const checkFFmpegStatus = async () => {
+  const checkFFmpegStatus = useCallback(async () => {
     const exists = await window.electron.ipcRenderer.invoke(
       'check-ffmpeg-status',
     );
     setFfmpegExists(exists);
-  };
+  }, []);
 
   /**
    * 打开终端
    */
-  const handleOpenTerminal = async () => {
+  const handleOpenTerminal = useCallback(async () => {
     try {
       await window.electron.ipcRenderer.invoke('open-terminal');
     } catch (error) {
       console.error('Failed to open terminal:', error);
     }
-  };
+  }, []);
 
   /**
    * 切换语言
    */
-  const toggleLanguage = () => {
+  const toggleLanguage = useCallback(() => {
     setLanguage(language === 'en' ? 'zh' : 'en');
-  };
+  }, [language, setLanguage]);
 
   /**
    * 处理文件选择并更新命令
@@ -125,7 +127,7 @@ function App() {
    * 处理模板选择
    */
   const onTemplateChange = useCallback(
-    (template: any) => {
+    (template: TransformedTemplate) => {
       handleTemplateSelect(template, (cmd) => {
         // 如果已经有输入输出路径，自动更新命令
         if (inputFile || outputFolder) {
@@ -162,7 +164,8 @@ function App() {
 
     const removeFFmpegStatusListener = window.electron.ipcRenderer.on(
       'ffmpeg-status',
-      (exists: any) => {
+      (...args: unknown[]) => {
+        const exists = args[0] as boolean;
         setFfmpegExists(exists);
       },
     );
@@ -170,9 +173,18 @@ function App() {
     return () => {
       removeFFmpegStatusListener();
     };
-  }, []);
+  }, [checkFFmpegStatus]);
 
   // ========== 渲染 ==========
+
+  // 加载状态：FFmpeg 状态检查中
+  if (ffmpegExists === null) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-gray-50 dark:bg-[#0d1117]">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+      </div>
+    );
+  }
 
   // 如果 FFmpeg 不存在，显示下载器
   if (!ffmpegExists) {

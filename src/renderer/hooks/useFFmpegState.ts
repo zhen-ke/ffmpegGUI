@@ -3,12 +3,28 @@
  * 管理 FFmpeg 执行状态、进度和 IPC 通信
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { LogType } from '../utils/logUtils';
 
+// ========== IPC 事件数据类型 ==========
+
+/** FFmpeg 总时长数据 */
+interface FFmpegDurationData {
+  duration: number;
+}
+
+/** FFmpeg 进度数据 */
+interface FFmpegProgressData {
+  time: number;
+}
+
+// ========== Hook Props ==========
+
 interface UseFFmpegStateProps {
+  /** 日志回调 */
   onLog: (type: LogType, message: string) => void;
-  onProgressUpdate: (currentTime: number) => void;
+  /** 进度更新回调（可选） */
+  onProgressUpdate?: (currentTime: number) => void;
 }
 
 export function useFFmpegState({
@@ -19,19 +35,36 @@ export function useFFmpegState({
   const [progress, setProgress] = useState(0);
   const [totalDuration, setTotalDuration] = useState(0);
 
+  // 使用 useRef 存储回调引用，避免 useEffect 依赖变化导致监听器频繁重建
+  const onLogRef = useRef(onLog);
+  const onProgressUpdateRef = useRef(onProgressUpdate);
+  const totalDurationRef = useRef(0);
+
+  // 同步 ref 与最新的 prop 值
+  useEffect(() => {
+    onLogRef.current = onLog;
+  }, [onLog]);
+
+  useEffect(() => {
+    onProgressUpdateRef.current = onProgressUpdate;
+  }, [onProgressUpdate]);
+
+  useEffect(() => {
+    totalDurationRef.current = totalDuration;
+  }, [totalDuration]);
+
   /**
    * 更新进度百分比
+   * 使用 ref 读取最新值，避免作为 useEffect 依赖
    */
-  const updateProgress = useCallback(
-    (currentTime: number) => {
-      if (totalDuration > 0) {
-        const progressPercentage = (currentTime / totalDuration) * 100;
-        setProgress(Math.min(100, progressPercentage));
-      }
-      onProgressUpdate(currentTime);
-    },
-    [totalDuration, onProgressUpdate],
-  );
+  const updateProgress = useCallback((currentTime: number) => {
+    const duration = totalDurationRef.current;
+    if (duration > 0) {
+      const progressPercentage = (currentTime / duration) * 100;
+      setProgress(Math.min(100, progressPercentage));
+    }
+    onProgressUpdateRef.current?.(currentTime);
+  }, []);
 
   /**
    * 启动 FFmpeg
@@ -53,12 +86,14 @@ export function useFFmpegState({
 
   /**
    * 设置 FFmpeg 事件监听器
+   * 使用 ref 读取回调，确保监听器只注册一次
    */
   useEffect(() => {
     // Duration 监听
     const removeDurationListener = window.electron.ipcRenderer.on(
       'ffmpeg-duration',
-      (data: { duration: number }) => {
+      (...args: unknown[]) => {
+        const data = args[0] as FFmpegDurationData;
         setTotalDuration(data.duration);
       },
     );
@@ -66,7 +101,8 @@ export function useFFmpegState({
     // Progress 监听
     const removeProgressListener = window.electron.ipcRenderer.on(
       'ffmpeg-progress',
-      (data: { time: number }) => {
+      (...args: unknown[]) => {
+        const data = args[0] as FFmpegProgressData;
         updateProgress(data.time);
       },
     );
@@ -74,16 +110,18 @@ export function useFFmpegState({
     // Output 监听
     const removeOutputListener = window.electron.ipcRenderer.on(
       'ffmpeg-output',
-      (data: string) => {
-        onLog('info', data);
+      (...args: unknown[]) => {
+        const data = args[0] as string;
+        onLogRef.current('info', data);
       },
     );
 
     // Error 监听
     const removeErrorListener = window.electron.ipcRenderer.on(
       'ffmpeg-error',
-      (error: string) => {
-        onLog('error', `Error: ${error}`);
+      (...args: unknown[]) => {
+        const error = args[0] as string;
+        onLogRef.current('error', `Error: ${error}`);
         setIsRunning(false);
       },
     );
@@ -94,7 +132,7 @@ export function useFFmpegState({
       () => {
         setProgress(100);
         setIsRunning(false);
-        onLog('success', 'FFmpeg process completed successfully.');
+        onLogRef.current('success', 'FFmpeg process completed successfully.');
       },
     );
 
@@ -106,7 +144,7 @@ export function useFFmpegState({
       removeErrorListener();
       removeCompleteListener();
     };
-  }, [updateProgress, onLog]);
+  }, [updateProgress]);
 
   return {
     isRunning,

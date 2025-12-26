@@ -3,8 +3,33 @@
  * 终端样式的日志输出窗口
  */
 
-import { Terminal } from 'lucide-react';
+import { Ban, Copy, Terminal } from 'lucide-react';
 import React from 'react';
+
+// ========== 子组件 ==========
+
+/**
+ * 工具栏按钮组件
+ */
+interface ToolButtonProps {
+  onClick: () => void;
+  title: string;
+  icon: React.ReactNode;
+}
+
+function ToolButton({ onClick, title, icon }: ToolButtonProps) {
+  return (
+    <button
+      onClick={onClick}
+      className="p-1 hover:bg-gray-300 dark:hover:bg-gray-700 rounded text-gray-500 dark:text-gray-400 transition-colors"
+      title={title}
+    >
+      {icon}
+    </button>
+  );
+}
+
+// ========== 主组件 ==========
 
 interface LogDisplayProps {
   logs: string;
@@ -24,54 +49,21 @@ export function LogDisplay({
       {/* 终端 Header */}
       <div className="flex-shrink-0 flex items-center justify-between px-4 py-2 bg-gray-200 dark:bg-[#161b22] border-b border-gray-300 dark:border-gray-800">
         <div className="flex items-center gap-2">
-          <div className="flex gap-1.5">
-            <div className="w-3 h-3 rounded-full bg-red-500/80" />
-            <div className="w-3 h-3 rounded-full bg-yellow-500/80" />
-            <div className="w-3 h-3 rounded-full bg-green-500/80" />
-          </div>
           <span className="ml-3 text-xs font-mono text-gray-600 dark:text-gray-400">
             Console Output
           </span>
         </div>
         <div className="flex gap-2">
-          <button
+          <ToolButton
             onClick={onCopy}
-            className="p-1 hover:bg-gray-300 dark:hover:bg-gray-700 rounded text-gray-500 dark:text-gray-400 transition-colors"
             title="Copy raw text"
-          >
-            <svg
-              className="w-3.5 h-3.5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-              />
-            </svg>
-          </button>
-          <button
+            icon={<Copy size={14} />}
+          />
+          <ToolButton
             onClick={onClear}
-            className="p-1 hover:bg-gray-300 dark:hover:bg-gray-700 rounded text-gray-500 dark:text-gray-400 transition-colors"
             title="Clear console"
-          >
-            <svg
-              className="w-3.5 h-3.5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"
-              />
-            </svg>
-          </button>
+            icon={<Ban size={14} />}
+          />
         </div>
       </div>
 
@@ -82,6 +74,11 @@ export function LogDisplay({
           className="absolute inset-0 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-700 scrollbar-track-transparent"
         >
           {logs ? (
+            /**
+             * 使用 dangerouslySetInnerHTML 渲染带颜色的日志
+             * 安全说明：日志内容来自本地 FFmpeg 进程输出，经过 logUtils 格式化处理，
+             * 不包含用户输入的不可信内容，因此 XSS 风险可控
+             */
             <div className="pb-10" dangerouslySetInnerHTML={{ __html: logs }} />
           ) : (
             <div className="h-full flex flex-col items-center justify-center opacity-20 pointer-events-none select-none">

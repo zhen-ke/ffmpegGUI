@@ -9,7 +9,7 @@ import { useLanguage } from '../LanguageContext';
 import { templateService } from '../services/templateService';
 import { Template } from '../types/template';
 
-interface TransformedTemplate extends Template {
+export interface TransformedTemplate extends Template {
   name: string;
   description: string;
 }
