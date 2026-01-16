@@ -87,7 +87,7 @@ export const commandTemplates: readonly CommandTemplate[] = [
       zh: '调整视频尺寸（720p）',
     },
     command:
-      '-i input.mp4 -vf "scale=-1:720" -c:v libx264 -crf 23 -c:a copy output_720p.mp4',
+      '-i input.mp4 -vf "scale=-2:720" -c:v libx264 -crf 23 -c:a copy -movflags +faststart output_720p.mp4',
     description: {
       en: 'Resize video to 720p while maintaining aspect ratio.',
       zh: '将视频调整为 720p 分辨率，同时保持原有的宽高比。',
@@ -110,7 +110,7 @@ export const commandTemplates: readonly CommandTemplate[] = [
       zh: '转换为 GIF',
     },
     command:
-      '-i input.mp4 -vf "fps=10,scale=320:-1:flags=lanczos" -c:v gif output.gif',
+      '-i input.mp4 -vf "fps=10,scale=320:-2:flags=lanczos" -c:v gif output.gif',
     description: {
       en: 'Convert video to GIF with optimized settings.',
       zh: '将视频转换为 GIF 格式，使用优化的设置。',
@@ -122,7 +122,7 @@ export const commandTemplates: readonly CommandTemplate[] = [
       zh: '高质量 GIF（使用调色板）',
     },
     command:
-      '-i input.mp4 -vf "fps=15,scale=480:-1:flags=lanczos,split[s0][s1];[s0]palettegen=stats_mode=diff[p];[s1][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle" output.gif',
+      '-i input.mp4 -vf "fps=15,scale=480:-2:flags=lanczos,split[s0][s1];[s0]palettegen=stats_mode=diff[p];[s1][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle" output.gif',
     description: {
       en: 'Create a high quality GIF using palette generation for optimal colors and dithering.',
       zh: '创建高质量 GIF，使用调色板生成技术以获得最佳颜色和抖动效果。',
@@ -232,7 +232,7 @@ export const commandTemplates: readonly CommandTemplate[] = [
       '-i input.mp4 -c:v h264_nvenc -preset slow -cq 23 -b:a 256k output.mp4',
     description: {
       en: 'H.264 encoding using NVIDIA hardware acceleration.',
-      zh: '使用 NVIDIA 硬件加的 H.264 编码。',
+      zh: '使用 NVIDIA 硬件加速的 H.264 编码。',
     },
   },
   {
@@ -240,7 +240,7 @@ export const commandTemplates: readonly CommandTemplate[] = [
       en: 'H.264 Encoding with Mac Hardware Acceleration',
       zh: 'H.264 编码（Mac 硬件加速）',
     },
-    command: '-i input.mp4 -c:v h264_videotoolbox -q:v 65 -b:a 256k output.mp4',
+    command: '-i input.mp4 -c:v h264_videotoolbox -q:v 65 -allow_sw 1 -b:a 256k -movflags +faststart output.mp4',
     description: {
       en: 'H.264 encoding using Mac VideoToolbox hardware acceleration.',
       zh: '使用 Mac VideoToolbox 硬件加速的 H.264 编码。',
@@ -299,7 +299,7 @@ export const commandTemplates: readonly CommandTemplate[] = [
       en: 'H.265 Encoding with Mac Hardware Acceleration',
       zh: 'H.265 编码（Mac 硬件加速）',
     },
-    command: '-i input.mp4 -c:v hevc_videotoolbox -q:v 65 -b:a 256k output.mp4',
+    command: '-i input.mp4 -c:v hevc_videotoolbox -q:v 65 -allow_sw 1 -b:a 256k -movflags +faststart output.mp4',
     description: {
       en: 'H.265 encoding using Mac VideoToolbox hardware acceleration.',
       zh: '使用 Mac VideoToolbox 硬件加速的 H.265 编码。',
@@ -436,7 +436,7 @@ export const commandTemplates: readonly CommandTemplate[] = [
       en: 'Video Stream Timestamp Offset',
       zh: '视频流时间戳偏移',
     },
-    command: '-itsoffset 1 -i input.mp4 -c copy -map 0:v -map 1:a output.mp4',
+    command: '-itsoffset 1 -i input.mp4 -i input.mp4 -c copy -map 0:v -map 1:a output.mp4',
     description: {
       en: 'Offset video stream timestamp to synchronize audio and video.',
       zh: '偏移视频流时间戳以同步音频和视频。',
@@ -613,6 +613,113 @@ export const commandTemplates: readonly CommandTemplate[] = [
     description: {
       en: 'Merge two audio streams into a single file.',
       zh: '将两个音频流合并到一个文件中。',
+    },
+  },
+  {
+    name: {
+      en: 'AV1 Encoding (High Compression)',
+      zh: 'AV1 编码（高压缩率）',
+    },
+    command:
+      '-i input.mp4 -c:v libaom-av1 -crf 30 -cpu-used 4 -row-mt 1 -c:a libopus -b:a 128k output.webm',
+    description: {
+      en: 'Encode video using AV1 codec for superior compression efficiency. Slower encoding but smaller file size at same quality.',
+      zh: '使用 AV1 编码器进行视频编码，压缩效率更高。编码较慢，但在相同质量下文件更小。',
+    },
+  },
+  {
+    name: {
+      en: 'Audio Fade In/Out',
+      zh: '音频淡入淡出',
+    },
+    command:
+      '-i input.mp3 -af "afade=t=in:st=0:d=2,afade=t=out:st=28:d=2" output_faded.mp3',
+    description: {
+      en: 'Add fade in at the start (2 seconds) and fade out near the end. Adjust st (start time) and d (duration) as needed.',
+      zh: '在开头添加淡入效果（2秒），结尾添加淡出效果。根据需要调整 st（开始时间）和 d（持续时间）。',
+    },
+  },
+  {
+    name: {
+      en: 'Concatenate Videos',
+      zh: '合并多个视频',
+    },
+    command:
+      '-f concat -safe 0 -i list.txt -c copy output_merged.mp4',
+    description: {
+      en: 'Concatenate multiple videos from a list file. Create list.txt with format: file \'video1.mp4\' (one per line).',
+      zh: '从列表文件合并多个视频。创建 list.txt，格式：file \'video1.mp4\'（每行一个）。',
+    },
+  },
+  {
+    name: {
+      en: 'Video Denoise',
+      zh: '视频降噪',
+    },
+    command:
+      '-i input.mp4 -vf "hqdn3d=4:4:9:9" -c:v libx264 -crf 23 -c:a copy output_denoised.mp4',
+    description: {
+      en: 'Apply high quality 3D denoise filter to reduce video noise. Parameters: luma_spatial:chroma_spatial:luma_tmp:chroma_tmp.',
+      zh: '应用高质量 3D 降噪滤镜减少视频噪点。参数：亮度空间:色度空间:亮度时间:色度时间。',
+    },
+  },
+  {
+    name: {
+      en: 'Add Watermark',
+      zh: '添加水印',
+    },
+    command:
+      '-i input.mp4 -i watermark.png -filter_complex "overlay=W-w-10:H-h-10" -c:v libx264 -crf 23 -c:a copy output_watermarked.mp4',
+    description: {
+      en: 'Add a watermark image to the bottom-right corner of the video. Adjust position with overlay parameters.',
+      zh: '在视频右下角添加水印图片。通过 overlay 参数调整水印位置。',
+    },
+  },
+  {
+    name: {
+      en: 'Extract All Frames (High Quality)',
+      zh: '提取所有帧（高质量）',
+    },
+    command: '-i input.mp4 -q:v 1 output_%04d.jpg',
+    description: {
+      en: 'Extract all frames from video as high quality JPEG images.',
+      zh: '从视频中提取所有帧为高质量 JPEG 图片。',
+    },
+  },
+  {
+    name: {
+      en: 'Create Video from Image Sequence',
+      zh: '从图片序列创建视频',
+    },
+    command:
+      '-framerate 30 -i image_%04d.jpg -c:v libx264 -pix_fmt yuv420p -movflags +faststart output.mp4',
+    description: {
+      en: 'Create video from numbered image sequence (image_0001.jpg, image_0002.jpg, etc.) at 30fps.',
+      zh: '从编号图片序列（image_0001.jpg、image_0002.jpg 等）创建 30fps 视频。',
+    },
+  },
+  {
+    name: {
+      en: 'Video Stabilization',
+      zh: '视频防抖',
+    },
+    command:
+      '-i input.mp4 -vf "vidstabdetect=stepsize=6:shakiness=8:accuracy=9:result=transform_vectors.trf" -f null - && ffmpeg -i input.mp4 -vf "vidstabtransform=input=transform_vectors.trf:zoom=1:smoothing=30,unsharp=5:5:0.8:3:3:0.4" -c:v libx264 -crf 18 output_stabilized.mp4',
+    description: {
+      en: 'Stabilize shaky video using two-pass analysis. Run as two separate commands.',
+      zh: '使用两遍分析稳定抖动的视频。需要作为两个独立命令运行。',
+    },
+  },
+  {
+    name: {
+      en: 'Picture in Picture',
+      zh: '画中画',
+    },
+    command:
+      '-i main.mp4 -i overlay.mp4 -filter_complex "[1:v]scale=320:-2[pip];[0:v][pip]overlay=W-w-10:H-h-10" -c:v libx264 -crf 23 -c:a copy output_pip.mp4',
+    description: {
+      en: 'Create picture-in-picture effect with overlay video in bottom-right corner.',
+      zh: '创建画中画效果，叠加视频显示在右下角。',
     },
   },
 ] as const;
