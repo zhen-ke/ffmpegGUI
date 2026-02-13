@@ -126,6 +126,16 @@ export function useFFmpegState({
       },
     );
 
+    // Cancelled 监听
+    const removeCancelledListener = window.electron.ipcRenderer.on(
+      'ffmpeg-cancelled',
+      (...args: unknown[]) => {
+        const message = args[0] as string | undefined;
+        onLogRef.current('info', message ?? 'FFmpeg process stopped.');
+        setIsRunning(false);
+      },
+    );
+
     // Complete 监听
     const removeCompleteListener = window.electron.ipcRenderer.on(
       'ffmpeg-complete',
@@ -142,6 +152,7 @@ export function useFFmpegState({
       removeProgressListener();
       removeOutputListener();
       removeErrorListener();
+      removeCancelledListener();
       removeCompleteListener();
     };
   }, [updateProgress]);

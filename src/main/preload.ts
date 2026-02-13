@@ -6,6 +6,7 @@ export type Channels =
   | 'check-file-exists'
   | 'ffmpeg-output'
   | 'ffmpeg-error'
+  | 'ffmpeg-cancelled'
   | 'ffmpeg-progress'
   | 'ffmpeg-duration'
   | 'open-output-folder'

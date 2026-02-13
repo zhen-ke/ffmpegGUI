@@ -21,8 +21,11 @@ export function setupFFmpegHandlers(mainWindow: BrowserWindow | null) {
   /**
    * 停止 FFmpeg
    */
-  ipcMain.on('stop-ffmpeg', () => {
-    ffmpegService.stop();
+  ipcMain.on('stop-ffmpeg', (event) => {
+    const stopped = ffmpegService.stop();
+    if (!stopped) {
+      event.reply('ffmpeg-error', 'No FFmpeg process is running.');
+    }
   });
 
   /**

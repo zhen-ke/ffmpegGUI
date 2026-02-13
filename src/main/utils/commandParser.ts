@@ -3,6 +3,33 @@
  * 解析和验证 FFmpeg 命令字符串
  */
 
+const UNSUPPORTED_SHELL_OPERATOR_TOKENS = new Set([
+  '&&',
+  '||',
+  '|',
+  ';',
+  '>',
+  '>>',
+  '<',
+  '<<',
+  '2>',
+  '2>>',
+  '&>',
+  '1>',
+  '1>>',
+]);
+
+function stripSurroundingQuotes(value: string): string {
+  if (
+    value.length >= 2 &&
+    ((value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'")))
+  ) {
+    return value.slice(1, -1);
+  }
+  return value;
+}
+
 /**
  * 解析 FFmpeg 命令为参数数组
  * 正确处理引号、转义字符和特殊情况
@@ -15,7 +42,6 @@ export function parseFFmpegCommand(command: string): string[] {
   let currentArg = '';
   let inQuotes = false;
   let inSingleQuotes = false;
-  let escapeNext = false;
 
   // 移除命令开头的 ffmpeg 如果存在
   command = command.trim();
@@ -26,44 +52,50 @@ export function parseFFmpegCommand(command: string): string[] {
   for (let i = 0; i < command.length; i++) {
     const char = command[i];
 
-    if (escapeNext) {
-      currentArg += `\\${char}`;
-      escapeNext = false;
-      continue;
-    }
+    // 反斜杠转义（兼容 Windows 路径和常见转义语法）
+    if (char === '\\' && !inSingleQuotes) {
+      const nextChar = command[i + 1];
+      if (nextChar === undefined) {
+        currentArg += '\\';
+        continue;
+      }
 
-    if (char === '\\') {
-      escapeNext = true;
+      if (inQuotes) {
+        if (nextChar === '"' || nextChar === '\\') {
+          currentArg += nextChar;
+          i += 1;
+          continue;
+        }
+        currentArg += '\\';
+        continue;
+      }
+
+      if (/\s|["'\\]/.test(nextChar)) {
+        currentArg += nextChar;
+        i += 1;
+        continue;
+      }
+
+      currentArg += '\\';
       continue;
     }
 
     // 处理双引号
     if (char === '"' && !inSingleQuotes) {
       inQuotes = !inQuotes;
-      currentArg += char;
       continue;
     }
 
     // 处理单引号
     if (char === "'" && !inQuotes) {
       inSingleQuotes = !inSingleQuotes;
-      currentArg += char;
       continue;
     }
 
     // 处理空格
     if (char === ' ' && !inQuotes && !inSingleQuotes) {
       if (currentArg) {
-        // 处理特殊情况：数字后的冒号不应被分割 (例如 scale=480:-1)
-        if (
-          args.length > 0 &&
-          currentArg === ':' &&
-          /^\d+$/.test(args[args.length - 1])
-        ) {
-          args[args.length - 1] += ':';
-        } else {
-          args.push(currentArg);
-        }
+        args.push(currentArg);
         currentArg = '';
       }
       continue;
@@ -78,29 +110,18 @@ export function parseFFmpegCommand(command: string): string[] {
 
   // 验证引号是否配对
   if (inQuotes || inSingleQuotes) {
-    console.warn('Warning: Unmatched quotes in command');
+    throw new Error('Unmatched quotes in command');
   }
 
-  // 处理空参数和添加必要的引号
-  return args
-    .filter((arg) => arg.length > 0)
-    .map((arg) => {
-      // 如果参数是选项标志，保持原样
-      if (arg.startsWith('-')) {
-        return arg;
-      }
+  return args.filter((arg) => arg.length > 0).map(stripSurroundingQuotes);
+}
 
-      // 如果参数包含特殊字符但没有引号，添加双引号
-      if (
-        !arg.startsWith('"') &&
-        !arg.startsWith("'") &&
-        (arg.includes(' ') || arg.includes(';') || arg.includes('|'))
-      ) {
-        return `"${arg}"`;
-      }
-
-      return arg;
-    });
+/**
+ * 检查命令参数中是否包含不支持的 shell 控制符
+ * 该项目只支持单条 FFmpeg 命令
+ */
+export function containsUnsupportedShellOperators(args: string[]): boolean {
+  return args.some((arg) => UNSUPPORTED_SHELL_OPERATOR_TOKENS.has(arg));
 }
 
 /**
@@ -113,8 +134,11 @@ export function extractOutputFile(args: string[]): string | undefined {
   // 查找可能的输出文件：最后一个不是选项且不跟在 -i 后面的参数
   for (let i = args.length - 1; i >= 0; i--) {
     if (!args[i].startsWith('-') && i > 0 && args[i - 1] !== '-i') {
-      // 移除引号
-      return args[i].replace(/^"|"$/g, '').trim();
+      const output = stripSurroundingQuotes(args[i]).trim();
+      if (!output || output === '-') {
+        return undefined;
+      }
+      return output;
     }
   }
   return undefined;
