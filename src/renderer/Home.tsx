@@ -120,11 +120,10 @@ function App() {
     setLanguage(language === 'en' ? 'zh' : 'en');
   }, [language, setLanguage]);
 
-  /**
-   * 使用 ref 追踪最新的 command 值，避免 useEffect 中的闭包陷阱
-   */
-  const commandRef = useRef(command);
-  commandRef.current = command;
+  const inputFileRef = useRef(inputFile);
+  const outputFolderRef = useRef(outputFolder);
+  inputFileRef.current = inputFile;
+  outputFolderRef.current = outputFolder;
 
   /**
    * 追踪是否为首次渲染，避免初始化时错误触发路径更新
@@ -133,7 +132,7 @@ function App() {
 
   /**
    * 监听文件路径变化，自动更新命令中的路径
-   * 使用 ref 获取最新的 command 值，避免循环依赖
+   * updateCommandWithPaths 内部会读取最新 command，避免循环依赖
    */
   useEffect(() => {
     // 跳过首次渲染，避免在没有 command 时错误触发
@@ -143,8 +142,7 @@ function App() {
     }
 
     if (inputFile || outputFolder) {
-      // 使用 ref 获取最新 command，避免闭包捕获过时值
-      updateCommandWithPaths(commandRef.current);
+      updateCommandWithPaths();
     }
   }, [inputFile, outputFolder, updateCommandWithPaths]);
 
@@ -156,27 +154,32 @@ function App() {
 
   useEffect(() => {
     if (selectedTemplateCommand) {
-      const cmd = selectedTemplateCommand;
-      if (inputFile || outputFolder) {
-        updateCommandWithPaths(cmd);
+      const latestInputFile = inputFileRef.current;
+      const latestOutputFolder = outputFolderRef.current;
+
+      if (latestInputFile || latestOutputFolder) {
+        updateCommandWithPaths(
+          selectedTemplateCommand,
+          latestInputFile,
+          latestOutputFolder,
+        );
       } else {
-        updateCommand(cmd);
+        updateCommand(selectedTemplateCommand);
       }
     }
-  }, [
-    selectedTemplateCommand,
-    inputFile,
-    outputFolder,
-    updateCommand,
-    updateCommandWithPaths,
-  ]);
+  }, [selectedTemplateCommand, updateCommand, updateCommandWithPaths]);
 
   /**
    * 处理 FFmpeg 启动
    */
   const onStart = useCallback(() => {
+    const trimmedCommand = command.trim();
+    if (!trimmedCommand) {
+      return;
+    }
+
     clearLogs();
-    handleStart(command);
+    handleStart(trimmedCommand);
   }, [clearLogs, handleStart, command]);
 
   // ========== 生命周期 ==========
@@ -312,7 +315,7 @@ function App() {
           {/* Main Action Buttons */}
           <ControlButtons
             isRunning={isRunning}
-            canStart={!!command}
+            canStart={command.trim().length > 0}
             onStart={onStart}
             onStop={handleStop}
             startLabel={t('Start')}

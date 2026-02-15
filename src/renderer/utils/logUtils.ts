@@ -11,6 +11,33 @@ interface LogStyle {
   icon: string;
 }
 
+const HTML_ESCAPE_MAP: Record<string, string> = {
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&#39;',
+};
+
+const HTML_ENTITY_MAP: Record<string, string> = {
+  '&amp;': '&',
+  '&lt;': '<',
+  '&gt;': '>',
+  '&quot;': '"',
+  '&#39;': "'",
+};
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (char) => HTML_ESCAPE_MAP[char] ?? char);
+}
+
+function decodeHtmlEntities(value: string): string {
+  return value.replace(
+    /&(amp|lt|gt|quot|#39);/g,
+    (entity) => HTML_ENTITY_MAP[entity] ?? entity,
+  );
+}
+
 /**
  * 日志样式配置
  */
@@ -41,13 +68,14 @@ const LOG_STYLES: Record<LogType, LogStyle> = {
 export function formatLog(type: LogType, message: string): string {
   const time = new Date().toLocaleTimeString('en-US', { hour12: false });
   const style = LOG_STYLES[type] || LOG_STYLES.info;
+  const safeMessage = escapeHtml(message);
 
   // 生成结构化的 HTML
   const logHtml = `
     <div class="group flex items-start gap-3 px-4 text-sm font-mono border-b border-dashed border-gray-200 dark:border-gray-800 last:border-0 transition-colors ${style.bg}">
       <span class="flex-shrink-0 w-5 text-center ${style.color} opacity-70 font-bold select-none">${style.icon}</span>
       <span class="flex-shrink-0 text-xs text-gray-400 select-none pt-0.5 group-hover:text-gray-500 dark:group-hover:text-gray-300 transition-colors">[${time}]</span>
-      <span class="flex-1 break-all whitespace-pre-wrap leading-relaxed ${style.color}">${message}</span>
+      <span class="flex-1 break-all whitespace-pre-wrap leading-relaxed ${style.color}">${safeMessage}</span>
     </div>
   `;
 
@@ -62,7 +90,7 @@ export function formatLog(type: LogType, message: string): string {
  * @returns 纯文本
  */
 export function stripHtmlTags(html: string): string {
-  return html.replace(/<[^>]+>/g, '');
+  return decodeHtmlEntities(html.replace(/<[^>]+>/g, ''));
 }
 
 /**

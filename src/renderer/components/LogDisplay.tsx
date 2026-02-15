@@ -20,7 +20,9 @@ interface ToolButtonProps {
 function ToolButton({ onClick, title, icon }: ToolButtonProps) {
   return (
     <button
+      type="button"
       onClick={onClick}
+      aria-label={title}
       className="p-1 hover:bg-gray-300 dark:hover:bg-gray-700 rounded text-gray-500 dark:text-gray-400 transition-colors"
       title={title}
     >
@@ -71,13 +73,15 @@ export function LogDisplay({
       <div className="flex-1 relative bg-white dark:bg-[#0d1117]">
         <div
           ref={logsRef}
+          role="log"
+          aria-live="polite"
+          aria-label="FFmpeg log output"
           className="absolute inset-0 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-700 scrollbar-track-transparent"
         >
           {logs ? (
             /**
              * 使用 dangerouslySetInnerHTML 渲染带颜色的日志
-             * 安全说明：日志内容来自本地 FFmpeg 进程输出，经过 logUtils 格式化处理，
-             * 不包含用户输入的不可信内容，因此 XSS 风险可控
+             * 安全说明：logUtils 已对日志消息做 HTML escape 处理，避免注入到 DOM
              */
             <div className="pb-10" dangerouslySetInnerHTML={{ __html: logs }} />
           ) : (

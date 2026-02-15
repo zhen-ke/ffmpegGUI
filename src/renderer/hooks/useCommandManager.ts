@@ -3,7 +3,7 @@
  * 管理 FFmpeg 命令的构建、更新和拖放处理
  */
 
-import { DragEvent, useCallback, useState } from 'react';
+import { DragEvent, useCallback, useRef, useState } from 'react';
 import {
   insertFilesIntoCommand,
   updateCommandPaths,
@@ -19,11 +19,18 @@ export function useCommandManager({
   outputFolder,
 }: UseCommandManagerProps) {
   const [command, setCommand] = useState('');
+  const commandRef = useRef(command);
+  const inputFileRef = useRef(inputFile);
+  const outputFolderRef = useRef(outputFolder);
+  commandRef.current = command;
+  inputFileRef.current = inputFile;
+  outputFolderRef.current = outputFolder;
 
   /**
    * 更新命令（手动编辑）
    */
   const updateCommand = useCallback((newCommand: string) => {
+    commandRef.current = newCommand;
     setCommand(newCommand);
   }, []);
 
@@ -36,18 +43,20 @@ export function useCommandManager({
       overrideInputFile?: string,
       overrideOutputFolder?: string,
     ) => {
-      const cmdToUpdate = baseCommand ?? command;
-      const finalInputFile = overrideInputFile ?? inputFile;
-      const finalOutputFolder = overrideOutputFolder ?? outputFolder;
+      const cmdToUpdate = baseCommand ?? commandRef.current;
+      const finalInputFile = overrideInputFile ?? inputFileRef.current;
+      const finalOutputFolder = overrideOutputFolder ?? outputFolderRef.current;
 
       const updatedCommand = updateCommandPaths(
         cmdToUpdate,
         finalInputFile,
         finalOutputFolder,
       );
+
+      commandRef.current = updatedCommand;
       setCommand(updatedCommand);
     },
-    [command, inputFile, outputFolder],
+    [],
   );
 
   /**
@@ -61,25 +70,30 @@ export function useCommandManager({
   /**
    * 处理文件放置
    */
-  const handleDrop = useCallback(
-    (e: DragEvent<HTMLTextAreaElement>) => {
-      e.preventDefault();
-      e.stopPropagation();
+  const handleDrop = useCallback((e: DragEvent<HTMLTextAreaElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
 
-      const files = Array.from(e.dataTransfer.files);
-      const textarea = e.currentTarget;
-      const cursorPosition = textarea.selectionStart;
+    const files = Array.from(e.dataTransfer.files);
+    const textarea = e.currentTarget;
+    const cursorPosition = textarea.selectionStart;
 
-      const newCommand = insertFilesIntoCommand(command, files, cursorPosition);
-      setCommand(newCommand);
-    },
-    [command],
-  );
+    setCommand((prevCommand) => {
+      const newCommand = insertFilesIntoCommand(
+        prevCommand,
+        files,
+        cursorPosition,
+      );
+      commandRef.current = newCommand;
+      return newCommand;
+    });
+  }, []);
 
   /**
    * 清空命令
    */
   const clearCommand = useCallback(() => {
+    commandRef.current = '';
     setCommand('');
   }, []);
 
@@ -87,10 +101,10 @@ export function useCommandManager({
    * 复制命令
    */
   const copyCommand = useCallback(() => {
-    if (command) {
-      navigator.clipboard.writeText(command);
+    if (commandRef.current) {
+      navigator.clipboard.writeText(commandRef.current);
     }
-  }, [command]);
+  }, []);
 
   return {
     command,
