@@ -3,11 +3,23 @@
  * 提供命令解析、路径更新等功能
  */
 
-const TOKEN_REGEX =
-  /"[^"\\]*(?:\\.[^"\\]*)*"|'[^'\\]*(?:\\.[^'\\]*)*'|\S+/g;
+import { tokenize } from '../../shared/commandTokenizer';
 
+/**
+ * 将命令拆分为 token，保留引号原样
+ * 用于命令重建场景（需要保持用户原始格式）
+ */
 function tokenizeCommand(command: string): string[] {
-  return command.match(TOKEN_REGEX) ?? [];
+  const regex = /"[^"]*"|'[^']*'|\S+/g;
+  return command.match(regex) || [];
+}
+
+/**
+ * 将命令拆分为 token 并去除引号
+ * 用于命令分析场景（需要纯值）
+ */
+function tokenizeAndStrip(command: string): string[] {
+  return tokenize(command).tokens;
 }
 
 function stripWrappingQuotes(value: string): string {
@@ -188,30 +200,4 @@ export function insertFilesIntoCommand(
   const newCommand =
     command.substring(0, position) + filePaths + command.substring(position);
   return newCommand;
-}
-
-/**
- * 验证 FFmpeg 命令是否有效
- * @param command 要验证的命令
- * @returns 是否有效
- */
-export function isValidFFmpegCommand(command: string): boolean {
-  const trimmed = command.trim();
-  if (!trimmed) return false;
-
-  // 至少应该包含一些参数
-  return trimmed.length > 0;
-}
-
-/**
- * 清理命令字符串
- * 移除多余的空格和换行符
- *
- * @param command 原始命令
- * @returns 清理后的命令
- */
-export function cleanCommand(command: string): string {
-  return command
-    .replace(/\s+/g, ' ') // 多个空格替换为单个空格
-    .trim();
 }

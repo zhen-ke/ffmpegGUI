@@ -9,10 +9,11 @@ import { dialog, Notification, shell } from 'electron';
 import fs from 'fs';
 import path from 'path';
 import {
-  containsUnsupportedShellOperators,
-  extractOutputFile,
-  parseFFmpegCommand,
+    containsUnsupportedShellOperators,
+    extractOutputFile,
+    parseFFmpegCommand,
 } from '../utils/commandParser';
+import { safeReply } from '../utils/ipcUtils';
 import { getFfmpegPath } from '../utils/pathUtils';
 
 /**
@@ -28,14 +29,6 @@ interface FFmpegProgress {
 interface FFmpegDuration {
   duration: number;
 }
-
-type FFmpegReplyChannel =
-  | 'ffmpeg-output'
-  | 'ffmpeg-error'
-  | 'ffmpeg-progress'
-  | 'ffmpeg-duration'
-  | 'ffmpeg-complete'
-  | 'ffmpeg-cancelled';
 
 /**
  * FFmpeg 进程管理服务类
@@ -53,26 +46,6 @@ class FFmpegService {
 
   private hasReportedDuration: boolean = false;
 
-  private reply(
-    event: IpcMainEvent,
-    channel: FFmpegReplyChannel,
-    payload?: unknown,
-  ): void {
-    try {
-      if (event.sender.isDestroyed()) {
-        return;
-      }
-
-      if (payload === undefined) {
-        event.reply(channel);
-      } else {
-        event.reply(channel, payload);
-      }
-    } catch (error) {
-      console.warn('Failed to send IPC message:', error);
-    }
-  }
-
   /**
    * 启动 FFmpeg 进程
    *
@@ -86,7 +59,7 @@ class FFmpegService {
     mainWindow: BrowserWindow | null,
   ): Promise<void> {
     if (this.process) {
-      this.reply(
+      safeReply(
         event,
         'ffmpeg-error',
         'An FFmpeg process is already running. Please stop it first.',
@@ -97,7 +70,7 @@ class FFmpegService {
     // 检查命令是否为空
     const trimmedCommand = command?.trim();
     if (!trimmedCommand) {
-      this.reply(
+      safeReply(
         event,
         'ffmpeg-error',
         'Empty command. Please provide a valid FFmpeg command.',
@@ -111,12 +84,12 @@ class FFmpegService {
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'Failed to parse command.';
-      this.reply(event, 'ffmpeg-error', message);
+      safeReply(event, 'ffmpeg-error', message);
       return;
     }
 
     if (args.length === 0) {
-      this.reply(
+      safeReply(
         event,
         'ffmpeg-error',
         'Command has no arguments. Please provide a valid FFmpeg command.',
@@ -125,7 +98,7 @@ class FFmpegService {
     }
 
     if (containsUnsupportedShellOperators(args)) {
-      this.reply(
+      safeReply(
         event,
         'ffmpeg-error',
         'Only a single FFmpeg command is supported. Remove shell operators such as &&, ||, |, or redirects.',
@@ -138,7 +111,7 @@ class FFmpegService {
     // 检查文件是否存在
     if (outputFile && fs.existsSync(outputFile)) {
       if (!mainWindow) {
-        this.reply(
+        safeReply(
           event,
           'ffmpeg-error',
           'Cannot confirm overwrite because the main window is unavailable.',
@@ -156,7 +129,7 @@ class FFmpegService {
       });
 
       if (response.response === 1) {
-        this.reply(
+        safeReply(
           event,
           'ffmpeg-cancelled',
           'Operation cancelled: file was not overwritten.',
@@ -210,24 +183,24 @@ class FFmpegService {
       this.resetState();
 
       if (stoppedByUser) {
-        this.reply(event, 'ffmpeg-cancelled', 'FFmpeg process stopped.');
+        safeReply(event, 'ffmpeg-cancelled', 'FFmpeg process stopped.');
         return;
       }
 
       if (code === 0) {
-        this.reply(event, 'ffmpeg-complete');
+        safeReply(event, 'ffmpeg-complete');
         if (outputFile) {
           this.showCompletionNotification(outputFile);
         }
         return;
       }
 
-      this.reply(event, 'ffmpeg-error', `FFmpeg process exited with code ${code}`);
+      safeReply(event, 'ffmpeg-error', `FFmpeg process exited with code ${code}`);
     });
 
     this.process.on('error', (err) => {
       console.error('FFmpeg process error:', err);
-      this.reply(event, 'ffmpeg-error', `FFmpeg process error: ${err.message}`);
+      safeReply(event, 'ffmpeg-error', `FFmpeg process error: ${err.message}`);
       this.resetState();
     });
   }
@@ -244,7 +217,7 @@ class FFmpegService {
       const [, hours, minutes, seconds] = progressMatch;
       const currentTime = this.toSeconds(hours, minutes, seconds);
       const progress: FFmpegProgress = { time: currentTime };
-      this.reply(event, 'ffmpeg-progress', progress);
+      safeReply(event, 'ffmpeg-progress', progress);
     }
   }
 
@@ -263,7 +236,7 @@ class FFmpegService {
       const [, hours, minutes, seconds] = durationMatch;
       const totalDuration = this.toSeconds(hours, minutes, seconds);
       const duration: FFmpegDuration = { duration: totalDuration };
-      this.reply(event, 'ffmpeg-duration', duration);
+      safeReply(event, 'ffmpeg-duration', duration);
       this.hasReportedDuration = true;
     }
   }
@@ -393,7 +366,7 @@ class FFmpegService {
     lines.forEach((line) => {
       const trimmedLine = line.trim();
       if (trimmedLine) {
-        this.reply(event, 'ffmpeg-output', trimmedLine);
+        safeReply(event, 'ffmpeg-output', trimmedLine);
       }
     });
   }
@@ -403,7 +376,7 @@ class FFmpegService {
     trailingLines.forEach((line) => {
       const trimmedLine = line.trim();
       if (trimmedLine) {
-        this.reply(event, 'ffmpeg-output', trimmedLine);
+        safeReply(event, 'ffmpeg-output', trimmedLine);
       }
     });
     this.stdoutBuffer = '';

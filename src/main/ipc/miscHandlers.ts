@@ -11,14 +11,16 @@ import { terminalService } from '../services/TerminalService';
 /**
  * 注册终端和其他相关的 IPC 处理器
  *
- * @param mainWindow 主窗口引用
+ * @param getMainWindow 获取主窗口的函数
  */
-export function setupMiscHandlers(mainWindow: BrowserWindow | null) {
+export function setupMiscHandlers(
+  getMainWindow: () => BrowserWindow | null,
+) {
   /**
    * 打开终端
    */
   ipcMain.handle('open-terminal', async () => {
-    return await terminalService.open(mainWindow);
+    return await terminalService.open(getMainWindow());
   });
 
   /**
@@ -27,12 +29,12 @@ export function setupMiscHandlers(mainWindow: BrowserWindow | null) {
   ipcMain.on('download-ffmpeg', async (event, url: string) => {
     const installed = await downloadService.downloadAndInstall(url, event);
     if (!installed) {
-      mainWindow?.webContents.send('ffmpeg-status', false);
+      getMainWindow()?.webContents.send('ffmpeg-status', false);
       return;
     }
 
     const exists = await ffmpegService.checkExists();
-    mainWindow?.webContents.send('ffmpeg-status', exists);
+    getMainWindow()?.webContents.send('ffmpeg-status', exists);
   });
 
   /**
@@ -46,14 +48,5 @@ export function setupMiscHandlers(mainWindow: BrowserWindow | null) {
       console.error('Error fetching OSXExperts HTML:', error);
       throw error;
     }
-  });
-
-  /**
-   * IPC 示例（保留用于测试）
-   */
-  ipcMain.on('ipc-example', async (event, arg) => {
-    const msgTemplate = (pingPong: string) => `IPC test: ${pingPong}`;
-    console.log(msgTemplate(arg));
-    event.reply('ipc-example', msgTemplate('pong'));
   });
 }

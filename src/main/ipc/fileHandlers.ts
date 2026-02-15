@@ -9,13 +9,16 @@ import { normalizePath } from '../utils/pathUtils';
 /**
  * 注册文件选择相关的 IPC 处理器
  *
- * @param mainWindow 主窗口引用
+ * @param getMainWindow 获取主窗口的函数
  */
-export function setupFileHandlers(mainWindow: BrowserWindow | null) {
+export function setupFileHandlers(
+  getMainWindow: () => BrowserWindow | null,
+) {
   /**
    * 选择输入文件
    */
   ipcMain.handle('select-input-file', async (event, currentPath) => {
+    const mainWindow = getMainWindow();
     if (!mainWindow) return { canceled: true, filePaths: [] };
 
     let defaultPath;
@@ -82,6 +85,7 @@ export function setupFileHandlers(mainWindow: BrowserWindow | null) {
    * 选择输出文件夹
    */
   ipcMain.handle('select-output-folder', async (event, currentPath) => {
+    const mainWindow = getMainWindow();
     if (!mainWindow) return { canceled: true, filePaths: [] };
 
     const result = await dialog.showOpenDialog(mainWindow, {

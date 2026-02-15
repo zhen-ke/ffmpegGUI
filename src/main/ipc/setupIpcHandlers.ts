@@ -10,11 +10,14 @@ import { setupMiscHandlers } from './miscHandlers';
 
 /**
  * 注册所有 IPC 处理器
+ * 使用 getter 函数确保始终获取最新的窗口引用
  *
- * @param mainWindow 主窗口引用
+ * @param getMainWindow 获取主窗口的函数
  */
-export function setupAllIpcHandlers(mainWindow: BrowserWindow | null) {
-  setupFFmpegHandlers(mainWindow);
-  setupFileHandlers(mainWindow);
-  setupMiscHandlers(mainWindow);
+export function setupAllIpcHandlers(
+  getMainWindow: () => BrowserWindow | null,
+) {
+  setupFFmpegHandlers(getMainWindow);
+  setupFileHandlers(getMainWindow);
+  setupMiscHandlers(getMainWindow);
 }

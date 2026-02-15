@@ -47,6 +47,13 @@ class AppUpdater {
 
 let mainWindow: BrowserWindow | null = null;
 
+/**
+ * 获取主窗口引用（用于 IPC handlers）
+ */
+function getMainWindow(): BrowserWindow | null {
+  return mainWindow;
+}
+
 const isDebug =
   process.env.NODE_ENV === 'development' || process.env.DEBUG_PROD === 'true';
 
@@ -77,11 +84,11 @@ const installExtensions = async () => {
 // ========== 窗口管理 ==========
 
 /**
- * 处理窗口关闭和显示逻辑
+ * 处理窗口关闭逻辑
  * macOS: 隐藏窗口而不是退出
  * Windows/Linux: 直接退出
  */
-function handleWindowHideShow() {
+function handleWindowClose() {
   if (!mainWindow) return;
 
   mainWindow.on('close', (event) => {
@@ -93,13 +100,6 @@ function handleWindowHideShow() {
     }
     return true;
   });
-
-  // 处理 dock 图标点击（仅 macOS）
-  if (process.platform === 'darwin') {
-    app.on('activate', () => {
-      mainWindow?.show();
-    });
-  }
 }
 
 /**
@@ -188,11 +188,8 @@ const createWindow = async () => {
   // Remove this if your app does not use auto updates
   new AppUpdater();
 
-  // 添加处理窗口隐藏和显示的逻辑
-  handleWindowHideShow();
-
-  // 注册所有 IPC 处理器
-  setupAllIpcHandlers(mainWindow);
+  // 添加处理窗口关闭的逻辑
+  handleWindowClose();
 };
 
 // ========== 进程清理 ==========
@@ -252,9 +249,18 @@ if (!gotTheLock) {
   app
     .whenReady()
     .then(() => {
+      // IPC handlers 只注册一次，使用 getter 确保引用最新窗口
+      setupAllIpcHandlers(getMainWindow);
+
       createWindow();
+
+      // 合并后的 activate handler：窗口存在则显示，不存在则重建
       app.on('activate', () => {
-        if (mainWindow === null) createWindow();
+        if (mainWindow === null) {
+          createWindow();
+        } else {
+          mainWindow.show();
+        }
       });
     })
     .catch(console.log);

@@ -26,7 +26,7 @@ import { LogDisplay } from './components/LogDisplay';
 import { ProgressBar } from './components/ProgressBar';
 import { countInputArguments, updateCommandPaths } from './utils/commandUtils';
 
-function App() {
+function Home() {
   const { language, setLanguage, t } = useLanguage();
   const [ffmpegExists, setFfmpegExists] = useState<boolean | null>(null);
 
@@ -470,4 +470,4 @@ function App() {
   );
 }
 
-export default App;
+export default Home;

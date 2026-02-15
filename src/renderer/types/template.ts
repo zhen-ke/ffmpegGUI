@@ -7,8 +7,3 @@ export interface Template {
   description: LocalizedString;
   isCustom?: boolean;
 }
-
-export interface TemplateGroup {
-  builtin: Template[];
-  custom: Template[];
-}

@@ -8,14 +8,16 @@ import { ffmpegService } from '../services/FFmpegService';
 /**
  * 注册 FFmpeg 相关的 IPC 处理器
  *
- * @param mainWindow 主窗口引用
+ * @param getMainWindow 获取主窗口的函数
  */
-export function setupFFmpegHandlers(mainWindow: BrowserWindow | null) {
+export function setupFFmpegHandlers(
+  getMainWindow: () => BrowserWindow | null,
+) {
   /**
    * 启动 FFmpeg
    */
   ipcMain.on('start-ffmpeg', async (event, command: string) => {
-    await ffmpegService.start(command, event, mainWindow);
+    await ffmpegService.start(command, event, getMainWindow());
   });
 
   /**

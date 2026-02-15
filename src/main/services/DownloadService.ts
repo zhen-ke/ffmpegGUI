@@ -8,11 +8,12 @@ import fs from 'fs';
 import path from 'path';
 import { extractArchive } from '../utils/extractionUtils';
 import {
-  downloadFile,
-  ensureDir,
-  moveFile,
-  removeDir,
+    downloadFile,
+    ensureDir,
+    moveFile,
+    removeDir,
 } from '../utils/fileUtils';
+import { safeReply } from '../utils/ipcUtils';
 import { getFfmpegPath } from '../utils/pathUtils';
 
 /**
@@ -42,12 +43,12 @@ class DownloadService {
       const filePath = path.join(downloadPath, fileName);
 
       // 下载文件
-      event.reply('ffmpeg-download-progress', 0);
+      safeReply(event, 'ffmpeg-download-progress', 0);
       const downloadedFilePath = await downloadFile(
         url,
         filePath,
         (progress) => {
-          event.reply('ffmpeg-download-progress', progress);
+          safeReply(event, 'ffmpeg-download-progress', progress);
         },
       );
 
@@ -57,12 +58,12 @@ class DownloadService {
       }
 
       // 解压文件
-      event.reply('ffmpeg-extract-progress', 0);
+      safeReply(event, 'ffmpeg-extract-progress', 0);
       const ffmpegSourcePath = await extractArchive(
         downloadedFilePath,
         extractPath,
         (progress) => {
-          event.reply('ffmpeg-extract-progress', progress);
+          safeReply(event, 'ffmpeg-extract-progress', progress);
         },
       );
 
@@ -77,12 +78,12 @@ class DownloadService {
       }
 
       console.log('FFmpeg installed successfully');
-      event.reply('ffmpeg-install-complete');
+      safeReply(event, 'ffmpeg-install-complete');
       installSucceeded = true;
     } catch (error: unknown) {
       const err = error as Error;
       console.error('Error during FFmpeg installation:', err);
-      event.reply('ffmpeg-install-error', err.message);
+      safeReply(event, 'ffmpeg-install-error', err.message);
     } finally {
       // 无论成功或失败都尝试清理临时文件
       try {

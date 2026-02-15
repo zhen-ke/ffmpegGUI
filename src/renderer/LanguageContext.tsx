@@ -1,9 +1,10 @@
 import React, {
-  createContext,
-  useState,
-  useContext,
-  ReactNode,
-  useEffect,
+    createContext,
+    ReactNode,
+    useCallback,
+    useContext,
+    useEffect,
+    useState,
 } from 'react';
 
 type Language = 'en' | 'zh';
@@ -175,9 +176,12 @@ export const LanguageProvider: React.FC<{ children: ReactNode }> = ({
     localStorage.setItem('language', language);
   }, [language]);
 
-  const t = (key: string): string => {
-    return translations[language][key] || key;
-  };
+  const t = useCallback(
+    (key: string): string => {
+      return translations[language][key] || key;
+    },
+    [language],
+  );
 
   return (
     <LanguageContext.Provider value={{ language, setLanguage, t }}>
