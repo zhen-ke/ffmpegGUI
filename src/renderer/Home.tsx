@@ -5,7 +5,7 @@
 
 import { Loader2, PlusCircle } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import Dropdown from './components/Dropdown';
+import Dropdown, { type DropdownOption } from './components/Dropdown';
 import FFmpegDownloader from './components/FFmpegDownloader';
 import { TemplateDialog } from './components/TemplateDialog';
 import { commandTemplates } from './constants/commandTemplates';
@@ -24,6 +24,7 @@ import { ControlButtons } from './components/ControlButtons';
 import { FileSelector } from './components/FileSelector';
 import { LogDisplay } from './components/LogDisplay';
 import { ProgressBar } from './components/ProgressBar';
+import { countInputArguments, updateCommandPaths } from './utils/commandUtils';
 
 function App() {
   const { language, setLanguage, t } = useLanguage();
@@ -32,7 +33,22 @@ function App() {
   // ========== 使用自定义 Hooks ==========
 
   // 日志管理
-  const { logs, logsRef, addLog, clearLogs, copyLogs } = useLogs();
+  const {
+    logs,
+    logsRef,
+    addLog,
+    clearLogs,
+    copyLogs,
+    handleLogsScroll,
+    isAutoScrollEnabled,
+  } = useLogs();
+
+  const handleOperationalError = useCallback(
+    (message: string) => {
+      addLog('error', t(message));
+    },
+    [addLog, t],
+  );
 
   // 文件选择
   const {
@@ -42,7 +58,9 @@ function App() {
     handleSelectOutputFolder,
     clearInputFile,
     clearOutputFolder,
-  } = useFileSelection();
+  } = useFileSelection({
+    onError: handleOperationalError,
+  });
 
   // 命令管理
   const {
@@ -68,7 +86,9 @@ function App() {
     handleEditTemplate,
     openNewTemplateDialog,
     closeTemplateDialog,
-  } = useTemplateManager();
+  } = useTemplateManager({
+    onError: handleOperationalError,
+  });
 
   const templateOptions = useMemo(
     () => [
@@ -86,7 +106,7 @@ function App() {
   );
 
   // FFmpeg 状态管理（onProgressUpdate 现在是可选的，无需传递空函数）
-  const { isRunning, progress, handleStart, handleStop } = useFFmpegState({
+  const { isRunning, isStopping, progress, handleStart, handleStop } = useFFmpegState({
     onLog: addLog,
   });
 
@@ -96,22 +116,32 @@ function App() {
    * 检查 FFmpeg 是否存在
    */
   const checkFFmpegStatus = useCallback(async () => {
-    const exists = await window.electron.ipcRenderer.invoke(
-      'check-ffmpeg-status',
-    );
-    setFfmpegExists(exists);
-  }, []);
+    try {
+      const exists = await window.electron.ipcRenderer.invoke(
+        'check-ffmpeg-status',
+      );
+      setFfmpegExists(exists);
+    } catch (error) {
+      console.error('Failed to check FFmpeg status:', error);
+      setFfmpegExists(false);
+      addLog('error', t('Failed to check FFmpeg status.'));
+    }
+  }, [addLog, t]);
 
   /**
    * 打开终端
    */
   const handleOpenTerminal = useCallback(async () => {
     try {
-      await window.electron.ipcRenderer.invoke('open-terminal');
+      const opened = await window.electron.ipcRenderer.invoke('open-terminal');
+      if (!opened) {
+        addLog('error', t('Failed to open terminal.'));
+      }
     } catch (error) {
       console.error('Failed to open terminal:', error);
+      addLog('error', t('Failed to open terminal.'));
     }
-  }, []);
+  }, [addLog, t]);
 
   /**
    * 切换语言
@@ -124,6 +154,9 @@ function App() {
   const outputFolderRef = useRef(outputFolder);
   inputFileRef.current = inputFile;
   outputFolderRef.current = outputFolder;
+
+  const selectedTemplateIdRef = useRef<string | null>(selectedTemplateId);
+  selectedTemplateIdRef.current = selectedTemplateId;
 
   /**
    * 追踪是否为首次渲染，避免初始化时错误触发路径更新
@@ -151,6 +184,38 @@ function App() {
    * 模板变化时总是用模板的命令替换当前命令
    */
   const selectedTemplateCommand = selectedTemplate?.command;
+
+  const handleTemplateSelectWithConfirm = useCallback(
+    (template: DropdownOption) => {
+      if (template.id === selectedTemplateIdRef.current) {
+        return;
+      }
+
+      const latestInputFile = inputFileRef.current;
+      const latestOutputFolder = outputFolderRef.current;
+      const nextCommand =
+        latestInputFile || latestOutputFolder
+          ? updateCommandPaths(
+              template.command,
+              latestInputFile,
+              latestOutputFolder,
+            )
+          : template.command;
+
+      const currentCommand = command.trim();
+      if (currentCommand && currentCommand !== nextCommand.trim()) {
+        const shouldReplace = window.confirm(
+          t('Selecting a template will replace the current command. Continue?'),
+        );
+        if (!shouldReplace) {
+          return;
+        }
+      }
+
+      handleTemplateSelect(template);
+    },
+    [command, handleTemplateSelect, t],
+  );
 
   useEffect(() => {
     if (selectedTemplateCommand) {
@@ -181,6 +246,48 @@ function App() {
     clearLogs();
     handleStart(trimmedCommand);
   }, [clearLogs, handleStart, command]);
+
+  const handleCopyCommand = useCallback(async () => {
+    const result = await copyCommand();
+    if (result === 'success') {
+      addLog('success', t('Command copied to clipboard.'));
+      return;
+    }
+    if (result === 'empty') {
+      addLog('info', t('Nothing to copy.'));
+      return;
+    }
+    addLog('error', t('Failed to copy command.'));
+  }, [addLog, copyCommand, t]);
+
+  const handleCopyLogs = useCallback(async () => {
+    const result = await copyLogs();
+    if (result === 'success') {
+      addLog('success', t('Log copied to clipboard.'));
+      return;
+    }
+    if (result === 'empty') {
+      addLog('info', t('Nothing to copy.'));
+      return;
+    }
+    addLog('error', t('Failed to copy logs.'));
+  }, [addLog, copyLogs, t]);
+
+  const handleDeleteTemplateWithConfirm = useCallback(
+    (templateId: string) => {
+      const shouldDelete = window.confirm(t('Delete this custom template?'));
+      if (!shouldDelete) {
+        return;
+      }
+      handleDeleteTemplate(templateId);
+    },
+    [handleDeleteTemplate, t],
+  );
+
+  const hasMultipleInputs = useMemo(
+    () => countInputArguments(command) > 1,
+    [command],
+  );
 
   // ========== 生命周期 ==========
 
@@ -243,7 +350,7 @@ function App() {
                 </svg>
               </div>
               <h1 className="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">
-                FFmpeg Tool
+                {t('FFmpeg Tool')}
               </h1>
               <button
                 type="button"
@@ -269,11 +376,11 @@ function App() {
             <div className="lg:col-span-4">
               <Dropdown
                 options={templateOptions}
-                onChange={handleTemplateSelect}
+                onChange={handleTemplateSelectWithConfirm}
                 value={selectedTemplate}
                 placeholder={t('Select a template')}
                 onEdit={handleEditTemplate}
-                onDelete={handleDeleteTemplate}
+                onDelete={handleDeleteTemplateWithConfirm}
               />
             </div>
 
@@ -306,20 +413,29 @@ function App() {
             onCommandChange={updateCommand}
             onDragOver={handleDragOver}
             onDrop={handleDrop}
-            onCopy={copyCommand}
+            onCopy={handleCopyCommand}
             onClear={clearCommand}
             onOpenTerminal={handleOpenTerminal}
             placeholder={t('Enter FFmpeg command or drag & drop files here')}
           />
+          {hasMultipleInputs && (
+            <p className="text-xs text-amber-600 dark:text-amber-400">
+              {t(
+                'This command has multiple input files; only the first -i is auto-bound from the input selector.',
+              )}
+            </p>
+          )}
 
           {/* Main Action Buttons */}
           <ControlButtons
             isRunning={isRunning}
+            isStopping={isStopping}
             canStart={command.trim().length > 0}
             onStart={onStart}
             onStop={handleStop}
             startLabel={t('Start')}
             stopLabel={t('Stop')}
+            stoppingLabel={t('Stopping...')}
           />
         </div>
       </div>
@@ -337,7 +453,7 @@ function App() {
         {/* Progress Bar */}
         <ProgressBar
           progress={progress}
-          isVisible={isRunning && progress > 0}
+          isVisible={isRunning}
         />
 
         {/* Logs Terminal */}
@@ -345,7 +461,9 @@ function App() {
           logs={logs}
           logsRef={logsRef}
           onClear={clearLogs}
-          onCopy={copyLogs}
+          onCopy={handleCopyLogs}
+          onScroll={handleLogsScroll}
+          isAutoScrollEnabled={isAutoScrollEnabled}
         />
       </div>
     </div>

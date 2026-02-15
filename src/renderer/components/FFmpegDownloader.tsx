@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { FFmpegAsset, fetchFFmpegAssets } from '../../utils/fetchFFmpegAssets';
+import { useLanguage } from '../LanguageContext';
 
 const FFmpegDownloader: React.FC = () => {
+  const { t } = useLanguage();
   const [assets, setAssets] = useState<FFmpegAsset[]>([]);
   const [selectedAsset, setSelectedAsset] = useState<FFmpegAsset | null>(null);
   const [loading, setLoading] = useState(true);
@@ -22,7 +24,7 @@ const FFmpegDownloader: React.FC = () => {
         }
       })
       .catch((err) => {
-        setError('Failed to fetch FFmpeg assets');
+        setError('Failed to fetch FFmpeg assets.');
         setLoading(false);
         console.error(err);
       });
@@ -105,16 +107,18 @@ const FFmpegDownloader: React.FC = () => {
       <div className="flex items-center justify-center h-screen bg-gradient-to-r from-blue-50 to-indigo-100">
         <div className="max-w-md w-full p-8 bg-white rounded-xl shadow-lg">
           <h2 className="text-3xl font-bold mb-6 text-indigo-800 text-center">
-            Installing FFmpeg
+            {t('Installing FFmpeg')}
           </h2>
           <div className="mb-6">
             <p className="text-gray-700 mb-2">
-              Downloading: {downloadProgress}%
+              {t('Downloading')}: {downloadProgress}%
             </p>
             <ProgressBar progress={downloadProgress} color="bg-blue-600" />
           </div>
           <div>
-            <p className="text-gray-700 mb-2">Extracting: {extractProgress}%</p>
+            <p className="text-gray-700 mb-2">
+              {t('Extracting')}: {extractProgress}%
+            </p>
             <ProgressBar progress={extractProgress} color="bg-green-600" />
           </div>
           <div className="mt-8 text-center">
@@ -168,7 +172,7 @@ const FFmpegDownloader: React.FC = () => {
               d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
             />
           </svg>
-          Loading FFmpeg assets...
+          {t('Loading FFmpeg assets...')}
         </div>
       </div>
     );
@@ -179,14 +183,15 @@ const FFmpegDownloader: React.FC = () => {
       <div className="flex items-center justify-center h-screen bg-gradient-to-r from-red-50 to-pink-100">
         <div className="max-w-md w-full p-8 bg-white rounded-xl shadow-lg">
           <h2 className="text-3xl font-bold mb-4 text-red-600 text-center">
-            Error
+            {t('Error')}
           </h2>
-          <p className="text-gray-700 text-center">{error}</p>
+          <p className="text-gray-700 text-center">{t(error)}</p>
           <button
+            type="button"
             onClick={() => window.location.reload()}
             className="mt-6 w-full py-2 px-4 bg-red-500 text-white rounded-md hover:bg-red-600 transition-colors duration-200"
           >
-            Try Again
+            {t('Try Again')}
           </button>
         </div>
       </div>
@@ -197,15 +202,15 @@ const FFmpegDownloader: React.FC = () => {
     <div className="flex items-center justify-center min-h-screen bg-gradient-to-r from-blue-50 to-indigo-100 p-4">
       <div className="max-w-2xl w-full p-8 bg-white rounded-xl shadow-lg">
         <h2 className="text-3xl font-bold mb-4 text-indigo-800 text-center">
-          Download FFmpeg
+          {t('Download FFmpeg')}
         </h2>
         <p className="text-gray-600 mb-8 text-center">
-          FFmpeg is not detected on your system. Please download it to continue.
+          {t('FFmpeg is not detected on your system. Please download it to continue.')}
         </p>
         {window.electron.platform === 'win32' ? (
           <div className="mb-2">
             <h3 className="text-xl font-semibold mb-4 text-gray-700">
-              Select a version:
+              {t('Select a version:')}
             </h3>
             <ul className="space-y-3">
               {assets.map((asset, index) => (
@@ -245,10 +250,11 @@ const FFmpegDownloader: React.FC = () => {
           </div>
         ) : (
           <p className="text-gray-700 mb-8 text-center font-medium">
-            The latest version of FFmpeg will be downloaded automatically.
+            {t('The latest version of FFmpeg will be downloaded automatically.')}
           </p>
         )}
         <button
+          type="button"
           onClick={handleDownload}
           disabled={!selectedAsset}
           className={`w-full py-3 px-4 mt-4 rounded-lg font-semibold text-white text-lg transition-all duration-200 ${
@@ -257,7 +263,7 @@ const FFmpegDownloader: React.FC = () => {
               : 'bg-gray-300 cursor-not-allowed'
           }`}
         >
-          Download and Install FFmpeg
+          {t('Download and Install FFmpeg')}
         </button>
       </div>
     </div>

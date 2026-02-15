@@ -71,7 +71,9 @@ export function FileSelector({
   return (
     <div className="relative flex items-center">
       <button
+        type="button"
         onClick={onSelect}
+        aria-label={label}
         className={`w-full flex items-center justify-between px-3 py-2 text-sm border rounded-lg transition-all duration-200 ${
           value ? colorScheme.filled : colorScheme.empty
         }`}
@@ -79,32 +81,30 @@ export function FileSelector({
         <span className="truncate flex-1 text-left mr-2" title={value || label}>
           {displayValue}
         </span>
-        {value ? (
-          <span
-            onClick={(e) => {
-              e.stopPropagation();
-              onClear();
-            }}
-            className={`p-1 ${colorScheme.hover} rounded-full cursor-pointer`}
-          >
-            <svg
-              className="w-3 h-3"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
-          </span>
-        ) : (
-          icon
-        )}
+        {!value && icon}
       </button>
+      {value && (
+        <button
+          type="button"
+          onClick={onClear}
+          aria-label={`Clear ${label}`}
+          className={`absolute right-2 top-1/2 -translate-y-1/2 p-1 ${colorScheme.hover} rounded-full cursor-pointer`}
+        >
+          <svg
+            className="w-3 h-3"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M6 18L18 6M6 6l12 12"
+            />
+          </svg>
+        </button>
+      )}
     </div>
   );
 }

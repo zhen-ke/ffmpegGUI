@@ -25,11 +25,12 @@ class DownloadService {
    * @param url 下载 URL
    * @param event IPC 事件对象
    */
-  async downloadAndInstall(url: string, event: IpcMainEvent): Promise<void> {
+  async downloadAndInstall(url: string, event: IpcMainEvent): Promise<boolean> {
     const tempDir = app.getPath('temp');
     const downloadPath = path.join(tempDir, 'ffmpeg-download');
     const extractPath = path.join(tempDir, 'ffmpeg-extract');
     const binariesPath = path.dirname(getFfmpegPath());
+    let installSucceeded = false;
 
     try {
       // 创建必要的目录
@@ -77,21 +78,21 @@ class DownloadService {
 
       console.log('FFmpeg installed successfully');
       event.reply('ffmpeg-install-complete');
-
-      // 清理临时文件
-      await this.cleanup(downloadPath, extractPath);
+      installSucceeded = true;
     } catch (error: unknown) {
       const err = error as Error;
       console.error('Error during FFmpeg installation:', err);
       event.reply('ffmpeg-install-error', err.message);
-
-      // 尝试清理临时文件
+    } finally {
+      // 无论成功或失败都尝试清理临时文件
       try {
         await this.cleanup(downloadPath, extractPath);
       } catch (cleanupError) {
         console.error('Error during cleanup:', cleanupError);
       }
     }
+
+    return installSucceeded;
   }
 
   /**

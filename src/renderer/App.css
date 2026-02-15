@@ -35,9 +35,13 @@ select,
   -webkit-app-region: no-drag;
 }
 
-/* 移除默认的 outline */
-:focus {
-  @apply outline-none;
+/* 统一键盘焦点样式 */
+:focus-visible {
+  @apply outline-none ring-2 ring-blue-500 ring-offset-2 ring-offset-white;
+}
+
+.dark :focus-visible {
+  @apply ring-offset-gray-900;
 }
 
 /* 定义一些通用的暗模式组件样式 */

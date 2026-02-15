@@ -5,6 +5,7 @@
 
 import { Ban, Copy, Terminal } from 'lucide-react';
 import React from 'react';
+import { useLanguage } from '../LanguageContext';
 
 // ========== 子组件 ==========
 
@@ -38,6 +39,8 @@ interface LogDisplayProps {
   logsRef: React.RefObject<HTMLDivElement>;
   onClear: () => void;
   onCopy: () => void;
+  onScroll: (event: React.UIEvent<HTMLDivElement>) => void;
+  isAutoScrollEnabled?: boolean;
 }
 
 export function LogDisplay({
@@ -45,25 +48,34 @@ export function LogDisplay({
   logsRef,
   onClear,
   onCopy,
+  onScroll,
+  isAutoScrollEnabled = true,
 }: LogDisplayProps) {
+  const { t } = useLanguage();
+
   return (
     <div className="flex-1 relative flex flex-col max-w-7xl mx-auto w-full">
       {/* 终端 Header */}
       <div className="flex-shrink-0 flex items-center justify-between px-4 py-2 bg-gray-200 dark:bg-[#161b22] border-b border-gray-300 dark:border-gray-800">
         <div className="flex items-center gap-2">
           <span className="ml-3 text-xs font-mono text-gray-600 dark:text-gray-400">
-            Console Output
+            {t('Console Output')}
           </span>
+          {!isAutoScrollEnabled && (
+            <span className="text-[10px] uppercase tracking-wide text-amber-600 dark:text-amber-400">
+              {t('Paused')}
+            </span>
+          )}
         </div>
         <div className="flex gap-2">
           <ToolButton
             onClick={onCopy}
-            title="Copy raw text"
+            title={t('Copy raw text')}
             icon={<Copy size={14} />}
           />
           <ToolButton
             onClick={onClear}
-            title="Clear console"
+            title={t('Clear console')}
             icon={<Ban size={14} />}
           />
         </div>
@@ -76,6 +88,7 @@ export function LogDisplay({
           role="log"
           aria-live="polite"
           aria-label="FFmpeg log output"
+          onScroll={onScroll}
           className="absolute inset-0 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-700 scrollbar-track-transparent"
         >
           {logs ? (
@@ -91,7 +104,7 @@ export function LogDisplay({
                 className="text-gray-400 dark:text-gray-600 mb-4"
               />
               <p className="text-gray-500 dark:text-gray-500 font-mono text-sm">
-                Ready to process...
+                {t('Ready to process...')}
               </p>
             </div>
           )}

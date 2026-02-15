@@ -23,6 +23,7 @@ export const TemplateDialog: React.FC<TemplateDialogProps> = ({
       description: { en: '', zh: '' },
     },
   );
+  const [validationError, setValidationError] = useState('');
 
   // 重置表单当初始模板改变时
   useEffect(() => {
@@ -33,20 +34,45 @@ export const TemplateDialog: React.FC<TemplateDialogProps> = ({
         description: { en: '', zh: '' },
       },
     );
+    setValidationError('');
   }, [initialTemplate, isOpen]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const nameEn = template.name?.en?.trim() ?? '';
+    const nameZh = template.name?.zh?.trim() ?? '';
+    const descEn = template.description?.en?.trim() ?? '';
+    const descZh = template.description?.zh?.trim() ?? '';
+    const command = template.command?.trim() ?? '';
+
+    const normalizedName = {
+      en: nameEn || nameZh,
+      zh: nameZh || nameEn,
+    };
+    const normalizedDescription = {
+      en: descEn || descZh,
+      zh: descZh || descEn,
+    };
+
     if (
-      template.name?.en &&
-      template.name?.zh &&
-      template.command &&
-      template.description?.en &&
-      template.description?.zh
+      !normalizedName.en ||
+      !normalizedName.zh ||
+      !normalizedDescription.en ||
+      !normalizedDescription.zh ||
+      !command
     ) {
-      onSave(template as Omit<Template, 'id' | 'isCustom'>);
-      onClose();
+      setValidationError(
+        t('Please provide at least one name and description, and a command.'),
+      );
+      return;
     }
+
+    onSave({
+      name: normalizedName,
+      command,
+      description: normalizedDescription,
+    });
+    onClose();
   };
 
   if (!isOpen) return null;
@@ -72,8 +98,8 @@ export const TemplateDialog: React.FC<TemplateDialogProps> = ({
                     name: { ...prev.name!, en: e.target.value },
                   }))
                 }
+                onInput={() => setValidationError('')}
                 className="dark:bg-background-textarea dark:border-border-dark mt-1 block w-full px-3 py-1.5 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:text-text-lightDark"
-                required
               />
             </div>
 
@@ -90,8 +116,8 @@ export const TemplateDialog: React.FC<TemplateDialogProps> = ({
                     name: { ...prev.name!, zh: e.target.value },
                   }))
                 }
+                onInput={() => setValidationError('')}
                 className="dark:bg-background-textarea dark:border-border-dark mt-1 block w-full px-3 py-1.5 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:text-text-lightDark"
-                required
               />
             </div>
           </div>
@@ -107,10 +133,10 @@ export const TemplateDialog: React.FC<TemplateDialogProps> = ({
                   command: e.target.value,
                 }))
               }
+              onInput={() => setValidationError('')}
               spellCheck="false"
               className="dark:bg-background-textarea dark:border-border-dark mt-1 block w-full px-3 py-1.5 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono resize-none text-sm dark:text-text-lightDark"
               rows={4}
-              required
             />
           </div>
 
@@ -127,10 +153,10 @@ export const TemplateDialog: React.FC<TemplateDialogProps> = ({
                     description: { ...prev.description!, en: e.target.value },
                   }))
                 }
+                onInput={() => setValidationError('')}
                 spellCheck="false"
                 className="dark:bg-background-textarea dark:border-border-dark mt-1 block w-full px-3 py-1.5 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none text-sm dark:text-text-lightDark"
                 rows={4}
-                required
               />
             </div>
             <div>
@@ -145,13 +171,19 @@ export const TemplateDialog: React.FC<TemplateDialogProps> = ({
                     description: { ...prev.description!, zh: e.target.value },
                   }))
                 }
+                onInput={() => setValidationError('')}
                 spellCheck="false"
                 className="dark:bg-background-textarea dark:border-border-dark mt-1 block w-full px-3 py-1.5 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none text-sm dark:text-text-lightDark"
                 rows={4}
-                required
               />
             </div>
           </div>
+
+          {validationError && (
+            <p className="text-sm text-red-600 dark:text-red-400">
+              {validationError}
+            </p>
+          )}
 
           <div className="mt-4 flex justify-end space-x-3">
             <button

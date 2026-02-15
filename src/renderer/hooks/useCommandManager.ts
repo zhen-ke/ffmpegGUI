@@ -14,6 +14,8 @@ interface UseCommandManagerProps {
   outputFolder: string;
 }
 
+export type ClipboardResult = 'success' | 'empty' | 'error';
+
 export function useCommandManager({
   inputFile,
   outputFolder,
@@ -100,9 +102,18 @@ export function useCommandManager({
   /**
    * 复制命令
    */
-  const copyCommand = useCallback(() => {
-    if (commandRef.current) {
-      navigator.clipboard.writeText(commandRef.current);
+  const copyCommand = useCallback(async (): Promise<ClipboardResult> => {
+    const currentCommand = commandRef.current.trim();
+    if (!currentCommand) {
+      return 'empty';
+    }
+
+    try {
+      await navigator.clipboard.writeText(commandRef.current);
+      return 'success';
+    } catch (error) {
+      console.error('Failed to copy command:', error);
+      return 'error';
     }
   }, []);
 

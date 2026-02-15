@@ -5,6 +5,7 @@
 import axios from 'axios';
 import { ipcMain, type BrowserWindow } from 'electron';
 import { downloadService } from '../services/DownloadService';
+import { ffmpegService } from '../services/FFmpegService';
 import { terminalService } from '../services/TerminalService';
 
 /**
@@ -24,10 +25,14 @@ export function setupMiscHandlers(mainWindow: BrowserWindow | null) {
    * 下载 FFmpeg
    */
   ipcMain.on('download-ffmpeg', async (event, url: string) => {
-    await downloadService.downloadAndInstall(url, event);
+    const installed = await downloadService.downloadAndInstall(url, event);
+    if (!installed) {
+      mainWindow?.webContents.send('ffmpeg-status', false);
+      return;
+    }
 
-    // 下载完成后通知前端更新状态
-    mainWindow?.webContents.send('ffmpeg-status', true);
+    const exists = await ffmpegService.checkExists();
+    mainWindow?.webContents.send('ffmpeg-status', exists);
   });
 
   /**

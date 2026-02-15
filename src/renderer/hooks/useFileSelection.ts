@@ -10,6 +10,10 @@ interface DialogResult {
   filePaths: string[];
 }
 
+interface UseFileSelectionProps {
+  onError?: (message: string) => void;
+}
+
 /**
  * 获取文件所在目录（跨平台兼容）
  * 纯函数，提取到模块顶层避免每次渲染重新创建
@@ -22,7 +26,7 @@ function getFileDirectory(filePath: string): string {
   return lastSlash > 0 ? filePath.substring(0, lastSlash) : filePath;
 }
 
-export function useFileSelection() {
+export function useFileSelection({ onError }: UseFileSelectionProps = {}) {
   const [inputFile, setInputFile] = useState<string>('');
   const [outputFolder, setOutputFolder] = useState<string>('');
 
@@ -47,8 +51,9 @@ export function useFileSelection() {
       }
     } catch (error) {
       console.error('Failed to select input file:', error);
+      onError?.('Failed to select input file. Please try again.');
     }
-  }, [inputFile]);
+  }, [inputFile, onError]);
 
   /**
    * 选择输出文件夹
@@ -66,8 +71,9 @@ export function useFileSelection() {
       }
     } catch (error) {
       console.error('Failed to select output folder:', error);
+      onError?.('Failed to select output folder. Please try again.');
     }
-  }, [outputFolder]);
+  }, [outputFolder, onError]);
 
   /**
    * 清除输入文件

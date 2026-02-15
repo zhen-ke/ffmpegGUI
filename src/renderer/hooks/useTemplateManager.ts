@@ -22,6 +22,10 @@ export interface TransformedTemplate extends Omit<Template, 'name' | 'descriptio
   description: string;
 }
 
+interface UseTemplateManagerProps {
+  onError?: (message: string) => void;
+}
+
 /** 初始化自定义模板（懒加载） */
 function getInitialCustomTemplates(): Template[] {
   try {
@@ -37,7 +41,7 @@ function isCustomTemplate(template: Template | CommandTemplate): boolean {
   return 'isCustom' in template && !!template.isCustom;
 }
 
-export function useTemplateManager() {
+export function useTemplateManager({ onError }: UseTemplateManagerProps = {}) {
   const { language } = useLanguage();
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
   const [customTemplates, setCustomTemplates] = useState<Template[]>(
@@ -53,8 +57,9 @@ export function useTemplateManager() {
       setCustomTemplates(templateService.getCustomTemplates());
     } catch (error) {
       console.error('Failed to load custom templates:', error);
+      onError?.('Failed to load templates.');
     }
-  }, []);
+  }, [onError]);
 
   /**
    * 转换模板以支持多语言
@@ -108,9 +113,10 @@ export function useTemplateManager() {
         setDialogState({ isOpen: false });
       } catch (error) {
         console.error('Failed to save template:', error);
+        onError?.('Failed to save template. Please check your data.');
       }
     },
-    [dialogState, refreshTemplates],
+    [dialogState, onError, refreshTemplates],
   );
 
   /**
@@ -128,9 +134,10 @@ export function useTemplateManager() {
         );
       } catch (error) {
         console.error('Failed to delete template:', error);
+        onError?.('Failed to delete template.');
       }
     },
-    [refreshTemplates],
+    [onError, refreshTemplates],
   );
 
   /**

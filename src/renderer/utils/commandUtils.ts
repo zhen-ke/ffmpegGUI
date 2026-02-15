@@ -3,27 +3,101 @@
  * 提供命令解析、路径更新等功能
  */
 
+const TOKEN_REGEX =
+  /"[^"\\]*(?:\\.[^"\\]*)*"|'[^'\\]*(?:\\.[^'\\]*)*'|\S+/g;
+
+function tokenizeCommand(command: string): string[] {
+  return command.match(TOKEN_REGEX) ?? [];
+}
+
+function stripWrappingQuotes(value: string): string {
+  if (
+    (value.startsWith('"') && value.endsWith('"')) ||
+    (value.startsWith("'") && value.endsWith("'"))
+  ) {
+    return value.slice(1, -1);
+  }
+  return value;
+}
+
+function quotePath(pathValue: string): string {
+  return `"${pathValue.replace(/"/g, '\\"')}"`;
+}
+
+function getFileName(filePath: string): string {
+  const parts = filePath.split(/[\\/]/);
+  return parts[parts.length - 1] || filePath;
+}
+
+function isInputPlaceholderToken(token: string): boolean {
+  const normalized = getFileName(stripWrappingQuotes(token));
+  return /^input\d*(\.[a-zA-Z0-9]+)?$/i.test(normalized);
+}
+
+function buildOutputPath(outputFolder: string, outputFileName: string): string {
+  const normalizedFolder = outputFolder.replace(/[\\/]+$/, '');
+  if (!normalizedFolder) {
+    return outputFileName;
+  }
+  const separator =
+    normalizedFolder.includes('\\') && !normalizedFolder.includes('/')
+      ? '\\'
+      : '/';
+  return `${normalizedFolder}${separator}${outputFileName}`;
+}
+
+/**
+ * 统计命令中输入参数（-i）的数量
+ */
+export function countInputArguments(command: string): number {
+  const tokens = tokenizeCommand(command);
+  let count = 0;
+
+  for (let i = 0; i < tokens.length; i += 1) {
+    if (tokens[i] === '-i' && tokens[i + 1]) {
+      count += 1;
+      i += 1;
+    }
+  }
+
+  return count;
+}
+
 /**
  * 从命令中解析输出文件名
  * @param command FFmpeg 命令字符串
  * @returns 输出文件名，默认为 'output.mp4'
  */
 export function parseOutputFileName(command: string): string {
-  const parts = command.trim().split(/\s+/);
-  const lastPart = parts[parts.length - 1];
-
-  // 检查最后一个参数是否是有效的输出文件名
-  if (lastPart && !lastPart.startsWith('-') && !lastPart.includes('input')) {
-    // 提取文件名和扩展名
-    // 移除可能的引号
-    const cleanLastPart = lastPart.replace(/["']/g, '');
-    const match = cleanLastPart.match(/([^/\\]+\.[a-zA-Z0-9]+)$/);
-    if (match) {
-      return match[1];
-    }
+  const tokens = tokenizeCommand(command);
+  if (tokens.length === 0) {
+    return 'output.mp4';
   }
 
-  return 'output.mp4';
+  const lastIndex = tokens.length - 1;
+  const lastToken = tokens[lastIndex];
+  const previousToken = tokens[lastIndex - 1];
+
+  // 末尾是 `-i <path>` 时，说明尚未指定输出文件
+  if (previousToken === '-i') {
+    return 'output.mp4';
+  }
+
+  const cleanLastToken = stripWrappingQuotes(lastToken);
+  if (!cleanLastToken || cleanLastToken.startsWith('-')) {
+    return 'output.mp4';
+  }
+
+  const outputFileName = getFileName(cleanLastToken);
+  if (!/\.[a-zA-Z0-9]+$/.test(outputFileName)) {
+    return 'output.mp4';
+  }
+
+  if (isInputPlaceholderToken(lastToken)) {
+    return 'output.mp4';
+  }
+
+  return outputFileName;
 }
 
 /**
@@ -40,37 +114,60 @@ export function updateCommandPaths(
   inputFile?: string,
   outputFolder?: string,
 ): string {
-  let newCommand = command;
+  const tokens = tokenizeCommand(command);
 
   // 替换输入文件路径
   if (inputFile) {
-    // 匹配并替换 -i 后的输入文件
-    // 支持带引号的路径（包含空格）和不带引号的路径
-    newCommand = newCommand.replace(
-      /-i\s+(?:"[^"]*"|'[^']*'|[^\s]+)/g,
-      `-i "${inputFile}"`,
-    );
-    // 如果命令中没有 -i 参数，则在开头添加
-    if (!newCommand.includes('-i')) {
-      newCommand = `-i "${inputFile}" ${newCommand}`;
+    const inputIndexes: number[] = [];
+    for (let i = 0; i < tokens.length; i += 1) {
+      if (tokens[i] === '-i') {
+        inputIndexes.push(i);
+      }
+    }
+
+    if (inputIndexes.length === 0) {
+      tokens.unshift(quotePath(inputFile));
+      tokens.unshift('-i');
+    } else {
+      const preferredIndex = inputIndexes.find((index) =>
+        isInputPlaceholderToken(tokens[index + 1] ?? ''),
+      );
+      const targetIndex = preferredIndex ?? inputIndexes[0];
+
+      if (tokens[targetIndex + 1]) {
+        tokens[targetIndex + 1] = quotePath(inputFile);
+      } else {
+        tokens.splice(targetIndex + 1, 0, quotePath(inputFile));
+      }
     }
   }
 
   // 替换输出文件路径
   if (outputFolder) {
-    // 从原命令中提取输出文件名
-    const outputFileName = parseOutputFileName(newCommand);
-    const outputPath = `${outputFolder}/${outputFileName}`;
+    const outputFileName = parseOutputFileName(tokens.join(' '));
+    const outputPath = buildOutputPath(outputFolder, outputFileName);
+    const quotedOutputPath = quotePath(outputPath);
 
-    // 替换最后一个参数作为输出文件
-    // 匹配最后一个可能是文件路径的参数（支持引号）
-    newCommand = newCommand.replace(
-      /\s+(?:"[^"]*"|'[^']*'|[^\s]+)$/,
-      ` "${outputPath}"`,
-    );
+    if (tokens.length === 0) {
+      tokens.push(quotedOutputPath);
+    } else {
+      const lastIndex = tokens.length - 1;
+      const lastToken = tokens[lastIndex];
+      const previousToken = tokens[lastIndex - 1];
+
+      // 若命令末尾仍是选项或选项值（尚未给出输出文件），则追加输出路径
+      const shouldAppendOutput =
+        lastToken.startsWith('-') || (previousToken?.startsWith('-') ?? false);
+
+      if (shouldAppendOutput) {
+        tokens.push(quotedOutputPath);
+      } else {
+        tokens[lastIndex] = quotedOutputPath;
+      }
+    }
   }
 
-  return newCommand;
+  return tokens.join(' ').trim();
 }
 
 /**

@@ -32,6 +32,7 @@ export function useFFmpegState({
   onProgressUpdate,
 }: UseFFmpegStateProps) {
   const [isRunning, setIsRunning] = useState(false);
+  const [isStopping, setIsStopping] = useState(false);
   const [progress, setProgress] = useState(0);
   const [totalDuration, setTotalDuration] = useState(0);
 
@@ -71,6 +72,7 @@ export function useFFmpegState({
    */
   const handleStart = useCallback((command: string) => {
     setIsRunning(true);
+    setIsStopping(false);
     setProgress(0);
     setTotalDuration(0);
     window.electron.ipcRenderer.sendMessage('start-ffmpeg', command);
@@ -80,9 +82,14 @@ export function useFFmpegState({
    * 停止 FFmpeg
    */
   const handleStop = useCallback(() => {
+    if (!isRunning || isStopping) {
+      return;
+    }
+
+    setIsStopping(true);
+    onLogRef.current('info', 'Stopping FFmpeg process...');
     window.electron.ipcRenderer.sendMessage('stop-ffmpeg', null);
-    setIsRunning(false);
-  }, []);
+  }, [isRunning, isStopping]);
 
   /**
    * 设置 FFmpeg 事件监听器
@@ -123,6 +130,7 @@ export function useFFmpegState({
         const error = args[0] as string;
         onLogRef.current('error', `Error: ${error}`);
         setIsRunning(false);
+        setIsStopping(false);
       },
     );
 
@@ -133,6 +141,7 @@ export function useFFmpegState({
         const message = args[0] as string | undefined;
         onLogRef.current('info', message ?? 'FFmpeg process stopped.');
         setIsRunning(false);
+        setIsStopping(false);
       },
     );
 
@@ -142,6 +151,7 @@ export function useFFmpegState({
       () => {
         setProgress(100);
         setIsRunning(false);
+        setIsStopping(false);
         onLogRef.current('success', 'FFmpeg process completed successfully.');
       },
     );
@@ -159,6 +169,7 @@ export function useFFmpegState({
 
   return {
     isRunning,
+    isStopping,
     progress,
     totalDuration,
     handleStart,

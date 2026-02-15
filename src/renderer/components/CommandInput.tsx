@@ -5,6 +5,7 @@
 
 import { Terminal } from 'lucide-react';
 import { DragEvent } from 'react';
+import { useLanguage } from '../LanguageContext';
 
 interface CommandInputProps {
   command: string;
@@ -27,6 +28,8 @@ export function CommandInput({
   onOpenTerminal,
   placeholder = 'Enter FFmpeg command or drag & drop files here',
 }: CommandInputProps) {
+  const { t } = useLanguage();
+
   return (
     <div className="relative group">
       <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl opacity-0 group-hover:opacity-20 transition duration-500 blur" />
@@ -35,26 +38,32 @@ export function CommandInput({
         <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/30 rounded-t-lg">
           <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
             <Terminal size={14} />
-            <span className="font-mono">FFmpeg Command</span>
+            <span className="font-mono">{t('FFmpeg Command')}</span>
           </div>
           <div className="flex items-center gap-2">
             <button
+              type="button"
               onClick={onCopy}
+              aria-label={t('Copy')}
               className="text-xs px-2 py-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 transition-colors"
             >
-              Copy
+              {t('Copy')}
             </button>
             <button
+              type="button"
               onClick={onClear}
+              aria-label={t('Clear')}
               className="text-xs px-2 py-1 rounded hover:bg-red-100 text-gray-500 hover:text-red-500 dark:hover:bg-red-900/30 transition-colors"
             >
-              Clear
+              {t('Clear')}
             </button>
             <button
+              type="button"
               onClick={onOpenTerminal}
+              aria-label={t('Terminal')}
               className="text-xs px-2 py-1 rounded bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 transition-colors"
             >
-              Terminal
+              {t('Terminal')}
             </button>
           </div>
         </div>
