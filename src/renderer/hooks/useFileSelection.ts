@@ -10,68 +10,64 @@ interface DialogResult {
   filePaths: string[];
 }
 
+/**
+ * 获取文件所在目录（跨平台兼容）
+ * 纯函数，提取到模块顶层避免每次渲染重新创建
+ */
+function getFileDirectory(filePath: string): string {
+  const lastSlash = Math.max(
+    filePath.lastIndexOf('/'),
+    filePath.lastIndexOf('\\'),
+  );
+  return lastSlash > 0 ? filePath.substring(0, lastSlash) : filePath;
+}
+
 export function useFileSelection() {
   const [inputFile, setInputFile] = useState<string>('');
   const [outputFolder, setOutputFolder] = useState<string>('');
 
-  /**
-   * 选择输入文件
-   * @param onPathsUpdate 路径更新后的回调
-   */
-  const handleSelectInputFile = useCallback(
-    async (onPathsUpdate?: (input: string, output: string) => void) => {
-      try {
-        const result: DialogResult = await window.electron.ipcRenderer.invoke(
-          'select-input-file',
-          inputFile,
-        );
+  const handleSelectInputFile = useCallback(async () => {
+    try {
+      const result: DialogResult = await window.electron.ipcRenderer.invoke(
+        'select-input-file',
+        inputFile,
+      );
 
-        if (result && !result.canceled && result.filePaths.length > 0) {
-          const filePath = result.filePaths[0];
-          setInputFile(filePath);
+      if (result && !result.canceled && result.filePaths.length > 0) {
+        const filePath = result.filePaths[0];
+        setInputFile(filePath);
 
-          // 智能联动：如果还没选输出目录，自动设置为输入文件所在目录
-          if (!outputFolder) {
-            const fileDir = filePath.substring(0, filePath.lastIndexOf('/'));
-            setOutputFolder(fileDir);
-            onPathsUpdate?.(filePath, fileDir);
-          } else {
-            onPathsUpdate?.(filePath, outputFolder);
+        // 智能联动：如果还没选输出目录，自动设置为输入文件所在目录
+        setOutputFolder((prevOutputFolder) => {
+          if (prevOutputFolder) {
+            return prevOutputFolder;
           }
-        }
-      } catch (error) {
-        console.error('Failed to select input file:', error);
+          return getFileDirectory(filePath);
+        });
       }
-    },
-    [inputFile, outputFolder],
-  );
+    } catch (error) {
+      console.error('Failed to select input file:', error);
+    }
+  }, [inputFile]);
 
   /**
    * 选择输出文件夹
-   * @param onPathsUpdate 路径更新后的回调
    */
-  const handleSelectOutputFolder = useCallback(
-    async (onPathsUpdate?: (input: string, output: string) => void) => {
-      try {
-        const result: DialogResult = await window.electron.ipcRenderer.invoke(
-          'select-output-folder',
-          outputFolder,
-        );
+  const handleSelectOutputFolder = useCallback(async () => {
+    try {
+      const result: DialogResult = await window.electron.ipcRenderer.invoke(
+        'select-output-folder',
+        outputFolder,
+      );
 
-        if (result && !result.canceled && result.filePaths.length > 0) {
-          const folderPath = result.filePaths[0];
-          setOutputFolder(folderPath);
-
-          if (inputFile) {
-            onPathsUpdate?.(inputFile, folderPath);
-          }
-        }
-      } catch (error) {
-        console.error('Failed to select output folder:', error);
+      if (result && !result.canceled && result.filePaths.length > 0) {
+        const folderPath = result.filePaths[0];
+        setOutputFolder(folderPath);
       }
-    },
-    [inputFile, outputFolder],
-  );
+    } catch (error) {
+      console.error('Failed to select output folder:', error);
+    }
+  }, [outputFolder]);
 
   /**
    * 清除输入文件

@@ -4,7 +4,7 @@
  */
 
 import { Loader2, PlusCircle } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Dropdown from './components/Dropdown';
 import FFmpegDownloader from './components/FFmpegDownloader';
 import { TemplateDialog } from './components/TemplateDialog';
@@ -16,10 +16,7 @@ import { useCommandManager } from './hooks/useCommandManager';
 import { useFFmpegState } from './hooks/useFFmpegState';
 import { useFileSelection } from './hooks/useFileSelection';
 import { useLogs } from './hooks/useLogs';
-import {
-  TransformedTemplate,
-  useTemplateManager,
-} from './hooks/useTemplateManager';
+import { useTemplateManager } from './hooks/useTemplateManager';
 
 // 导入 UI 组件
 import { CommandInput } from './components/CommandInput';
@@ -60,7 +57,7 @@ function App() {
 
   // 模板管理
   const {
-    selectedTemplate,
+    selectedTemplateId,
     customTemplates,
     isTemplateDialogOpen,
     editingTemplate,
@@ -72,6 +69,21 @@ function App() {
     openNewTemplateDialog,
     closeTemplateDialog,
   } = useTemplateManager();
+
+  const templateOptions = useMemo(
+    () => [
+      ...customTemplates.map(transformTemplate),
+      ...commandTemplates.map(transformTemplate),
+    ],
+    [customTemplates, transformTemplate],
+  );
+
+  const selectedTemplate = useMemo(
+    () =>
+      templateOptions.find((template) => template.id === selectedTemplateId) ??
+      null,
+    [templateOptions, selectedTemplateId],
+  );
 
   // FFmpeg 状态管理（onProgressUpdate 现在是可选的，无需传递空函数）
   const { isRunning, progress, handleStart, handleStop } = useFFmpegState({
@@ -109,42 +121,55 @@ function App() {
   }, [language, setLanguage]);
 
   /**
-   * 处理文件选择并更新命令
+   * 使用 ref 追踪最新的 command 值，避免 useEffect 中的闭包陷阱
    */
-  const handleInputFileSelect = useCallback(async () => {
-    await handleSelectInputFile((input, output) => {
-      updateCommandWithPaths(command, input, output);
-    });
-  }, [handleSelectInputFile, command, updateCommandWithPaths]);
-
-  const handleOutputFolderSelect = useCallback(async () => {
-    await handleSelectOutputFolder((input, output) => {
-      updateCommandWithPaths(command, input, output);
-    });
-  }, [handleSelectOutputFolder, command, updateCommandWithPaths]);
+  const commandRef = useRef(command);
+  commandRef.current = command;
 
   /**
-   * 处理模板选择
+   * 追踪是否为首次渲染，避免初始化时错误触发路径更新
    */
-  const onTemplateChange = useCallback(
-    (template: TransformedTemplate) => {
-      handleTemplateSelect(template, (cmd) => {
-        // 如果已经有输入输出路径，自动更新命令
-        if (inputFile || outputFolder) {
-          updateCommandWithPaths(cmd);
-        } else {
-          updateCommand(cmd);
-        }
-      });
-    },
-    [
-      handleTemplateSelect,
-      inputFile,
-      outputFolder,
-      updateCommandWithPaths,
-      updateCommand,
-    ],
-  );
+  const isInitialRender = useRef(true);
+
+  /**
+   * 监听文件路径变化，自动更新命令中的路径
+   * 使用 ref 获取最新的 command 值，避免循环依赖
+   */
+  useEffect(() => {
+    // 跳过首次渲染，避免在没有 command 时错误触发
+    if (isInitialRender.current) {
+      isInitialRender.current = false;
+      return;
+    }
+
+    if (inputFile || outputFolder) {
+      // 使用 ref 获取最新 command，避免闭包捕获过时值
+      updateCommandWithPaths(commandRef.current);
+    }
+  }, [inputFile, outputFolder, updateCommandWithPaths]);
+
+  /**
+   * 监听模板选择变化，更新命令
+   * 模板变化时总是用模板的命令替换当前命令
+   */
+  const selectedTemplateCommand = selectedTemplate?.command;
+
+  useEffect(() => {
+    if (selectedTemplateCommand) {
+      const cmd = selectedTemplateCommand;
+      if (inputFile || outputFolder) {
+        updateCommandWithPaths(cmd);
+      } else {
+        updateCommand(cmd);
+      }
+    }
+  }, [
+    selectedTemplateCommand,
+    inputFile,
+    outputFolder,
+    updateCommand,
+    updateCommandWithPaths,
+  ]);
 
   /**
    * 处理 FFmpeg 启动
@@ -240,11 +265,8 @@ function App() {
             {/* 模板选择 */}
             <div className="lg:col-span-4">
               <Dropdown
-                options={[
-                  ...customTemplates.map(transformTemplate),
-                  ...commandTemplates.map(transformTemplate),
-                ]}
-                onChange={onTemplateChange}
+                options={templateOptions}
+                onChange={handleTemplateSelect}
                 value={selectedTemplate}
                 placeholder={t('Select a template')}
                 onEdit={handleEditTemplate}
@@ -257,7 +279,7 @@ function App() {
               <FileSelector
                 type="input"
                 value={inputFile}
-                onSelect={handleInputFileSelect}
+                onSelect={handleSelectInputFile}
                 onClear={clearInputFile}
                 label={t('Select Input File')}
               />
@@ -268,7 +290,7 @@ function App() {
               <FileSelector
                 type="output"
                 value={outputFolder}
-                onSelect={handleOutputFolderSelect}
+                onSelect={handleSelectOutputFolder}
                 onClear={clearOutputFolder}
                 label={t('Select Output Folder')}
               />
