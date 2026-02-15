@@ -12,7 +12,7 @@ interface DropdownProps {
   onChange: (option: DropdownOption) => void;
   value: DropdownOption | null;
   placeholder: string;
-  onEdit?: (template: Template) => void;
+  onEdit?: (template: { id: string }) => void;
   onDelete?: (templateId: string) => void;
 }
 
@@ -57,11 +57,11 @@ const Dropdown: React.FC<DropdownProps> = ({
           isOpen ? '' : 'hidden'
         }`}
       >
-        {options.map((option, index) => (
+        {options.map((option) => (
           <div
-            key={option.id || `template-${index}`}
+            key={option.id}
             className={`dark:hover:bg-background-textarea dark:text-text-lightDark p-2 hover:bg-gray-100 cursor-pointer ${
-              value && value.name === option.name
+              value && value.id === option.id
                 ? 'bg-blue-100 dark:bg-background-textarea'
                 : ''
             }`}
@@ -84,15 +84,7 @@ const Dropdown: React.FC<DropdownProps> = ({
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      const template: Template = {
-                        ...option,
-                        name: { en: option.name, zh: option.name },
-                        description: {
-                          en: option.description,
-                          zh: option.description,
-                        },
-                      };
-                      onEdit?.(template);
+                      onEdit?.({ id: option.id });
                     }}
                     className="p-1 hover:bg-blue-100 rounded"
                   >

@@ -1,15 +1,35 @@
+import { v5 as uuidv5 } from 'uuid';
+
 export interface LocalizedString {
   en: string;
   zh: string;
 }
 
 export interface CommandTemplate {
+  id: string;
   name: LocalizedString;
   command: string;
   description: LocalizedString;
 }
 
-export const commandTemplates: readonly CommandTemplate[] = [
+const BUILTIN_TEMPLATE_NAMESPACE = '4db6d566-f6fe-46f7-b97d-a17edb11336f';
+
+function createBuiltinTemplateId(
+  template: Omit<CommandTemplate, 'id'>,
+): string {
+  return `builtin-${uuidv5(
+    JSON.stringify({
+      nameEn: template.name.en,
+      nameZh: template.name.zh,
+      command: template.command,
+      descriptionEn: template.description.en,
+      descriptionZh: template.description.zh,
+    }),
+    BUILTIN_TEMPLATE_NAMESPACE,
+  )}`;
+}
+
+const baseCommandTemplates: readonly Omit<CommandTemplate, 'id'>[] = [
   {
     name: {
       en: 'Trim audio by timestamp (Copy stream)',
@@ -722,4 +742,10 @@ export const commandTemplates: readonly CommandTemplate[] = [
       zh: '创建画中画效果，叠加视频显示在右下角。',
     },
   },
-] as const;
+];
+
+export const commandTemplates: readonly CommandTemplate[] =
+  baseCommandTemplates.map((template) => ({
+    ...template,
+    id: createBuiltinTemplateId(template),
+  }));
