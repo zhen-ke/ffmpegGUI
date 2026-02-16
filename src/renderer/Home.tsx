@@ -4,7 +4,7 @@
  */
 
 import { Loader2, PlusCircle } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import Dropdown, { type DropdownOption } from './components/Dropdown';
 import FFmpegDownloader from './components/FFmpegDownloader';
 import { TemplateDialog } from './components/TemplateDialog';
@@ -13,6 +13,7 @@ import { useLanguage } from './LanguageContext';
 
 // 导入自定义 hooks
 import { useCommandManager } from './hooks/useCommandManager';
+import { useElectronIPC } from './hooks/useElectronIPC';
 import { useFFmpegState } from './hooks/useFFmpegState';
 import { useFileSelection } from './hooks/useFileSelection';
 import { useLogs } from './hooks/useLogs';
@@ -28,7 +29,7 @@ import { countInputArguments, updateCommandPaths } from './utils/commandUtils';
 
 function Home() {
   const { language, setLanguage, t } = useLanguage();
-  const [ffmpegExists, setFfmpegExists] = useState<boolean | null>(null);
+  const { ffmpegExists, openTerminal } = useElectronIPC();
 
   // ========== 使用自定义 Hooks ==========
 
@@ -113,47 +114,28 @@ function Home() {
   // ========== 组件逻辑 ==========
 
   /**
-   * 检查 FFmpeg 是否存在
-   */
-  const checkFFmpegStatus = useCallback(async () => {
-    try {
-      const exists = await window.electron.ipcRenderer.invoke(
-        'check-ffmpeg-status',
-      );
-      setFfmpegExists(exists);
-    } catch (error) {
-      console.error('Failed to check FFmpeg status:', error);
-      setFfmpegExists(false);
-      addLog('error', t('Failed to check FFmpeg status.'));
-    }
-  }, [addLog, t]);
-
-  /**
    * 打开终端
    */
   const handleOpenTerminal = useCallback(async () => {
-    try {
-      const opened = await window.electron.ipcRenderer.invoke('open-terminal');
-      if (!opened) {
-        addLog('error', t('Failed to open terminal.'));
-      }
-    } catch (error) {
-      console.error('Failed to open terminal:', error);
+    const opened = await openTerminal();
+    if (!opened) {
       addLog('error', t('Failed to open terminal.'));
     }
-  }, [addLog, t]);
+  }, [addLog, openTerminal, t]);
 
   /**
    * 切换语言
    */
   const toggleLanguage = useCallback(() => {
-    setLanguage(language === 'en' ? 'zh' : 'en');
-  }, [language, setLanguage]);
+    setLanguage((previousLanguage) => (previousLanguage === 'en' ? 'zh' : 'en'));
+  }, [setLanguage]);
 
   const inputFileRef = useRef(inputFile);
   const outputFolderRef = useRef(outputFolder);
+  const commandRef = useRef(command);
   inputFileRef.current = inputFile;
   outputFolderRef.current = outputFolder;
+  commandRef.current = command;
 
   const selectedTemplateIdRef = useRef<string | null>(selectedTemplateId);
   selectedTemplateIdRef.current = selectedTemplateId;
@@ -185,6 +167,32 @@ function Home() {
    */
   const selectedTemplateCommand = selectedTemplate?.command;
 
+  const applyTemplateCommand = useCallback(
+    (templateCommand: string) => {
+      const latestInputFile = inputFileRef.current;
+      const latestOutputFolder = outputFolderRef.current;
+
+      if (latestInputFile || latestOutputFolder) {
+        updateCommandWithPaths(
+          templateCommand,
+          latestInputFile,
+          latestOutputFolder,
+        );
+      } else {
+        updateCommand(templateCommand);
+      }
+    },
+    [updateCommand, updateCommandWithPaths],
+  );
+
+  useEffect(() => {
+    if (!selectedTemplateId || !selectedTemplateCommand) {
+      return;
+    }
+
+    applyTemplateCommand(selectedTemplateCommand);
+  }, [applyTemplateCommand, selectedTemplateCommand, selectedTemplateId]);
+
   const handleTemplateSelectWithConfirm = useCallback(
     (template: DropdownOption) => {
       if (template.id === selectedTemplateIdRef.current) {
@@ -202,7 +210,7 @@ function Home() {
             )
           : template.command;
 
-      const currentCommand = command.trim();
+      const currentCommand = commandRef.current.trim();
       if (currentCommand && currentCommand !== nextCommand.trim()) {
         const shouldReplace = window.confirm(
           t('Selecting a template will replace the current command. Continue?'),
@@ -214,25 +222,8 @@ function Home() {
 
       handleTemplateSelect(template);
     },
-    [command, handleTemplateSelect, t],
+    [handleTemplateSelect, t],
   );
-
-  useEffect(() => {
-    if (selectedTemplateCommand) {
-      const latestInputFile = inputFileRef.current;
-      const latestOutputFolder = outputFolderRef.current;
-
-      if (latestInputFile || latestOutputFolder) {
-        updateCommandWithPaths(
-          selectedTemplateCommand,
-          latestInputFile,
-          latestOutputFolder,
-        );
-      } else {
-        updateCommand(selectedTemplateCommand);
-      }
-    }
-  }, [selectedTemplateCommand, updateCommand, updateCommandWithPaths]);
 
   /**
    * 处理 FFmpeg 启动
@@ -288,27 +279,6 @@ function Home() {
     () => countInputArguments(command) > 1,
     [command],
   );
-
-  // ========== 生命周期 ==========
-
-  /**
-   * 初始化 - 检查 FFmpeg 状态
-   */
-  useEffect(() => {
-    checkFFmpegStatus();
-
-    const removeFFmpegStatusListener = window.electron.ipcRenderer.on(
-      'ffmpeg-status',
-      (...args: unknown[]) => {
-        const exists = args[0] as boolean;
-        setFfmpegExists(exists);
-      },
-    );
-
-    return () => {
-      removeFFmpegStatusListener();
-    };
-  }, [checkFFmpegStatus]);
 
   // ========== 渲染 ==========
 
