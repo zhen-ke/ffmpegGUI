@@ -1,6 +1,5 @@
 /**
- * FFmpeg 进程管理服务
- * 单例模式管理 FFmpeg 进程的生命周期
+ * FFmpeg 进程管理服务（单例）
  */
 
 import { ChildProcessWithoutNullStreams, spawn } from 'child_process';
@@ -9,49 +8,73 @@ import { dialog, Notification, shell } from 'electron';
 import fs from 'fs';
 import path from 'path';
 import {
-    containsUnsupportedShellOperators,
-    extractOutputFile,
-    parseFFmpegCommand,
+  containsUnsupportedShellOperators,
+  extractOutputFile,
+  parseFFmpegCommand,
 } from '../utils/commandParser';
 import { safeReply } from '../utils/ipcUtils';
 import { getFfmpegPath } from '../utils/pathUtils';
 
-/**
- * FFmpeg 进度数据
- */
+// ========== 类型 ==========
+
 interface FFmpegProgress {
   time: number;
 }
-
-/**
- * FFmpeg 时长数据
- */
 interface FFmpegDuration {
   duration: number;
 }
 
+type IpcChannel =
+  | 'ffmpeg-output'
+  | 'ffmpeg-progress'
+  | 'ffmpeg-duration'
+  | 'ffmpeg-complete'
+  | 'ffmpeg-cancelled'
+  | 'ffmpeg-error';
+
+// ========== 输出缓冲 ==========
+
 /**
- * FFmpeg 进程管理服务类
+ * 行缓冲器：将流式数据拆分为完整行，尾部不完整行留存。
  */
-class FFmpegService {
-  private process: ChildProcessWithoutNullStreams | null = null;
-
-  private isStopping: boolean = false;
-
-  private stopTimer: NodeJS.Timeout | null = null;
-
-  private stdoutBuffer: string = '';
-
-  private stderrBuffer: string = '';
-
-  private hasReportedDuration: boolean = false;
+class LineBuffer {
+  private buffer = '';
 
   /**
-   * 启动 FFmpeg 进程
-   *
-   * @param command FFmpeg 命令
-   * @param event IPC 事件对象
-   * @param mainWindow 主窗口引用
+   * 追加数据，返回所有完整行（不含换行符）。
+   */
+  push(chunk: string): string[] {
+    const lines = (this.buffer + chunk).split(/\r?\n|\r/);
+    this.buffer = lines.pop() ?? '';
+    return lines.filter((l) => l.trim() !== '');
+  }
+
+  /**
+   * 刷新残余内容，重置缓冲区。
+   */
+  flush(): string[] {
+    const trailing = this.buffer.trim();
+    this.buffer = '';
+    return trailing ? [trailing] : [];
+  }
+}
+
+// ========== FFmpegService ==========
+
+class FFmpegService {
+  private process: ChildProcessWithoutNullStreams | null = null;
+  private isStopping = false;
+  private stopTimer: NodeJS.Timeout | null = null;
+  private hasReportedDuration = false;
+
+  private readonly stdout = new LineBuffer();
+  private readonly stderr = new LineBuffer();
+
+  // ——— 公共 API ———
+
+  /**
+   * 验证并启动 FFmpeg 命令。
+   * 包含前置校验、文件覆盖确认、参数注入。
    */
   async start(
     command: string,
@@ -59,67 +82,61 @@ class FFmpegService {
     mainWindow: BrowserWindow | null,
   ): Promise<void> {
     if (this.process) {
-      safeReply(
+      return safeReply(
         event,
         'ffmpeg-error',
         'An FFmpeg process is already running. Please stop it first.',
       );
-      return;
     }
 
-    // 检查命令是否为空
-    const trimmedCommand = command?.trim();
-    if (!trimmedCommand) {
-      safeReply(
+    const trimmed = command?.trim();
+    if (!trimmed) {
+      return safeReply(
         event,
         'ffmpeg-error',
         'Empty command. Please provide a valid FFmpeg command.',
       );
-      return;
     }
 
     let args: string[];
     try {
-      args = parseFFmpegCommand(trimmedCommand);
+      args = parseFFmpegCommand(trimmed);
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : 'Failed to parse command.';
-      safeReply(event, 'ffmpeg-error', message);
-      return;
+      return safeReply(
+        event,
+        'ffmpeg-error',
+        error instanceof Error ? error.message : 'Failed to parse command.',
+      );
     }
 
     if (args.length === 0) {
-      safeReply(
+      return safeReply(
         event,
         'ffmpeg-error',
         'Command has no arguments. Please provide a valid FFmpeg command.',
       );
-      return;
     }
 
     if (containsUnsupportedShellOperators(args)) {
-      safeReply(
+      return safeReply(
         event,
         'ffmpeg-error',
         'Only a single FFmpeg command is supported. Remove shell operators such as &&, ||, |, or redirects.',
       );
-      return;
     }
 
     const outputFile = extractOutputFile(args);
 
-    // 检查文件是否存在
     if (outputFile && fs.existsSync(outputFile)) {
       if (!mainWindow) {
-        safeReply(
+        return safeReply(
           event,
           'ffmpeg-error',
           'Cannot confirm overwrite because the main window is unavailable.',
         );
-        return;
       }
 
-      const response = await dialog.showMessageBox(mainWindow, {
+      const { response } = await dialog.showMessageBox(mainWindow, {
         type: 'question',
         buttons: ['Yes', 'No'],
         defaultId: 1,
@@ -128,16 +145,14 @@ class FFmpegService {
         message: `File '${outputFile}' already exists. Overwrite?`,
       });
 
-      if (response.response === 1) {
-        safeReply(
+      if (response === 1) {
+        return safeReply(
           event,
           'ffmpeg-cancelled',
           'Operation cancelled: file was not overwritten.',
         );
-        return;
       }
 
-      // 用户选择 Yes，添加 -y 参数
       args = ['-y', ...args];
     }
 
@@ -145,132 +160,7 @@ class FFmpegService {
   }
 
   /**
-   * 运行 FFmpeg 命令
-   */
-  private run(args: string[], event: IpcMainEvent, outputFile?: string): void {
-    const ffmpegPath = getFfmpegPath();
-
-    this.isStopping = false;
-    this.hasReportedDuration = false;
-    this.stdoutBuffer = '';
-    this.stderrBuffer = '';
-    this.clearStopTimer();
-
-    this.process = spawn(ffmpegPath, args, {
-      shell: false,
-      windowsHide: true,
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
-
-    this.process.stdout.on('data', (data: Buffer) => {
-      this.appendOutput(data.toString(), 'stdout', event);
-    });
-
-    this.process.stderr.on('data', (data: Buffer) => {
-      const output = data.toString();
-      this.appendOutput(output, 'stderr', event);
-      this.parseDuration(output, event);
-      this.parseProgress(output, event);
-    });
-
-    this.process.on('close', (code) => {
-      this.flushBufferedOutput(event);
-      const stoppedByUser = this.isStopping;
-      console.log('FFmpeg process closed with code:', code, {
-        stoppedByUser,
-      });
-
-      this.resetState();
-
-      if (stoppedByUser) {
-        safeReply(event, 'ffmpeg-cancelled', 'FFmpeg process stopped.');
-        return;
-      }
-
-      if (code === 0) {
-        safeReply(event, 'ffmpeg-complete');
-        if (outputFile) {
-          this.showCompletionNotification(outputFile);
-        }
-        return;
-      }
-
-      safeReply(event, 'ffmpeg-error', `FFmpeg process exited with code ${code}`);
-    });
-
-    this.process.on('error', (err) => {
-      console.error('FFmpeg process error:', err);
-      safeReply(event, 'ffmpeg-error', `FFmpeg process error: ${err.message}`);
-      this.resetState();
-    });
-  }
-
-  /**
-   * 解析进度信息
-   */
-  private parseProgress(output: string, event: IpcMainEvent): void {
-    const matches = Array.from(
-      output.matchAll(/time=(\d{2}):(\d{2}):(\d{2}(?:\.\d+)?)/g),
-    );
-    if (matches.length > 0) {
-      const progressMatch = matches[matches.length - 1];
-      const [, hours, minutes, seconds] = progressMatch;
-      const currentTime = this.toSeconds(hours, minutes, seconds);
-      const progress: FFmpegProgress = { time: currentTime };
-      safeReply(event, 'ffmpeg-progress', progress);
-    }
-  }
-
-  /**
-   * 解析时长信息
-   */
-  private parseDuration(output: string, event: IpcMainEvent): void {
-    if (this.hasReportedDuration) {
-      return;
-    }
-
-    const durationMatch = output.match(
-      /Duration:\s*(\d{2}):(\d{2}):(\d{2}(?:\.\d+)?)/,
-    );
-    if (durationMatch) {
-      const [, hours, minutes, seconds] = durationMatch;
-      const totalDuration = this.toSeconds(hours, minutes, seconds);
-      const duration: FFmpegDuration = { duration: totalDuration };
-      safeReply(event, 'ffmpeg-duration', duration);
-      this.hasReportedDuration = true;
-    }
-  }
-
-  /**
-   * 显示完成通知
-   */
-  private showCompletionNotification(outputFile: string): void {
-    if (!Notification.isSupported()) {
-      return;
-    }
-
-    const resolvedOutput = path.resolve(outputFile);
-
-    const notification = new Notification({
-      title: 'FFmpeg Process Complete',
-      body: 'The FFmpeg process has completed successfully.',
-      silent: false,
-      sound: process.platform === 'darwin' ? 'Ping' : undefined,
-    });
-
-    notification.on('click', () => {
-      shell.showItemInFolder(resolvedOutput);
-    });
-
-    try {
-      notification.show();
-    } catch (error) {
-      console.warn('Failed to show completion notification:', error);
-    }
-  }
-
-  /**
-   * 停止 FFmpeg 进程
+   * 优雅停止：先写 'q' 到 stdin，5 秒后强杀。
    */
   stop(): boolean {
     if (!this.process) {
@@ -286,29 +176,23 @@ class FFmpegService {
       } else {
         this.process.kill('SIGTERM');
       }
-    } catch (error) {
-      console.warn('Failed to request graceful FFmpeg shutdown:', error);
+    } catch {
       this.process.kill('SIGTERM');
     }
 
-    this.clearStopTimer();
-    this.stopTimer = setTimeout(() => {
-      if (this.process) {
-        console.warn('FFmpeg did not exit gracefully, force killing...');
-        this.process.kill('SIGKILL');
-      }
-    }, 5000);
-
+    this.scheduleForceKill(5000);
     return true;
   }
 
   /**
-   * 检查 FFmpeg 是否存在
+   * 检查 FFmpeg 可执行文件是否存在且可执行。
    */
   async checkExists(): Promise<boolean> {
-    const ffmpegPath = getFfmpegPath();
     try {
-      await fs.promises.access(ffmpegPath, fs.constants.F_OK | fs.constants.X_OK);
+      await fs.promises.access(
+        getFfmpegPath(),
+        fs.constants.F_OK | fs.constants.X_OK,
+      );
       return true;
     } catch {
       return false;
@@ -316,71 +200,132 @@ class FFmpegService {
   }
 
   /**
-   * 清理进程
+   * 应用退出时强制清理。
    */
   cleanup(): void {
-    if (!this.process) {
-      return;
-    }
-
+    if (!this.process) return;
     this.isStopping = true;
-
     try {
       this.process.kill('SIGTERM');
-      this.clearStopTimer();
-      this.stopTimer = setTimeout(() => {
-        if (this.process) {
-          this.process.kill('SIGKILL');
-        }
-      }, 2000);
-      console.log('FFmpeg process cleanup requested');
+      this.scheduleForceKill(2000);
     } catch (error) {
       console.error('Error cleaning up FFmpeg process:', error);
       this.resetState();
     }
   }
 
-  private toSeconds(hours: string, minutes: string, seconds: string): number {
-    return (
-      parseInt(hours, 10) * 3600 +
-      parseInt(minutes, 10) * 60 +
-      parseFloat(seconds)
-    );
+  isRunning(): boolean {
+    return this.process !== null;
   }
 
-  private appendOutput(
-    chunk: string,
-    stream: 'stdout' | 'stderr',
-    event: IpcMainEvent,
-  ): void {
-    const currentBuffer = stream === 'stdout' ? this.stdoutBuffer : this.stderrBuffer;
-    const lines = (currentBuffer + chunk).split(/\r?\n|\r/);
-    const incompleteLine = lines.pop() ?? '';
+  // ——— 内部实现 ———
 
-    if (stream === 'stdout') {
-      this.stdoutBuffer = incompleteLine;
-    } else {
-      this.stderrBuffer = incompleteLine;
+  private run(args: string[], event: IpcMainEvent, outputFile?: string): void {
+    this.resetState();
+
+    this.process = spawn(getFfmpegPath(), args, {
+      shell: false,
+      windowsHide: true,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+
+    this.process.stdout.on('data', (data: Buffer) => {
+      this.flushLines(this.stdout.push(data.toString()), event);
+    });
+
+    this.process.stderr.on('data', (data: Buffer) => {
+      const chunk = data.toString();
+      this.flushLines(this.stderr.push(chunk), event);
+      this.tryParseDuration(chunk, event);
+      this.tryParseProgress(chunk, event);
+    });
+
+    this.process.on('close', (code) => {
+      // 刷新残余输出
+      this.flushLines(this.stdout.flush(), event);
+      this.flushLines(this.stderr.flush(), event);
+
+      const stoppedByUser = this.isStopping;
+      this.resetState();
+
+      if (stoppedByUser) {
+        return safeReply(event, 'ffmpeg-cancelled', 'FFmpeg process stopped.');
+      }
+      if (code === 0) {
+        safeReply(event, 'ffmpeg-complete');
+        if (outputFile) this.notifyCompletion(outputFile);
+        return;
+      }
+      safeReply(
+        event,
+        'ffmpeg-error',
+        `FFmpeg process exited with code ${code}`,
+      );
+    });
+
+    this.process.on('error', (err) => {
+      console.error('FFmpeg process error:', err);
+      safeReply(event, 'ffmpeg-error', `FFmpeg process error: ${err.message}`);
+      this.resetState();
+    });
+  }
+
+  private flushLines(lines: string[], event: IpcMainEvent): void {
+    for (const line of lines) {
+      safeReply(event, 'ffmpeg-output', line);
     }
-
-    lines.forEach((line) => {
-      const trimmedLine = line.trim();
-      if (trimmedLine) {
-        safeReply(event, 'ffmpeg-output', trimmedLine);
-      }
-    });
   }
 
-  private flushBufferedOutput(event: IpcMainEvent): void {
-    const trailingLines = [this.stdoutBuffer, this.stderrBuffer];
-    trailingLines.forEach((line) => {
-      const trimmedLine = line.trim();
-      if (trimmedLine) {
-        safeReply(event, 'ffmpeg-output', trimmedLine);
-      }
+  private tryParseProgress(output: string, event: IpcMainEvent): void {
+    const matches = [
+      ...output.matchAll(/time=(\d{2}):(\d{2}):(\d{2}(?:\.\d+)?)/g),
+    ];
+    if (matches.length === 0) return;
+    const [, h, m, s] = matches[matches.length - 1];
+    safeReply(event, 'ffmpeg-progress', {
+      time: this.toSeconds(h, m, s),
+    } satisfies FFmpegProgress);
+  }
+
+  private tryParseDuration(output: string, event: IpcMainEvent): void {
+    if (this.hasReportedDuration) return;
+    const match = output.match(/Duration:\s*(\d{2}):(\d{2}):(\d{2}(?:\.\d+)?)/);
+    if (!match) return;
+    const [, h, m, s] = match;
+    safeReply(event, 'ffmpeg-duration', {
+      duration: this.toSeconds(h, m, s),
+    } satisfies FFmpegDuration);
+    this.hasReportedDuration = true;
+  }
+
+  private notifyCompletion(outputFile: string): void {
+    if (!Notification.isSupported()) return;
+
+    const resolved = path.resolve(outputFile);
+    const notification = new Notification({
+      title: 'FFmpeg Process Complete',
+      body: 'The FFmpeg process has completed successfully.',
+      silent: false,
+      sound: process.platform === 'darwin' ? 'Ping' : undefined,
     });
-    this.stdoutBuffer = '';
-    this.stderrBuffer = '';
+
+    notification.on('click', () => shell.showItemInFolder(resolved));
+
+    try {
+      notification.show();
+    } catch (error) {
+      console.warn('Failed to show completion notification:', error);
+    }
+  }
+
+  private scheduleForceKill(delayMs: number): void {
+    this.clearStopTimer();
+    this.stopTimer = setTimeout(() => {
+      if (this.process) {
+        console.warn('FFmpeg did not exit gracefully, force killing...');
+        this.process.kill('SIGKILL');
+      }
+    }, delayMs);
   }
 
   private clearStopTimer(): void {
@@ -390,19 +335,18 @@ class FFmpegService {
     }
   }
 
+  private toSeconds(h: string, m: string, s: string): number {
+    return parseInt(h, 10) * 3600 + parseInt(m, 10) * 60 + parseFloat(s);
+  }
+
   private resetState(): void {
     this.clearStopTimer();
     this.process = null;
     this.isStopping = false;
-    this.stdoutBuffer = '';
-    this.stderrBuffer = '';
     this.hasReportedDuration = false;
-  }
-
-  isRunning(): boolean {
-    return this.process !== null;
+    this.stdout.flush();
+    this.stderr.flush();
   }
 }
 
-// 导出单例
 export const ffmpegService = new FFmpegService();

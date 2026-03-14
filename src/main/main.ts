@@ -1,14 +1,7 @@
 /* eslint global-require: off, no-console: off, promise/always-return: off */
 
 /**
- * Electron 主进程（重构版）
- * 使用模块化的服务和 IPC 处理器
- *
- * 主要改进：
- * - 使用服务类管理 FFmpeg、Terminal、Download
- * - 模块化的 IPC 处理器
- * - 统一的工具函数
- * - 更好的代码组织和可维护性
+ * Electron 主进程
  */
 
 import { app, BrowserWindow, nativeTheme, shell } from 'electron';
@@ -17,15 +10,10 @@ import { autoUpdater } from 'electron-updater';
 import path from 'path';
 import MenuBuilder from './menu';
 import { resolveHtmlPath } from './util';
-
-// 导入服务
 import { ffmpegService } from './services/FFmpegService';
 import { terminalService } from './services/TerminalService';
-
-// 导入 IPC 处理器注册函数
 import { setupAllIpcHandlers } from './ipc/setupIpcHandlers';
 
-// 全局类型声明
 declare global {
   namespace Electron {
     interface App {
@@ -34,30 +22,10 @@ declare global {
   }
 }
 
-/**
- * 自动更新类
- */
-class AppUpdater {
-  constructor() {
-    log.transports.file.level = 'info';
-    autoUpdater.logger = log;
-    autoUpdater.checkForUpdatesAndNotify();
-  }
-}
-
-let mainWindow: BrowserWindow | null = null;
-
-/**
- * 获取主窗口引用（用于 IPC handlers）
- */
-function getMainWindow(): BrowserWindow | null {
-  return mainWindow;
-}
+// ========== 环境配置 ==========
 
 const isDebug =
   process.env.NODE_ENV === 'development' || process.env.DEBUG_PROD === 'true';
-
-// ========== 开发环境配置 ==========
 
 if (process.env.NODE_ENV === 'production') {
   const sourceMapSupport = require('source-map-support');
@@ -68,55 +36,65 @@ if (isDebug) {
   require('electron-debug')();
 }
 
-const installExtensions = async () => {
+// ========== 自动更新 ==========
+
+function initAutoUpdater(): void {
+  log.transports.file.level = 'info';
+  autoUpdater.logger = log;
+  autoUpdater.checkForUpdatesAndNotify();
+}
+
+// ========== 窗口配置 ==========
+
+const WIN32_TITLEBAR = {
+  dark: { color: '#1E293B', symbolColor: '#ffffff', height: 35 },
+  light: { color: '#f0f4f8', symbolColor: '#4a90e2', height: 35 },
+};
+
+function getTitleBarOverlay() {
+  return nativeTheme.shouldUseDarkColors
+    ? WIN32_TITLEBAR.dark
+    : WIN32_TITLEBAR.light;
+}
+
+// ========== 开发工具 ==========
+
+async function installDevExtensions(): Promise<void> {
   const installer = require('electron-devtools-installer');
   const forceDownload = !!process.env.UPGRADE_EXTENSIONS;
-  const extensions = ['REACT_DEVELOPER_TOOLS'];
-
-  return installer
+  await installer
     .default(
-      extensions.map((name) => installer[name]),
+      ['REACT_DEVELOPER_TOOLS'].map((name) => installer[name]),
       forceDownload,
     )
     .catch(console.log);
-};
+}
 
 // ========== 窗口管理 ==========
 
-/**
- * 处理窗口关闭逻辑
- * macOS: 隐藏窗口而不是退出
- * Windows/Linux: 直接退出
- */
-function handleWindowClose() {
-  if (!mainWindow) return;
+let mainWindow: BrowserWindow | null = null;
 
-  mainWindow.on('close', (event) => {
-    // 只在 macOS 平台实现隐藏窗口的行为
-    if (process.platform === 'darwin' && !app.isQuitting) {
-      event.preventDefault();
-      mainWindow?.hide();
-      return false;
-    }
-    return true;
-  });
+function getMainWindow(): BrowserWindow | null {
+  return mainWindow;
 }
 
-/**
- * 创建主窗口
- */
-const createWindow = async () => {
-  if (isDebug) {
-    await installExtensions();
-  }
-
-  const RESOURCES_PATH = app.isPackaged
+function getAssetPath(...paths: string[]): string {
+  const base = app.isPackaged
     ? path.join(process.resourcesPath, 'assets')
     : path.join(__dirname, '../../assets');
+  return path.join(base, ...paths);
+}
 
-  const getAssetPath = (...paths: string[]): string => {
-    return path.join(RESOURCES_PATH, ...paths);
-  };
+function getPreloadPath(): string {
+  return app.isPackaged
+    ? path.join(__dirname, 'preload.js')
+    : path.join(__dirname, '../../.erb/dll/preload.js');
+}
+
+async function createWindow(): Promise<void> {
+  if (isDebug) {
+    await installDevExtensions();
+  }
 
   mainWindow = new BrowserWindow({
     show: false,
@@ -127,43 +105,30 @@ const createWindow = async () => {
     icon: getAssetPath('icon.png'),
     frame: true,
     titleBarStyle: 'hidden',
-    // 根据平台设置标题栏样式
     ...(process.platform === 'win32' && {
-      titleBarOverlay: {
-        color: nativeTheme.shouldUseDarkColors ? '#1E293B' : '#f0f4f8',
-        symbolColor: nativeTheme.shouldUseDarkColors ? '#ffffff' : '#4a90e2',
-        height: 35,
-      },
+      titleBarOverlay: getTitleBarOverlay(),
     }),
     trafficLightPosition: { x: 15, y: 10 },
     webPreferences: {
-      preload: app.isPackaged
-        ? path.join(__dirname, 'preload.js')
-        : path.join(__dirname, '../../.erb/dll/preload.js'),
+      preload: getPreloadPath(),
     },
   });
 
-  // 监听系统主题变化
-  nativeTheme.on('updated', () => {
-    if (process.platform === 'win32' && mainWindow?.setTitleBarOverlay) {
+  // 响应系统主题变化（仅 Windows）
+  if (process.platform === 'win32') {
+    nativeTheme.on('updated', () => {
       try {
-        mainWindow.setTitleBarOverlay({
-          color: nativeTheme.shouldUseDarkColors ? '#1E293B' : '#f0f4f8',
-          symbolColor: nativeTheme.shouldUseDarkColors ? '#ffffff' : '#4a90e2',
-          height: 35,
-        });
+        mainWindow?.setTitleBarOverlay?.(getTitleBarOverlay());
       } catch (error) {
-        console.warn('Failed to set title bar overlay:', error);
+        console.warn('Failed to update title bar overlay:', error);
       }
-    }
-  });
+    });
+  }
 
   mainWindow.loadURL(resolveHtmlPath('index.html'));
 
   mainWindow.on('ready-to-show', () => {
-    if (!mainWindow) {
-      throw new Error('"mainWindow" is not defined');
-    }
+    if (!mainWindow) throw new Error('"mainWindow" is not defined');
     if (process.env.START_MINIMIZED) {
       mainWindow.minimize();
     } else {
@@ -172,89 +137,54 @@ const createWindow = async () => {
     }
   });
 
+  // macOS：关闭按钮隐藏窗口而非退出
+  mainWindow.on('close', (event) => {
+    if (process.platform === 'darwin' && !app.isQuitting) {
+      event.preventDefault();
+      mainWindow?.hide();
+    }
+  });
+
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
 
-  const menuBuilder = new MenuBuilder(mainWindow);
-  menuBuilder.buildMenu();
-
-  // Open urls in the user's browser
-  mainWindow.webContents.setWindowOpenHandler((edata) => {
-    shell.openExternal(edata.url);
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    shell.openExternal(url);
     return { action: 'deny' };
   });
 
-  // Remove this if your app does not use auto updates
-  new AppUpdater();
-
-  // 添加处理窗口关闭的逻辑
-  handleWindowClose();
-};
+  new MenuBuilder(mainWindow).buildMenu();
+  initAutoUpdater();
+}
 
 // ========== 进程清理 ==========
 
-/**
- * 清理所有子进程
- */
-function cleanupProcesses() {
+function cleanupProcesses(): void {
   ffmpegService.cleanup();
   terminalService.cleanup();
 }
 
-// ========== 应用生命周期事件 ==========
+// ========== 单实例锁 ==========
 
-/**
- * 所有窗口关闭时
- */
-app.on('window-all-closed', () => {
-  cleanupProcesses();
-  if (process.platform !== 'darwin') {
-    app.quit();
-  }
-});
-
-/**
- * 退出前清理（仅 macOS）
- */
-if (process.platform === 'darwin') {
-  app.on('before-quit', () => {
-    console.log('Application is quitting...');
-    app.isQuitting = true;
-    cleanupProcesses();
-  });
-}
-
-/**
- * 单实例锁
- * 确保应用程序只有一个实例
- */
 const gotTheLock = app.requestSingleInstanceLock();
 
 if (!gotTheLock) {
   app.quit();
 } else {
-  app.on('second-instance', (_event, _commandLine, _workingDirectory) => {
-    // 当运行第二个实例时，重新激活主窗口
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) {
-        mainWindow.restore();
-      }
-      mainWindow.focus();
-      mainWindow.show();
-    }
+  app.on('second-instance', () => {
+    if (!mainWindow) return;
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
   });
 
-  // 应用准备就绪
   app
     .whenReady()
     .then(() => {
-      // IPC handlers 只注册一次，使用 getter 确保引用最新窗口
       setupAllIpcHandlers(getMainWindow);
-
       createWindow();
 
-      // 合并后的 activate handler：窗口存在则显示，不存在则重建
       app.on('activate', () => {
         if (mainWindow === null) {
           createWindow();
@@ -264,4 +194,20 @@ if (!gotTheLock) {
       });
     })
     .catch(console.log);
+}
+
+// ========== 应用生命周期 ==========
+
+app.on('window-all-closed', () => {
+  cleanupProcesses();
+  if (process.platform !== 'darwin') {
+    app.quit();
+  }
+});
+
+if (process.platform === 'darwin') {
+  app.on('before-quit', () => {
+    app.isQuitting = true;
+    cleanupProcesses();
+  });
 }
