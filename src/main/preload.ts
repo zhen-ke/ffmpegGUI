@@ -28,4 +28,30 @@ const electronHandler = {
 
 contextBridge.exposeInMainWorld('electron', electronHandler);
 
+const terminalAPI = {
+  start: (cols: number, rows: number) =>
+    ipcRenderer.invoke('pty-start', cols, rows),
+
+  sendInput: (data: string) => ipcRenderer.send('pty-input', data),
+
+  resize: (cols: number, rows: number) =>
+    ipcRenderer.send('pty-resize', cols, rows),
+
+  kill: () => ipcRenderer.invoke('pty-kill'),
+
+  onOutput: (cb: (data: string) => void) => {
+    const handler = (_event: unknown, data: string) => cb(data);
+    ipcRenderer.on('pty-output', handler);
+    return () => ipcRenderer.off('pty-output', handler);
+  },
+
+  onExit: (cb: (code: number) => void) => {
+    const handler = (_event: unknown, code: number) => cb(code);
+    ipcRenderer.on('pty-exit', handler);
+    return () => ipcRenderer.off('pty-exit', handler);
+  },
+};
+
+contextBridge.exposeInMainWorld('terminalAPI', terminalAPI);
+
 export type ElectronHandler = typeof electronHandler;

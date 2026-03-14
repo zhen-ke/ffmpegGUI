@@ -1,28 +1,18 @@
 /**
- * 终端和其他杂项 IPC 处理器
+ * 杂项 IPC 处理器
  */
 
 import axios from 'axios';
 import { ipcMain, type BrowserWindow } from 'electron';
 import { downloadService } from '../services/DownloadService';
 import { ffmpegService } from '../services/FFmpegService';
-import { terminalService } from '../services/TerminalService';
 
 /**
- * 注册终端和其他相关的 IPC 处理器
+ * 注册杂项相关的 IPC 处理器
  *
  * @param getMainWindow 获取主窗口的函数
  */
-export function setupMiscHandlers(
-  getMainWindow: () => BrowserWindow | null,
-) {
-  /**
-   * 打开终端
-   */
-  ipcMain.handle('open-terminal', async () => {
-    return await terminalService.open(getMainWindow());
-  });
-
+export function setupMiscHandlers(getMainWindow: () => BrowserWindow | null) {
   /**
    * 下载 FFmpeg
    */

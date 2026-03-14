@@ -4,10 +4,11 @@
  */
 
 import { Loader2, PlusCircle } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Dropdown, { type DropdownOption } from './components/Dropdown';
 import FFmpegDownloader from './components/FFmpegDownloader';
 import { TemplateDialog } from './components/TemplateDialog';
+import Terminal from './components/Terminal/Terminal';
 import { commandTemplates } from './constants/commandTemplates';
 import { useLanguage } from './LanguageContext';
 
@@ -29,7 +30,8 @@ import { countInputArguments, updateCommandPaths } from './utils/commandUtils';
 
 function Home() {
   const { language, setLanguage, t } = useLanguage();
-  const { ffmpegExists, openTerminal } = useElectronIPC();
+  const { ffmpegExists } = useElectronIPC();
+  const [showTerminal, setShowTerminal] = useState(false);
 
   // ========== 使用自定义 Hooks ==========
 
@@ -107,28 +109,26 @@ function Home() {
   );
 
   // FFmpeg 状态管理（onProgressUpdate 现在是可选的，无需传递空函数）
-  const { isRunning, isStopping, progress, handleStart, handleStop } = useFFmpegState({
-    onLog: addLog,
-  });
+  const { isRunning, isStopping, progress, handleStart, handleStop } =
+    useFFmpegState({
+      onLog: addLog,
+    });
 
   // ========== 组件逻辑 ==========
 
   /**
-   * 打开终端
+   * Toggle terminal visibility
    */
-  const handleOpenTerminal = useCallback(async () => {
-    const opened = await openTerminal();
-    if (!opened) {
-      addLog('error', t('Failed to open terminal.'));
-    }
-  }, [addLog, openTerminal, t]);
+  const handleOpenTerminal = useCallback(() => {
+    setShowTerminal((prev) => !prev);
+  }, []);
 
   /**
    * 切换语言
    */
   const toggleLanguage = useCallback(() => {
-    setLanguage((previousLanguage) => (previousLanguage === 'en' ? 'zh' : 'en'));
-  }, [setLanguage]);
+    setLanguage(language === 'en' ? 'zh' : 'en');
+  }, [language, setLanguage]);
 
   const inputFileRef = useRef(inputFile);
   const outputFolderRef = useRef(outputFolder);
@@ -299,8 +299,12 @@ function Home() {
   return (
     <div className="h-screen flex flex-col bg-gray-50 overflow-hidden dark:bg-[#0d1117] text-gray-900 dark:text-gray-100 font-sans">
       {/* ================= 上半部分：控制区 ================= */}
-      <div className="flex-shrink-0 bg-white dark:bg-[#161b22] border-b border-gray-200 dark:border-gray-800 shadow-sm z-20">
-        <div className="max-w-7xl mx-auto w-full px-4 py-8 space-y-4">
+      <div
+        className={`${showTerminal ? 'flex-1 flex flex-col min-h-0' : 'flex-shrink-0'} bg-white dark:bg-[#161b22] border-b border-gray-200 dark:border-gray-800 shadow-sm z-20`}
+      >
+        <div
+          className={`max-w-7xl mx-auto w-full px-4 ${showTerminal ? 'pt-8 pb-4 flex-1 flex flex-col min-h-0' : 'py-8'} space-y-4`}
+        >
           {/* Header Row */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -322,91 +326,159 @@ function Home() {
               <h1 className="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">
                 {t('FFmpeg Tool')}
               </h1>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1 p-1 bg-gray-100 dark:bg-gray-800 rounded-lg">
+                  <button
+                    type="button"
+                    onClick={() => showTerminal && handleOpenTerminal()}
+                    disabled={!showTerminal}
+                    className={`flex items-center px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200 ${
+                      !showTerminal
+                        ? 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-sm'
+                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 cursor-pointer'
+                    }`}
+                  >
+                    <svg
+                      className="w-3.5 h-3.5 mr-1.5"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M13 10V3L4 14h7v7l9-11h-7z"
+                      />
+                    </svg>
+                    FFmpeg
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => !showTerminal && handleOpenTerminal()}
+                    disabled={showTerminal}
+                    className={`flex items-center px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200 ${
+                      showTerminal
+                        ? 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-sm'
+                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 cursor-pointer'
+                    }`}
+                  >
+                    <svg
+                      className="w-3.5 h-3.5 mr-1.5"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                      />
+                    </svg>
+                    {t('Terminal')}
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={toggleLanguage}
+                  className="px-2.5 py-1.5 text-xs font-medium bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-md dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700 transition-colors"
+                >
+                  {language === 'en' ? '中文' : 'EN'}
+                </button>
+              </div>
+            </div>
+            {!showTerminal && (
               <button
                 type="button"
-                onClick={toggleLanguage}
-                className="px-2 py-0.5 text-xs font-medium bg-gray-100 hover:bg-gray-200 text-gray-600 rounded dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700 transition-colors"
+                onClick={openNewTemplateDialog}
+                className="flex items-center px-3 py-1.5 text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors dark:bg-blue-900/20 dark:text-blue-400 dark:hover:bg-blue-900/30"
               >
-                {language === 'en' ? '中文' : 'EN'}
+                <PlusCircle size={16} className="mr-1.5" />
+                {t('Add Template')}
               </button>
-            </div>
-            <button
-              type="button"
-              onClick={openNewTemplateDialog}
-              className="flex items-center px-3 py-1.5 text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors dark:bg-blue-900/20 dark:text-blue-400 dark:hover:bg-blue-900/30"
-            >
-              <PlusCircle size={16} className="mr-1.5" />
-              {t('Add Template')}
-            </button>
+            )}
           </div>
 
           {/* Dropdown & File Inputs Grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-            {/* 模板选择 */}
-            <div className="lg:col-span-4">
-              <Dropdown
-                options={templateOptions}
-                onChange={handleTemplateSelectWithConfirm}
-                value={selectedTemplate}
-                placeholder={t('Select a template')}
-                onEdit={handleEditTemplate}
-                onDelete={handleDeleteTemplateWithConfirm}
-              />
-            </div>
+          {!showTerminal && (
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+              {/* 模板选择 */}
+              <div className="lg:col-span-4">
+                <Dropdown
+                  options={templateOptions}
+                  onChange={handleTemplateSelectWithConfirm}
+                  value={selectedTemplate}
+                  placeholder={t('Select a template')}
+                  onEdit={handleEditTemplate}
+                  onDelete={handleDeleteTemplateWithConfirm}
+                />
+              </div>
 
-            {/* 输入文件 */}
-            <div className="lg:col-span-4">
-              <FileSelector
-                type="input"
-                value={inputFile}
-                onSelect={handleSelectInputFile}
-                onClear={clearInputFile}
-                label={t('Select Input File')}
-              />
-            </div>
+              {/* 输入文件 */}
+              <div className="lg:col-span-4">
+                <FileSelector
+                  type="input"
+                  value={inputFile}
+                  onSelect={handleSelectInputFile}
+                  onClear={clearInputFile}
+                  label={t('Select Input File')}
+                />
+              </div>
 
-            {/* 输出文件夹 */}
-            <div className="lg:col-span-4">
-              <FileSelector
-                type="output"
-                value={outputFolder}
-                onSelect={handleSelectOutputFolder}
-                onClear={clearOutputFolder}
-                label={t('Select Output Folder')}
-              />
+              {/* 输出文件夹 */}
+              <div className="lg:col-span-4">
+                <FileSelector
+                  type="output"
+                  value={outputFolder}
+                  onSelect={handleSelectOutputFolder}
+                  onClear={clearOutputFolder}
+                  label={t('Select Output Folder')}
+                />
+              </div>
             </div>
-          </div>
-
-          {/* Command Input Area */}
-          <CommandInput
-            command={command}
-            onCommandChange={updateCommand}
-            onDragOver={handleDragOver}
-            onDrop={handleDrop}
-            onCopy={handleCopyCommand}
-            onClear={clearCommand}
-            onOpenTerminal={handleOpenTerminal}
-            placeholder={t('Enter FFmpeg command or drag & drop files here')}
-          />
-          {hasMultipleInputs && (
-            <p className="text-xs text-amber-600 dark:text-amber-400">
-              {t(
-                'This command has multiple input files; only the first -i is auto-bound from the input selector.',
-              )}
-            </p>
           )}
 
-          {/* Main Action Buttons */}
-          <ControlButtons
-            isRunning={isRunning}
-            isStopping={isStopping}
-            canStart={command.trim().length > 0}
-            onStart={onStart}
-            onStop={handleStop}
-            startLabel={t('Start')}
-            stopLabel={t('Stop')}
-            stoppingLabel={t('Stopping...')}
-          />
+          {/* 模式切换：CommandInput+按钮 vs Terminal */}
+          {showTerminal ? (
+            <div className="flex-1 min-h-0 mt-2">
+              <Terminal />
+            </div>
+          ) : (
+            <>
+              {/* Command Input Area */}
+              <CommandInput
+                command={command}
+                onCommandChange={updateCommand}
+                onDragOver={handleDragOver}
+                onDrop={handleDrop}
+                onCopy={handleCopyCommand}
+                onClear={clearCommand}
+                placeholder={t(
+                  'Enter FFmpeg command or drag & drop files here',
+                )}
+              />
+              {hasMultipleInputs && (
+                <p className="text-xs text-amber-600 dark:text-amber-400">
+                  {t(
+                    'This command has multiple input files; only the first -i is auto-bound from the input selector.',
+                  )}
+                </p>
+              )}
+
+              {/* Main Action Buttons */}
+              <ControlButtons
+                isRunning={isRunning}
+                isStopping={isStopping}
+                canStart={command.trim().length > 0}
+                onStart={onStart}
+                onStop={handleStop}
+                startLabel={t('Start')}
+                stopLabel={t('Stop')}
+                stoppingLabel={t('Stopping...')}
+              />
+            </>
+          )}
         </div>
       </div>
 
@@ -419,23 +491,22 @@ function Home() {
       />
 
       {/* ================= 下半部分：Logs & Progress ================= */}
-      <div className="flex-1 flex flex-col min-h-0 relative bg-gray-100 dark:bg-black">
-        {/* Progress Bar */}
-        <ProgressBar
-          progress={progress}
-          isVisible={isRunning}
-        />
+      {!showTerminal && (
+        <div className="flex-1 flex flex-col min-h-0 relative bg-gray-100 dark:bg-black">
+          {/* Progress Bar */}
+          <ProgressBar progress={progress} isVisible={isRunning} />
 
-        {/* Logs Terminal */}
-        <LogDisplay
-          logs={logs}
-          logsRef={logsRef}
-          onClear={clearLogs}
-          onCopy={handleCopyLogs}
-          onScroll={handleLogsScroll}
-          isAutoScrollEnabled={isAutoScrollEnabled}
-        />
-      </div>
+          {/* Logs Terminal */}
+          <LogDisplay
+            logs={logs}
+            logsRef={logsRef}
+            onClear={clearLogs}
+            onCopy={handleCopyLogs}
+            onScroll={handleLogsScroll}
+            isAutoScrollEnabled={isAutoScrollEnabled}
+          />
+        </div>
+      )}
     </div>
   );
 }

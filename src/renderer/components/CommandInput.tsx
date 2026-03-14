@@ -14,7 +14,6 @@ interface CommandInputProps {
   onDrop: (e: DragEvent<HTMLTextAreaElement>) => void;
   onCopy: () => void;
   onClear: () => void;
-  onOpenTerminal: () => void;
   placeholder?: string;
 }
 
@@ -25,7 +24,6 @@ export function CommandInput({
   onDrop,
   onCopy,
   onClear,
-  onOpenTerminal,
   placeholder = 'Enter FFmpeg command or drag & drop files here',
 }: CommandInputProps) {
   const { t } = useLanguage();
@@ -56,14 +54,6 @@ export function CommandInput({
               className="text-xs px-2 py-1 rounded hover:bg-red-100 text-gray-500 hover:text-red-500 dark:hover:bg-red-900/30 transition-colors"
             >
               {t('Clear')}
-            </button>
-            <button
-              type="button"
-              onClick={onOpenTerminal}
-              aria-label={t('Terminal')}
-              className="text-xs px-2 py-1 rounded bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 transition-colors"
-            >
-              {t('Terminal')}
             </button>
           </div>
         </div>

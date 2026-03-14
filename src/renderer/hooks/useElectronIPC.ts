@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from 'react';
 import type { IpcChannel } from '../../shared/ipcChannels';
 
 const CHECK_FFMPEG_STATUS_CHANNEL: IpcChannel = 'check-ffmpeg-status';
-const OPEN_TERMINAL_CHANNEL: IpcChannel = 'open-terminal';
 const FFMPEG_STATUS_CHANNEL: IpcChannel = 'ffmpeg-status';
 
 export function useElectronIPC() {
@@ -22,21 +21,6 @@ export function useElectronIPC() {
     } catch (error) {
       console.error('Failed to check FFmpeg status:', error);
       setFfmpegExists(false);
-      return false;
-    }
-  }, []);
-
-  /**
-   * Open the terminal
-   */
-  const openTerminal = useCallback(async () => {
-    try {
-      const opened = await window.electron.ipcRenderer.invoke(
-        OPEN_TERMINAL_CHANNEL,
-      );
-      return opened === true;
-    } catch (error) {
-      console.error('Failed to open terminal:', error);
       return false;
     }
   }, []);
@@ -65,6 +49,5 @@ export function useElectronIPC() {
   return {
     ffmpegExists,
     checkFFmpegStatus,
-    openTerminal,
   };
 }

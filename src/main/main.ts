@@ -11,7 +11,7 @@ import path from 'path';
 import MenuBuilder from './menu';
 import { resolveHtmlPath } from './util';
 import { ffmpegService } from './services/FFmpegService';
-import { terminalService } from './services/TerminalService';
+import { ptyService } from './services/PtyService';
 import { setupAllIpcHandlers } from './ipc/setupIpcHandlers';
 
 declare global {
@@ -162,7 +162,7 @@ async function createWindow(): Promise<void> {
 
 function cleanupProcesses(): void {
   ffmpegService.cleanup();
-  terminalService.cleanup();
+  ptyService.cleanup();
 }
 
 // ========== 单实例锁 ==========

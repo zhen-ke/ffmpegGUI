@@ -35,7 +35,6 @@ export const IPC_CHANNELS = [
   'select-output-folder',
 
   // 其他
-  'open-terminal',
   'fetch-osx-experts-html',
 ] as const;
 

@@ -7,6 +7,7 @@ import type { BrowserWindow } from 'electron';
 import { setupFFmpegHandlers } from './ffmpegHandlers';
 import { setupFileHandlers } from './fileHandlers';
 import { setupMiscHandlers } from './miscHandlers';
+import { setupPtyHandlers } from './ptyHandlers';
 
 /**
  * 注册所有 IPC 处理器
@@ -14,10 +15,9 @@ import { setupMiscHandlers } from './miscHandlers';
  *
  * @param getMainWindow 获取主窗口的函数
  */
-export function setupAllIpcHandlers(
-  getMainWindow: () => BrowserWindow | null,
-) {
+export function setupAllIpcHandlers(getMainWindow: () => BrowserWindow | null) {
   setupFFmpegHandlers(getMainWindow);
   setupFileHandlers(getMainWindow);
   setupMiscHandlers(getMainWindow);
+  setupPtyHandlers(getMainWindow);
 }
