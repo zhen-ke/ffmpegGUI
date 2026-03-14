@@ -3,10 +3,15 @@
 @tailwind utilities;
 
 @layer base {
+  * {
+    @apply border-gray-200;
+  }
+
   body {
-    @apply bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100;
-    font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC',
-      'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    @apply bg-white text-gray-900;
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display',
+      'SF Pro Text', 'PingFang SC', 'Microsoft YaHei', 'Helvetica Neue',
+      Helvetica, Arial, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
@@ -40,22 +45,45 @@ select,
   @apply outline-none ring-2 ring-blue-500 ring-offset-2 ring-offset-white;
 }
 
-.dark :focus-visible {
-  @apply ring-offset-gray-900;
-}
-
-/* 定义一些通用的暗模式组件样式 */
+/* 定义一些通用的组件样式 */
 @layer components {
   .card {
-    @apply bg-white dark:bg-gray-800 rounded-lg shadow-md;
+    @apply bg-white rounded-2xl shadow-md border border-gray-100;
   }
 
   .btn {
-    @apply px-4 py-2 rounded-md bg-primary hover:bg-primary-dark text-white transition-colors;
+    @apply px-5 py-2.5 rounded-xl bg-primary hover:bg-primary-dark text-white transition-all duration-200 font-medium shadow-md hover:shadow-lg;
   }
 
   .input {
-    @apply bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700
-           rounded-md px-3 py-2 focus:ring-2 focus:ring-primary focus:ring-opacity-50;
+    @apply bg-white border-2 border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all;
   }
+}
+
+/* 自定义滚动条样式 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-gray-300 rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-gray-400;
+}
+
+/* 平滑滚动 */
+html {
+  scroll-behavior: smooth;
+}
+
+/* 选中文字样式 */
+::selection {
+  @apply bg-blue-500/20 text-blue-700;
 }

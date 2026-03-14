@@ -285,8 +285,14 @@ function Home() {
   // 加载状态：FFmpeg 状态检查中
   if (ffmpegExists === null) {
     return (
-      <div className="h-screen flex items-center justify-center bg-gray-50 dark:bg-[#0d1117]">
-        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+      <div className="h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-white to-gray-100">
+        <div className="flex flex-col items-center gap-4">
+          <div className="relative">
+            <div className="w-16 h-16 border-4 border-blue-100 rounded-full"></div>
+            <Loader2 className="absolute inset-0 w-16 h-16 animate-spin text-blue-600" />
+          </div>
+          <p className="text-gray-500 font-medium">Loading...</p>
+        </div>
       </div>
     );
   }
@@ -297,20 +303,20 @@ function Home() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-gray-50 overflow-hidden dark:bg-[#0d1117] text-gray-900 dark:text-gray-100 font-sans">
+    <div className="h-screen flex flex-col bg-gradient-to-br from-gray-50 via-white to-gray-100 overflow-hidden dark:hidden">
       {/* ================= 上半部分：控制区 ================= */}
       <div
-        className={`${showTerminal ? 'flex-1 flex flex-col min-h-0' : 'flex-shrink-0'} bg-white dark:bg-[#161b22] border-b border-gray-200 dark:border-gray-800 shadow-sm z-20`}
+        className={`${showTerminal ? 'flex-1 flex flex-col min-h-0' : 'flex-shrink-0'} bg-white/80 backdrop-blur-sm border-b border-gray-200/60 shadow-sm z-20`}
       >
         <div
-          className={`max-w-7xl mx-auto w-full px-4 ${showTerminal ? 'pt-8 pb-4 flex-1 flex flex-col min-h-0' : 'py-8'} space-y-4`}
+          className={`max-w-7xl mx-auto w-full px-6 ${showTerminal ? 'pt-8 pb-4 flex-1 flex flex-col min-h-0' : 'py-6'} space-y-5`}
         >
           {/* Header Row */}
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-600 rounded-lg shadow-lg shadow-blue-600/20">
+            <div className="flex items-center gap-4">
+              <div className="p-2.5 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-lg shadow-blue-500/25">
                 <svg
-                  className="w-6 h-6 text-white"
+                  className="w-7 h-7 text-white"
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
@@ -318,28 +324,33 @@ function Home() {
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    strokeWidth={2.5}
+                    strokeWidth={2}
                     d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
                   />
                 </svg>
               </div>
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">
-                {t('FFmpeg Tool')}
-              </h1>
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-1 p-1 bg-gray-100 dark:bg-gray-800 rounded-lg">
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">
+                  {t('FFmpeg Tool')}
+                </h1>
+                <p className="text-xs text-gray-500 -mt-0.5">
+                  {t('Video & Audio Processing')}
+                </p>
+              </div>
+              <div className="flex items-center gap-2 ml-4">
+                <div className="flex items-center gap-1 p-1 bg-gray-100 rounded-xl border border-gray-200/60">
                   <button
                     type="button"
                     onClick={() => showTerminal && handleOpenTerminal()}
                     disabled={!showTerminal}
-                    className={`flex items-center px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200 ${
+                    className={`flex items-center px-4 py-1.5 text-sm font-medium rounded-lg transition-all duration-200 ${
                       !showTerminal
-                        ? 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-sm'
-                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 cursor-pointer'
+                        ? 'bg-white text-blue-600 shadow-sm ring-1 ring-blue-500/20'
+                        : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'
                     }`}
                   >
                     <svg
-                      className="w-3.5 h-3.5 mr-1.5"
+                      className="w-4 h-4 mr-1.5"
                       fill="none"
                       viewBox="0 0 24 24"
                       stroke="currentColor"
@@ -357,14 +368,14 @@ function Home() {
                     type="button"
                     onClick={() => !showTerminal && handleOpenTerminal()}
                     disabled={showTerminal}
-                    className={`flex items-center px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200 ${
+                    className={`flex items-center px-4 py-1.5 text-sm font-medium rounded-lg transition-all duration-200 ${
                       showTerminal
-                        ? 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-sm'
-                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 cursor-pointer'
+                        ? 'bg-white text-blue-600 shadow-sm ring-1 ring-blue-500/20'
+                        : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'
                     }`}
                   >
                     <svg
-                      className="w-3.5 h-3.5 mr-1.5"
+                      className="w-4 h-4 mr-1.5"
                       fill="none"
                       viewBox="0 0 24 24"
                       stroke="currentColor"
@@ -382,7 +393,7 @@ function Home() {
                 <button
                   type="button"
                   onClick={toggleLanguage}
-                  className="px-2.5 py-1.5 text-xs font-medium bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-md dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700 transition-colors"
+                  className="px-3 py-1.5 text-sm font-medium bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg border border-gray-200/60 transition-all hover:shadow-sm"
                 >
                   {language === 'en' ? '中文' : 'EN'}
                 </button>
@@ -392,9 +403,9 @@ function Home() {
               <button
                 type="button"
                 onClick={openNewTemplateDialog}
-                className="flex items-center px-3 py-1.5 text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors dark:bg-blue-900/20 dark:text-blue-400 dark:hover:bg-blue-900/30"
+                className="flex items-center px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-xl transition-all duration-200 border border-blue-200/60 hover:shadow-sm"
               >
-                <PlusCircle size={16} className="mr-1.5" />
+                <PlusCircle size={18} className="mr-2" />
                 {t('Add Template')}
               </button>
             )}
@@ -402,9 +413,12 @@ function Home() {
 
           {/* Dropdown & File Inputs Grid */}
           {!showTerminal && (
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
               {/* 模板选择 */}
               <div className="lg:col-span-4">
+                <label className="block text-xs font-medium text-gray-500 mb-1.5 ml-0.5">
+                  Template
+                </label>
                 <Dropdown
                   options={templateOptions}
                   onChange={handleTemplateSelectWithConfirm}
@@ -417,6 +431,9 @@ function Home() {
 
               {/* 输入文件 */}
               <div className="lg:col-span-4">
+                <label className="block text-xs font-medium text-gray-500 mb-1.5 ml-0.5">
+                  {t('Input File')}
+                </label>
                 <FileSelector
                   type="input"
                   value={inputFile}
@@ -428,6 +445,9 @@ function Home() {
 
               {/* 输出文件夹 */}
               <div className="lg:col-span-4">
+                <label className="block text-xs font-medium text-gray-500 mb-1.5 ml-0.5">
+                  {t('Output Folder')}
+                </label>
                 <FileSelector
                   type="output"
                   value={outputFolder}
@@ -459,7 +479,7 @@ function Home() {
                 )}
               />
               {hasMultipleInputs && (
-                <p className="text-xs text-amber-600 dark:text-amber-400">
+                <p className="text-xs text-amber-600 dark:text-amber-400 ml-1">
                   {t(
                     'This command has multiple input files; only the first -i is auto-bound from the input selector.',
                   )}
@@ -492,7 +512,7 @@ function Home() {
 
       {/* ================= 下半部分：Logs & Progress ================= */}
       {!showTerminal && (
-        <div className="flex-1 flex flex-col min-h-0 relative bg-gray-100 dark:bg-black">
+        <div className="flex-1 flex flex-col min-h-0 relative bg-gradient-to-b from-gray-100 to-gray-200/50">
           {/* Progress Bar */}
           <ProgressBar progress={progress} isVisible={isRunning} />
 
