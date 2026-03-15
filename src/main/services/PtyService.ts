@@ -50,7 +50,7 @@ class PtyService {
     const shell = DEFAULT_SHELL[process.platform] ?? FALLBACK_SHELL;
     const cwd = path.dirname(getFfmpegPath());
 
-    const proc = pty.spawn(shell, [], {
+    const proc = pty.spawn(shell, ['--login'], {
       name: 'xterm-256color',
       cols,
       rows,
@@ -136,8 +136,18 @@ class PtyService {
     for (const [k, v] of Object.entries(process.env)) {
       if (v !== undefined) base[k] = v;
     }
-    // 将 ffmpeg 所在目录注入 PATH 首位，确保 shell 能直接调用
-    base.PATH = `${cwd}${path.delimiter}${base.PATH ?? ''}`;
+
+    // 补全 GUI 启动时缺失的常见工具路径
+    const extraPaths = [
+      '/usr/local/bin',
+      '/usr/bin',
+      '/bin',
+      '/opt/homebrew/bin',         // Apple Silicon Homebrew
+      '/opt/homebrew/sbin',
+      `${process.env.HOME}/.fnm`,  // fnm
+    ].join(':');
+
+    base.PATH = `${cwd}:${extraPaths}:${base.PATH ?? ''}`;
     return base;
   }
 
