@@ -1,6 +1,5 @@
 /**
- * 文件选择器组件
- * 可复用的文件/文件夹选择按钮
+ * 文件选择器组件（重构版）
  */
 
 import { FolderOpen, Upload, X } from 'lucide-react';
@@ -23,68 +22,72 @@ export function FileSelector({
 }: FileSelectorProps) {
   const { t } = useLanguage();
 
-  const colorScheme =
-    type === 'input'
-      ? {
-          filled:
-            'bg-gradient-to-r from-primary-50 to-primary-100/50 dark:from-primary-900/30 dark:to-primary-800/20 border-primary-200 dark:border-primary-700/50 text-primary-800 dark:text-primary-300',
-          empty:
-            'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 hover:border-primary-300 dark:hover:border-primary-700 hover:bg-primary-50/30 dark:hover:bg-primary-900/20 text-slate-600 dark:text-slate-300',
-          hover: 'hover:bg-primary-100/50 dark:hover:bg-primary-900/30',
-          icon: 'text-primary-500 dark:text-primary-400',
-        }
-      : {
-          filled:
-            'bg-gradient-to-r from-amber-50 to-amber-100/50 dark:from-amber-900/30 dark:to-amber-800/20 border-amber-200 dark:border-amber-700/50 text-amber-800 dark:text-amber-300',
-          empty:
-            'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 hover:border-amber-300 dark:hover:border-amber-700 hover:bg-amber-50/30 dark:hover:bg-amber-900/20 text-slate-600 dark:text-slate-300',
-          hover: 'hover:bg-amber-100/50 dark:hover:bg-amber-900/30',
-          icon: 'text-amber-500 dark:text-amber-400',
-        };
+  const isInput = type === 'input';
 
-  const icon =
-    type === 'input' ? (
-      <Upload className={`w-5 h-5 ${colorScheme.icon}`} />
-    ) : (
-      <FolderOpen className={`w-5 h-5 ${colorScheme.icon}`} />
-    );
-
-  const displayValue = value ? value.split(/[/\\]/).pop() : label;
+  // 只显示文件名或文件夹末段
+  const displayValue = value ? value.split(/[/\\]/).pop() ?? value : null;
 
   return (
-    <div className="relative group h-full">
+    <div className="relative h-10">
+      {/* 主按钮 */}
       <button
         type="button"
         onClick={onSelect}
         aria-label={label}
-        className={`w-full h-full flex items-center justify-between px-4 py-1.5 text-sm border-2 rounded-xl transition-all duration-200 ${
-          value ? colorScheme.filled : colorScheme.empty
-        } ${!value && 'group-hover:shadow-md'}`}
+        className={`
+          w-full h-full flex items-center gap-2.5 px-3 rounded-xl
+          border-2 text-sm font-medium
+          transition-all duration-200 outline-none
+          focus-visible:ring-2 focus-visible:ring-offset-2
+          ${value
+            ? isInput
+              ? 'bg-primary-50 dark:bg-primary-900/20 border-primary-200 dark:border-primary-700/50 text-primary-800 dark:text-primary-300 hover:bg-primary-100 dark:hover:bg-primary-900/30 focus-visible:ring-primary-500'
+              : 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-700/50 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/30 focus-visible:ring-amber-500'
+            : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 text-slate-400 dark:text-slate-500 hover:border-slate-300 dark:hover:border-slate-500 hover:text-slate-600 dark:hover:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700/50 focus-visible:ring-primary-500'
+          }
+        `}
       >
-        <div className="flex items-center gap-3 flex-1 min-w-0">
-          <div
-            className={`p-1.5 rounded-lg ${value ? 'bg-white/50 dark:bg-slate-900/30' : 'bg-slate-50 dark:bg-slate-700/50'}`}
-          >
-            {icon}
-          </div>
-          <span className="truncate font-medium" title={value || label}>
-            {displayValue}
-          </span>
-        </div>
-        {!value && (
-          <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-            Browse
-          </span>
-        )}
+        {/* 图标 */}
+        {isInput
+          ? <Upload
+              size={15}
+              className={`flex-shrink-0 ${value ? 'text-primary-500 dark:text-primary-400' : 'text-slate-400 dark:text-slate-500'}`}
+            />
+          : <FolderOpen
+              size={15}
+              className={`flex-shrink-0 ${value ? 'text-amber-500 dark:text-amber-400' : 'text-slate-400 dark:text-slate-500'}`}
+            />
+        }
+
+        {/* 文字 — 右侧预留 20px 给清除按钮，始终不被遮挡 */}
+        <span
+          className="flex-1 min-w-0 truncate text-left pr-5"
+          title={value || label}
+        >
+          {displayValue ?? label}
+        </span>
       </button>
+
+      {/* 清除按钮 — 仅填充态显示，absolute 不影响布局 */}
       {value && (
         <button
           type="button"
-          onClick={onClear}
+          onClick={(e) => {
+            e.stopPropagation();
+            onClear();
+          }}
           aria-label={`Clear ${label}`}
-          className={`absolute right-3 top-1/2 -translate-y-1/2 p-1.5 ${colorScheme.hover} rounded-lg cursor-pointer transition-all duration-200 hover:scale-110 hover:shadow-md`}
+          className={`
+            absolute right-2 top-1/2 -translate-y-1/2
+            w-5 h-5 flex items-center justify-center rounded-md
+            transition-all duration-150
+            ${isInput
+              ? 'text-primary-400 dark:text-primary-500 hover:text-primary-600 dark:hover:text-primary-300 hover:bg-primary-100 dark:hover:bg-primary-900/40'
+              : 'text-amber-400 dark:text-amber-500 hover:text-amber-600 dark:hover:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/40'
+            }
+          `}
         >
-          <X className="w-4 h-4" />
+          <X size={13} strokeWidth={2.5} />
         </button>
       )}
     </div>
