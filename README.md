@@ -34,6 +34,10 @@ npm run start
 # 打包项目
 npm run package
 ```
+#### 启动报错时（原生模块架构不匹配）
+```bash
+npm run rebuild:pty
+```
 
 ### 赞助我
 
