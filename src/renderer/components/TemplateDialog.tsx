@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLanguage } from '../LanguageContext';
 import { Template } from '../types/template';
+import { X, FileCode, Sparkles } from 'lucide-react';
 
 interface TemplateDialogProps {
   isOpen: boolean;
@@ -25,7 +26,6 @@ export const TemplateDialog: React.FC<TemplateDialogProps> = ({
   );
   const [validationError, setValidationError] = useState('');
 
-  // 重置表单当初始模板改变时
   useEffect(() => {
     setTemplate(
       initialTemplate || {
@@ -78,15 +78,51 @@ export const TemplateDialog: React.FC<TemplateDialogProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 dark:bg-background-dialog backdrop-blur-sm">
-      <div className="bg-white rounded-lg p-5 w-full max-w-2xl dark:bg-background-textarea">
-        <h2 className="text-lg font-bold mb-3 dark:text-text-dark">
-          {initialTemplate ? t('Edit Template') : t('Add New Template')}
-        </h2>
-        <form onSubmit={handleSubmit} className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      {/* Backdrop */}
+      <div
+        className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-fade-in"
+        onClick={onClose}
+      />
+
+      {/* Dialog */}
+      <div className="relative w-full max-w-2xl mx-4 bg-white dark:bg-slate-800 rounded-2xl shadow-2xl dark:shadow-slate-900/50 border border-slate-200 dark:border-slate-700 animate-scale-in overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-gradient-to-br from-primary-500 to-primary-600 rounded-xl shadow-lg shadow-primary-500/25">
+              {initialTemplate ? (
+                <FileCode size={20} className="text-white" />
+              ) : (
+                <Sparkles size={20} className="text-white" />
+              )}
+            </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-text-dark">
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+                {initialTemplate ? t('Edit Template') : t('Add New Template')}
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {initialTemplate
+                  ? t('Modify existing template')
+                  : t('Create a new custom template')}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 dark:hover:text-slate-300 transition-all"
+          >
+            <X size={20} />
+          </button>
+        </div>
+
+        {/* Form */}
+        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+          {/* Name Fields */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
                 {t('Name (English)')}
               </label>
               <input
@@ -99,12 +135,13 @@ export const TemplateDialog: React.FC<TemplateDialogProps> = ({
                   }))
                 }
                 onInput={() => setValidationError('')}
-                className="dark:bg-background-textarea dark:border-border-dark mt-1 block w-full px-3 py-1.5 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:text-text-lightDark"
+                placeholder="e.g., Convert to MP4"
+                className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-xl text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-text-dark">
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
                 {t('Name (Chinese)')}
               </label>
               <input
@@ -117,12 +154,15 @@ export const TemplateDialog: React.FC<TemplateDialogProps> = ({
                   }))
                 }
                 onInput={() => setValidationError('')}
-                className="dark:bg-background-textarea dark:border-border-dark mt-1 block w-full px-3 py-1.5 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:text-text-lightDark"
+                placeholder="例如：转换为 MP4"
+                className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-xl text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all"
               />
             </div>
           </div>
+
+          {/* Command Field */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-text-dark">
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
               {t('Command')}
             </label>
             <textarea
@@ -135,14 +175,16 @@ export const TemplateDialog: React.FC<TemplateDialogProps> = ({
               }
               onInput={() => setValidationError('')}
               spellCheck="false"
-              className="dark:bg-background-textarea dark:border-border-dark mt-1 block w-full px-3 py-1.5 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono resize-none text-sm dark:text-text-lightDark"
-              rows={4}
+              placeholder="ffmpeg -i input.mp4 -c:v libx264 -c:a aac output.mp4"
+              className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-xl text-sm font-mono text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all resize-none"
+              rows={3}
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          {/* Description Fields */}
+          <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-text-dark">
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
                 {t('Description (English)')}
               </label>
               <textarea
@@ -155,12 +197,13 @@ export const TemplateDialog: React.FC<TemplateDialogProps> = ({
                 }
                 onInput={() => setValidationError('')}
                 spellCheck="false"
-                className="dark:bg-background-textarea dark:border-border-dark mt-1 block w-full px-3 py-1.5 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none text-sm dark:text-text-lightDark"
-                rows={4}
+                placeholder="Convert video to MP4 format using H.264"
+                className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-xl text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all resize-none"
+                rows={3}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-text-dark">
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
                 {t('Description (Chinese)')}
               </label>
               <textarea
@@ -173,29 +216,34 @@ export const TemplateDialog: React.FC<TemplateDialogProps> = ({
                 }
                 onInput={() => setValidationError('')}
                 spellCheck="false"
-                className="dark:bg-background-textarea dark:border-border-dark mt-1 block w-full px-3 py-1.5 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none text-sm dark:text-text-lightDark"
-                rows={4}
+                placeholder="使用 H.264 将视频转换为 MP4 格式"
+                className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-xl text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all resize-none"
+                rows={3}
               />
             </div>
           </div>
 
+          {/* Validation Error */}
           {validationError && (
-            <p className="text-sm text-red-600 dark:text-red-400">
-              {validationError}
-            </p>
+            <div className="flex items-center gap-2 px-4 py-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/30 rounded-xl">
+              <span className="text-sm text-red-600 dark:text-red-400">
+                {validationError}
+              </span>
+            </div>
           )}
 
-          <div className="mt-4 flex justify-end space-x-3">
+          {/* Actions */}
+          <div className="flex items-center justify-end gap-3 pt-2">
             <button
               type="button"
               onClick={onClose}
-              className="px-3 py-1.5 bg-white border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              className="px-5 py-2.5 text-sm font-medium text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-slate-800 transition-all"
             >
               {t('Cancel')}
             </button>
             <button
               type="submit"
-              className="px-3 py-1.5 bg-blue-600 border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              className="px-5 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-primary-500 to-primary-600 rounded-xl shadow-lg shadow-primary-500/25 hover:from-primary-600 hover:to-primary-700 hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-slate-800 transition-all"
             >
               {t('Save')}
             </button>
