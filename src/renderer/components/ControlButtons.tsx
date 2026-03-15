@@ -32,10 +32,10 @@ export function ControlButtons({
         type="button"
         onClick={onStart}
         disabled={isRunning || isStopping || !canStart}
-        className={`min-w-[160px] px-8 py-3.5 rounded-xl font-semibold text-sm shadow-lg transition-all duration-300 flex items-center justify-center group ${
+        className={`min-w-[160px] px-8 py-3.5 rounded-xl font-semibold text-sm shadow-lg transition-all duration-200 flex items-center justify-center group focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-800 ${
           isRunning || isStopping || !canStart
-            ? 'bg-gray-100 text-gray-400 cursor-not-allowed shadow-none'
-            : 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white hover:shadow-xl hover:-translate-y-1 active:translate-y-0'
+            ? 'bg-slate-100 dark:bg-slate-700/50 text-slate-400 dark:text-slate-500 cursor-not-allowed shadow-none'
+            : 'bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 text-white hover:shadow-xl hover:-translate-y-1 active:translate-y-0 dark:shadow-primary-500/20'
         }`}
       >
         {isRunning || isStopping || !canStart ? (
@@ -52,10 +52,10 @@ export function ControlButtons({
         type="button"
         onClick={onStop}
         disabled={!isRunning || isStopping}
-        className={`min-w-[160px] px-8 py-3.5 rounded-xl font-semibold text-sm shadow-lg transition-all duration-300 flex items-center justify-center ${
+        className={`min-w-[160px] px-8 py-3.5 rounded-xl font-semibold text-sm shadow-lg transition-all duration-200 flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-800 ${
           !isRunning || isStopping
-            ? 'bg-gray-100 text-gray-400 cursor-not-allowed shadow-none'
-            : 'bg-white border-2 border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 hover:shadow-xl hover:-translate-y-1 active:translate-y-0'
+            ? 'bg-slate-100 dark:bg-slate-700/50 text-slate-400 dark:text-slate-500 cursor-not-allowed shadow-none'
+            : 'bg-white dark:bg-slate-700 border-2 border-red-200 dark:border-red-800/50 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 hover:border-red-300 dark:hover:border-red-700/50 hover:shadow-xl hover:-translate-y-1 active:translate-y-0'
         }`}
       >
         {isStopping ? (

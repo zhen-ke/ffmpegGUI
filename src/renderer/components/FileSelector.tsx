@@ -27,19 +27,19 @@ export function FileSelector({
     type === 'input'
       ? {
           filled:
-            'bg-gradient-to-r from-blue-50 to-blue-100/50 border-blue-200 text-blue-800',
+            'bg-gradient-to-r from-primary-50 to-primary-100/50 dark:from-primary-900/30 dark:to-primary-800/20 border-primary-200 dark:border-primary-700/50 text-primary-800 dark:text-primary-300',
           empty:
-            'bg-white border-gray-200 hover:border-blue-300 hover:bg-blue-50/30 text-gray-600',
-          hover: 'hover:bg-blue-100/50',
-          icon: 'text-blue-500',
+            'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 hover:border-primary-300 dark:hover:border-primary-700 hover:bg-primary-50/30 dark:hover:bg-primary-900/20 text-slate-600 dark:text-slate-300',
+          hover: 'hover:bg-primary-100/50 dark:hover:bg-primary-900/30',
+          icon: 'text-primary-500 dark:text-primary-400',
         }
       : {
           filled:
-            'bg-gradient-to-r from-amber-50 to-amber-100/50 border-amber-200 text-amber-800',
+            'bg-gradient-to-r from-amber-50 to-amber-100/50 dark:from-amber-900/30 dark:to-amber-800/20 border-amber-200 dark:border-amber-700/50 text-amber-800 dark:text-amber-300',
           empty:
-            'bg-white border-gray-200 hover:border-amber-300 hover:bg-amber-50/30 text-gray-600',
-          hover: 'hover:bg-amber-100/50',
-          icon: 'text-amber-500',
+            'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 hover:border-amber-300 dark:hover:border-amber-700 hover:bg-amber-50/30 dark:hover:bg-amber-900/20 text-slate-600 dark:text-slate-300',
+          hover: 'hover:bg-amber-100/50 dark:hover:bg-amber-900/30',
+          icon: 'text-amber-500 dark:text-amber-400',
         };
 
   const icon =
@@ -63,7 +63,7 @@ export function FileSelector({
       >
         <div className="flex items-center gap-3 flex-1 min-w-0">
           <div
-            className={`p-1.5 rounded-lg ${value ? 'bg-white/50' : 'bg-gray-50'}`}
+            className={`p-1.5 rounded-lg ${value ? 'bg-white/50 dark:bg-slate-900/30' : 'bg-slate-50 dark:bg-slate-700/50'}`}
           >
             {icon}
           </div>
@@ -72,7 +72,9 @@ export function FileSelector({
           </span>
         </div>
         {!value && (
-          <span className="text-xs text-gray-400 font-medium">Browse</span>
+          <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+            Browse
+          </span>
         )}
       </button>
       {value && (
