@@ -56,15 +56,9 @@ export function LogDisplay({
   return (
     <div className="flex-1 relative flex flex-col max-w-7xl mx-auto w-full">
       {/* 终端 Header */}
-      <div className="flex-shrink-0 flex items-center justify-between px-4 py-3 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm border-b border-slate-200/60 dark:border-slate-700/60 shadow-sm">
+      <div className="flex-shrink-0 flex items-center justify-between px-4 py-1 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm border-b border-slate-200/60 dark:border-slate-700/60 shadow-sm">
         <div className="flex items-center gap-3">
-          {/* Mac 风格窗口按钮 */}
-          <div className="flex items-center gap-1.5">
-            <div className="w-3 h-3 rounded-full bg-red-400/80"></div>
-            <div className="w-3 h-3 rounded-full bg-amber-400/80"></div>
-            <div className="w-3 h-3 rounded-full bg-green-400/80"></div>
-          </div>
-          <span className="ml-3 text-sm font-medium text-slate-600 dark:text-slate-300">
+          <span className="text-sm font-medium text-slate-600 dark:text-slate-300">
             {t('Console Output')}
           </span>
           {!isAutoScrollEnabled && (

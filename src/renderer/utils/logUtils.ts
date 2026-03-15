@@ -72,7 +72,7 @@ export function formatLog(type: LogType, message: string): string {
 
   // 生成结构化的 HTML
   const logHtml = `
-    <div class="group flex items-start gap-3 px-4 text-sm font-mono border-b border-dashed border-gray-200 dark:border-gray-800 last:border-0 transition-colors ${style.bg}">
+    <div class="group flex items-start gap-3 text-sm font-mono border-b border-dashed border-gray-200 dark:border-gray-800 last:border-0 transition-colors ${style.bg}">
       <span class="flex-shrink-0 w-5 text-center ${style.color} opacity-70 font-bold select-none">${style.icon}</span>
       <span class="flex-shrink-0 text-xs text-gray-400 select-none pt-0.5 group-hover:text-gray-500 dark:group-hover:text-gray-300 transition-colors">[${time}]</span>
       <span class="flex-1 break-all whitespace-pre-wrap leading-relaxed ${style.color}">${safeMessage}</span>

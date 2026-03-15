@@ -2,6 +2,11 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ========== Titlebar 安全区 ========== */
+:root {
+  --titlebar-height: 35px;
+}
+
 @layer base {
   * {
     @apply border-slate-200 dark:border-slate-700;
@@ -24,14 +29,16 @@
 
 .app {
   @apply h-screen flex flex-col;
+  /* 顶部留出 titlebar 安全区，所有子页面自动不被遮挡 */
+  padding-top: var(--titlebar-height);
 }
 
 .drag-handle {
-  position: absolute;
+  position: fixed;
   top: 0;
   left: 0;
   right: 0;
-  height: 35px;
+  height: var(--titlebar-height);
   -webkit-app-region: drag;
   z-index: 1000;
 }
