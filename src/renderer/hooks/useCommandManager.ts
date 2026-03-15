@@ -9,6 +9,20 @@ import {
   updateCommandPaths,
 } from '../utils/commandUtils';
 
+// ========== 工具 Hook ==========
+
+/**
+ * 始终持有最新值的 ref，避免在 useCallback deps 中重复列举状态值。
+ * 在渲染阶段同步，保证回调内读取时值是最新的。
+ */
+function useLatest<T>(value: T) {
+  const ref = useRef(value);
+  ref.current = value;
+  return ref;
+}
+
+// ========== 类型 ==========
+
 interface UseCommandManagerProps {
   inputFile: string;
   outputFolder: string;
@@ -16,28 +30,29 @@ interface UseCommandManagerProps {
 
 export type ClipboardResult = 'success' | 'empty' | 'error';
 
+// ========== Hook ==========
+
 export function useCommandManager({
   inputFile,
   outputFolder,
 }: UseCommandManagerProps) {
   const [command, setCommand] = useState('');
-  const commandRef = useRef(command);
-  const inputFileRef = useRef(inputFile);
-  const outputFolderRef = useRef(outputFolder);
-  commandRef.current = command;
-  inputFileRef.current = inputFile;
-  outputFolderRef.current = outputFolder;
+
+  // 通过 useLatest 统一管理"最新值"，不再在每个 setter 里手动同步 ref
+  const commandRef     = useLatest(command);
+  const inputFileRef   = useLatest(inputFile);
+  const outputFolderRef = useLatest(outputFolder);
 
   /**
    * 更新命令（手动编辑）
    */
   const updateCommand = useCallback((newCommand: string) => {
-    commandRef.current = newCommand;
     setCommand(newCommand);
   }, []);
 
   /**
-   * 基于输入输出文件更新命令路径
+   * 基于输入/输出路径更新命令中的文件路径占位符。
+   * 参数均可选，不传则使用当前最新值。
    */
   const updateCommandWithPaths = useCallback(
     (
@@ -45,76 +60,64 @@ export function useCommandManager({
       overrideInputFile?: string,
       overrideOutputFolder?: string,
     ) => {
-      const cmdToUpdate = baseCommand ?? commandRef.current;
-      const finalInputFile = overrideInputFile ?? inputFileRef.current;
-      const finalOutputFolder = overrideOutputFolder ?? outputFolderRef.current;
-
-      const updatedCommand = updateCommandPaths(
-        cmdToUpdate,
-        finalInputFile,
-        finalOutputFolder,
+      const updated = updateCommandPaths(
+        baseCommand       ?? commandRef.current,
+        overrideInputFile ?? inputFileRef.current,
+        overrideOutputFolder ?? outputFolderRef.current,
       );
-
-      commandRef.current = updatedCommand;
-      setCommand(updatedCommand);
+      setCommand(updated);
     },
+    // refs 引用稳定，无需列入 deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
 
   /**
-   * 处理拖放文件
+   * 处理拖拽悬停：阻止默认行为以允许放置。
+   * 不调用 stopPropagation，保留父组件响应拖拽事件的能力。
    */
   const handleDragOver = useCallback((e: DragEvent<HTMLTextAreaElement>) => {
     e.preventDefault();
-    e.stopPropagation();
   }, []);
 
   /**
-   * 处理文件放置
+   * 处理文件放置：将文件路径插入光标位置。
+   * cursorPosition 在事件处理器同步帧内读取，避免异步 setState 回调中
+   * currentTarget 已被 React 清空的问题。
    */
   const handleDrop = useCallback((e: DragEvent<HTMLTextAreaElement>) => {
     e.preventDefault();
-    e.stopPropagation();
 
     const files = Array.from(e.dataTransfer.files);
-    const textarea = e.currentTarget;
-    const cursorPosition = textarea.selectionStart;
+    // 在同步帧内读取，不在 setCommand 回调内访问 e.currentTarget
+    const cursorPosition = e.currentTarget.selectionStart;
 
-    setCommand((prevCommand) => {
-      const newCommand = insertFilesIntoCommand(
-        prevCommand,
-        files,
-        cursorPosition,
-      );
-      commandRef.current = newCommand;
-      return newCommand;
-    });
+    setCommand((prev) => insertFilesIntoCommand(prev, files, cursorPosition));
   }, []);
 
   /**
    * 清空命令
    */
   const clearCommand = useCallback(() => {
-    commandRef.current = '';
     setCommand('');
   }, []);
 
   /**
-   * 复制命令
+   * 复制命令到剪贴板。
+   * trim 后判空，复制同样使用 trim 后的内容，保持一致。
    */
   const copyCommand = useCallback(async (): Promise<ClipboardResult> => {
-    const currentCommand = commandRef.current.trim();
-    if (!currentCommand) {
-      return 'empty';
-    }
+    const trimmed = commandRef.current.trim();
+    if (!trimmed) return 'empty';
 
     try {
-      await navigator.clipboard.writeText(commandRef.current);
+      await navigator.clipboard.writeText(trimmed);
       return 'success';
     } catch (error) {
       console.error('Failed to copy command:', error);
       return 'error';
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return {

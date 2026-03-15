@@ -90,6 +90,8 @@ export const translations: Record<Language, Record<string, string>> = {
     'Failed to check FFmpeg status.': 'Failed to check FFmpeg status.',
     'Please provide at least one name and description, and a command.':
       'Please provide at least one name and description, and a command.',
+    'Drag & drop files or type manually': 'Drag & drop files or type manually',
+    characters: 'characters',
   },
   zh: {
     'Add Template': '添加模板',
@@ -161,6 +163,8 @@ export const translations: Record<Language, Record<string, string>> = {
     'Failed to check FFmpeg status.': '检查 FFmpeg 状态失败。',
     'Please provide at least one name and description, and a command.':
       '请至少填写一侧名称和描述，并提供命令。',
+    'Drag & drop files or type manually': '拖拽文件或手动输入',
+    characters: '个字符',
   },
 };
 

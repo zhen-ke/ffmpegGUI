@@ -7,104 +7,119 @@ import { app, type IpcMainEvent } from 'electron';
 import fs from 'fs';
 import path from 'path';
 import { extractArchive } from '../utils/extractionUtils';
-import {
-    downloadFile,
-    ensureDir,
-    moveFile,
-    removeDir,
-} from '../utils/fileUtils';
+import { downloadFile, ensureDir, moveFile, removeDir } from '../utils/fileUtils';
 import { safeReply } from '../utils/ipcUtils';
 import { getFfmpegPath } from '../utils/pathUtils';
 
+// ========== 工具函数 ==========
+
 /**
- * FFmpeg 下载和安装服务类
+ * 将任意 catch 捕获值规范化为 Error 对象。
+ * 直接 `error as Error` 在 reject 传非 Error 值时会导致 `.message` 为 undefined。
+ */
+function toError(value: unknown): Error {
+  if (value instanceof Error) return value;
+  return new Error(typeof value === 'string' ? value : JSON.stringify(value));
+}
+
+/**
+ * 校验 URL 是否为合法的 HTTP/HTTPS 地址。
+ * 在调用网络层之前提前失败，错误信息更明确。
+ */
+function validateUrl(url: string): void {
+  const trimmed = url?.trim();
+  if (!trimmed) {
+    throw new Error('Download URL must not be empty.');
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    throw new Error(`Invalid download URL: "${trimmed}"`);
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error(
+      `Unsupported URL protocol "${parsed.protocol}". Only http and https are allowed.`,
+    );
+  }
+}
+
+// ========== DownloadService ==========
+
+/**
+ * FFmpeg 下载和安装服务
  */
 class DownloadService {
   /**
-   * 下载并安装 FFmpeg
+   * 下载并安装 FFmpeg。
    *
-   * @param url 下载 URL
-   * @param event IPC 事件对象
+   * @param url   下载 URL（必须为 http/https）
+   * @param event IPC 事件对象，用于向 renderer 推送进度
+   * @returns     安装成功返回 true，失败返回 false
    */
   async downloadAndInstall(url: string, event: IpcMainEvent): Promise<boolean> {
+    // 前置校验：在触碰文件系统或网络之前快速失败
+    try {
+      validateUrl(url);
+    } catch (error) {
+      safeReply(event, 'ffmpeg-install-error', toError(error).message);
+      return false;
+    }
+
     const tempDir = app.getPath('temp');
-    const downloadPath = path.join(tempDir, 'ffmpeg-download');
-    const extractPath = path.join(tempDir, 'ffmpeg-extract');
-    const binariesPath = path.dirname(getFfmpegPath());
-    let installSucceeded = false;
+    const downloadDir = path.join(tempDir, 'ffmpeg-download');
+    const extractDir = path.join(tempDir, 'ffmpeg-extract');
 
     try {
-      // 创建必要的目录
-      await ensureDir(downloadPath);
-      await ensureDir(extractPath);
-      await ensureDir(binariesPath);
+      // 准备临时目录（安装目标目录推迟到 move 前创建，避免失败后留下残留）
+      await ensureDir(downloadDir);
+      await ensureDir(extractDir);
 
-      const fileName = path.basename(url);
-      const filePath = path.join(downloadPath, fileName);
+      // ── 阶段 1：下载 ──────────────────────────────────────
+      const fileName = path.basename(new URL(url).pathname) || 'ffmpeg-archive';
+      const archivePath = path.join(downloadDir, fileName);
 
-      // 下载文件
       safeReply(event, 'ffmpeg-download-progress', 0);
-      const downloadedFilePath = await downloadFile(
-        url,
-        filePath,
-        (progress) => {
-          safeReply(event, 'ffmpeg-download-progress', progress);
-        },
-      );
+      // downloadFile 返回 void，严格写入 archivePath，无需捕获返回值
+      await downloadFile(url, archivePath, (progress) => {
+        safeReply(event, 'ffmpeg-download-progress', progress);
+      });
 
-      // 检查下载的文件是否存在
-      if (!fs.existsSync(downloadedFilePath)) {
-        throw new Error(`Downloaded file not found: ${downloadedFilePath}`);
-      }
-
-      // 解压文件
+      // ── 阶段 2：解压 ──────────────────────────────────────
       safeReply(event, 'ffmpeg-extract-progress', 0);
       const ffmpegSourcePath = await extractArchive(
-        downloadedFilePath,
-        extractPath,
+        archivePath,
+        extractDir,
         (progress) => {
           safeReply(event, 'ffmpeg-extract-progress', progress);
         },
       );
 
-      // 移动 FFmpeg 到目标位置
+      // ── 阶段 3：安装 ──────────────────────────────────────
       const ffmpegDestPath = getFfmpegPath();
-      await ensureDir(path.dirname(ffmpegDestPath));
+      const ffmpegDestDir = path.dirname(ffmpegDestPath);
+
+      // 仅在确认解压成功后才创建安装目录
+      await ensureDir(ffmpegDestDir);
       await moveFile(ffmpegSourcePath, ffmpegDestPath);
 
-      // 设置执行权限（Mac 和 Linux）
+      // 设置执行权限（macOS / Linux）
       if (process.platform !== 'win32') {
-        await fs.promises.chmod(ffmpegDestPath, '755');
+        await fs.promises.chmod(ffmpegDestPath, 0o755);
       }
 
-      console.log('FFmpeg installed successfully');
+      console.log('FFmpeg installed successfully to:', ffmpegDestPath);
       safeReply(event, 'ffmpeg-install-complete');
-      installSucceeded = true;
-    } catch (error: unknown) {
-      const err = error as Error;
-      console.error('Error during FFmpeg installation:', err);
+      return true;
+    } catch (error) {
+      const err = toError(error);
+      console.error('FFmpeg installation failed:', err);
       safeReply(event, 'ffmpeg-install-error', err.message);
+      return false;
     } finally {
-      // 无论成功或失败都尝试清理临时文件
-      try {
-        await this.cleanup(downloadPath, extractPath);
-      } catch (cleanupError) {
-        console.error('Error during cleanup:', cleanupError);
-      }
+      // 无论成功或失败，始终清理临时目录
+      await Promise.allSettled([removeDir(downloadDir), removeDir(extractDir)]);
     }
-
-    return installSucceeded;
-  }
-
-  /**
-   * 清理临时文件
-   */
-  private async cleanup(
-    downloadPath: string,
-    extractPath: string,
-  ): Promise<void> {
-    await removeDir(downloadPath);
-    await removeDir(extractPath);
   }
 }
 

@@ -35,7 +35,7 @@ function ToolButton({ onClick, title, icon }: ToolButtonProps) {
 // ========== 主组件 ==========
 
 interface LogDisplayProps {
-  logs: string;
+  logs: string[];
   logsRef: React.RefObject<HTMLDivElement>;
   onClear: () => void;
   onCopy: () => void;
@@ -98,12 +98,15 @@ export function LogDisplay({
           onScroll={onScroll}
           className="absolute inset-0 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-600 scrollbar-track-transparent font-mono text-sm"
         >
-          {logs ? (
-            /**
-             * 使用 dangerouslySetInnerHTML 渲染带颜色的日志
-             * 安全说明：logUtils 已对日志消息做 HTML escape 处理，避免注入到 DOM
-             */
-            <div className="p-4" dangerouslySetInnerHTML={{ __html: logs }} />
+          {logs.length > 0 ? (
+            <div className="p-4">
+              {logs.map((logHtml, index) => (
+                <div
+                  key={index}
+                  dangerouslySetInnerHTML={{ __html: logHtml }}
+                />
+              ))}
+            </div>
           ) : (
             <div className="h-full flex flex-col items-center justify-center pointer-events-none select-none">
               <div className="relative mb-4">

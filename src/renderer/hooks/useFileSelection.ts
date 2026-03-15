@@ -3,7 +3,34 @@
  * 管理输入文件和输出文件夹的选择和联动
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
+
+// ========== 工具 ==========
+
+/**
+ * 始终持有最新值的 ref，在渲染阶段同步。
+ */
+function useLatest<T>(value: T) {
+  const ref = useRef(value);
+  ref.current = value;
+  return ref;
+}
+
+/**
+ * 从文件路径中提取所在目录（兼容 `/` 和 `\` 分隔符）。
+ *
+ * 注：renderer 进程无法直接使用 Node.js path 模块，
+ * 此处用字符串操作替代 path.dirname，逻辑与主进程保持一致。
+ */
+function getFileDirectory(filePath: string): string {
+  const lastSlash = Math.max(
+    filePath.lastIndexOf('/'),
+    filePath.lastIndexOf('\\'),
+  );
+  return lastSlash > 0 ? filePath.substring(0, lastSlash) : filePath;
+}
+
+// ========== 类型 ==========
 
 interface DialogResult {
   canceled: boolean;
@@ -14,79 +41,60 @@ interface UseFileSelectionProps {
   onError?: (message: string) => void;
 }
 
-/**
- * 获取文件所在目录（跨平台兼容）
- * 纯函数，提取到模块顶层避免每次渲染重新创建
- */
-function getFileDirectory(filePath: string): string {
-  const lastSlash = Math.max(
-    filePath.lastIndexOf('/'),
-    filePath.lastIndexOf('\\'),
-  );
-  return lastSlash > 0 ? filePath.substring(0, lastSlash) : filePath;
-}
+// ========== Hook ==========
 
 export function useFileSelection({ onError }: UseFileSelectionProps = {}) {
-  const [inputFile, setInputFile] = useState<string>('');
-  const [outputFolder, setOutputFolder] = useState<string>('');
+  const [inputFile, setInputFile]       = useState('');
+  const [outputFolder, setOutputFolder] = useState('');
 
+  // useLatest 消除 handler 对 state 和 onError 的依赖，避免频繁重建引用
+  const inputFileRef   = useLatest(inputFile);
+  const outputFolderRef = useLatest(outputFolder);
+  const onErrorRef     = useLatest(onError);
+
+  /**
+   * 打开文件选择对话框，选中后自动联动输出目录。
+   * 若输出目录已设置则不覆盖。
+   */
   const handleSelectInputFile = useCallback(async () => {
     try {
       const result: DialogResult = await window.electron.ipcRenderer.invoke(
         'select-input-file',
-        inputFile,
+        inputFileRef.current,
       );
 
-      if (result && !result.canceled && result.filePaths.length > 0) {
-        const filePath = result.filePaths[0];
-        setInputFile(filePath);
+      if (result.canceled || result.filePaths.length === 0) return;
 
-        // 智能联动：如果还没选输出目录，自动设置为输入文件所在目录
-        setOutputFolder((prevOutputFolder) => {
-          if (prevOutputFolder) {
-            return prevOutputFolder;
-          }
-          return getFileDirectory(filePath);
-        });
-      }
+      const filePath = result.filePaths[0];
+      setInputFile(filePath);
+
+      // 智能联动：输出目录为空时自动设为输入文件所在目录
+      setOutputFolder((prev) => prev || getFileDirectory(filePath));
     } catch (error) {
       console.error('Failed to select input file:', error);
-      onError?.('Failed to select input file. Please try again.');
+      onErrorRef.current?.('Failed to select input file. Please try again.');
     }
-  }, [inputFile, onError]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /**
-   * 选择输出文件夹
+   * 打开文件夹选择对话框。
    */
   const handleSelectOutputFolder = useCallback(async () => {
     try {
       const result: DialogResult = await window.electron.ipcRenderer.invoke(
         'select-output-folder',
-        outputFolder,
+        outputFolderRef.current,
       );
 
-      if (result && !result.canceled && result.filePaths.length > 0) {
-        const folderPath = result.filePaths[0];
-        setOutputFolder(folderPath);
-      }
+      if (result.canceled || result.filePaths.length === 0) return;
+
+      setOutputFolder(result.filePaths[0]);
     } catch (error) {
       console.error('Failed to select output folder:', error);
-      onError?.('Failed to select output folder. Please try again.');
+      onErrorRef.current?.('Failed to select output folder. Please try again.');
     }
-  }, [outputFolder, onError]);
-
-  /**
-   * 清除输入文件
-   */
-  const clearInputFile = useCallback(() => {
-    setInputFile('');
-  }, []);
-
-  /**
-   * 清除输出文件夹
-   */
-  const clearOutputFolder = useCallback(() => {
-    setOutputFolder('');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return {
@@ -94,7 +102,8 @@ export function useFileSelection({ onError }: UseFileSelectionProps = {}) {
     outputFolder,
     handleSelectInputFile,
     handleSelectOutputFolder,
-    clearInputFile,
-    clearOutputFolder,
+    // setState 的引用天然稳定，直接暴露空值版本无需 useCallback 包裹
+    clearInputFile:    () => setInputFile(''),
+    clearOutputFolder: () => setOutputFolder(''),
   };
 }

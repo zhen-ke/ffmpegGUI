@@ -24,9 +24,11 @@ export function CommandInput({
   onDrop,
   onCopy,
   onClear,
-  placeholder = 'Enter FFmpeg command or drag & drop files here',
+  placeholder,
 }: CommandInputProps) {
   const { t } = useLanguage();
+
+  const activePlaceholder = placeholder || t('Enter FFmpeg command or drag & drop files here');
 
   return (
     <div className="relative group">
@@ -43,7 +45,7 @@ export function CommandInput({
                 {t('FFmpeg Command')}
               </span>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Drag & drop files or type manually
+                {t('Drag & drop files or type manually')}
               </p>
             </div>
           </div>
@@ -74,7 +76,7 @@ export function CommandInput({
           onChange={(e) => onCommandChange(e.target.value)}
           onDragOver={onDragOver}
           onDrop={onDrop}
-          placeholder={placeholder}
+          placeholder={activePlaceholder}
           className="w-full p-4 bg-transparent border-none resize-none font-mono text-sm text-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-primary-500 focus:ring-inset min-h-[6rem] leading-relaxed rounded-xl placeholder:text-slate-400 dark:placeholder:text-slate-500"
           rows={4}
           spellCheck="false"
@@ -84,7 +86,7 @@ export function CommandInput({
         {command && (
           <div className="px-4 pb-3 flex justify-end">
             <span className="text-xs text-slate-400 dark:text-slate-500">
-              {command.length} characters
+              {command.length} {t('characters')}
             </span>
           </div>
         )}

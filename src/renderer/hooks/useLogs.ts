@@ -6,74 +6,104 @@
 import { UIEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { formatLog, LogType, stripHtmlTags } from '../utils/logUtils';
 
+// ========== 工具 ==========
+
+function useLatest<T>(value: T) {
+  const ref = useRef(value);
+  ref.current = value;
+  return ref;
+}
+
+// ========== 常量 ==========
+
+/**
+ * 距底部不超过此像素数时视为"已滚动到底部"，保持自动滚动。
+ * 容忍小误差，防止亚像素偏差导致自动滚动意外关闭。
+ */
+const AUTO_SCROLL_THRESHOLD_PX = 24;
+
+// ========== 类型 ==========
+
 export type ClipboardResult = 'success' | 'empty' | 'error';
 
+// ========== Hook ==========
+
 export function useLogs() {
-  const [logs, setLogs] = useState('');
+  const [logs, setLogs] = useState<string[]>([]);
   const [isAutoScrollEnabled, setIsAutoScrollEnabled] = useState(true);
   const logsRef = useRef<HTMLDivElement>(null);
+  const isScrollingRef = useRef(false);
+
+  // useLatest 消除 copyLogs 对 logs state 的依赖
+  const logsLatest = useLatest(logs);
 
   /**
-   * 添加日志
+   * 追加一条日志（HTML 格式）。
    */
   const addLog = useCallback((type: LogType, message: string) => {
-    const logHtml = formatLog(type, message);
-    setLogs((prevLogs) => prevLogs + logHtml);
+    setLogs((prev) => [...prev, formatLog(type, message)]);
   }, []);
 
   /**
    * 清除所有日志
    */
   const clearLogs = useCallback(() => {
-    setLogs('');
+    setLogs([]);
   }, []);
 
   /**
    * 复制日志为纯文本
    */
   const copyLogs = useCallback(async (): Promise<ClipboardResult> => {
-    if (!logs.trim()) {
-      return 'empty';
-    }
+    if (logsLatest.current.length === 0) return 'empty';
 
-    const plainText = stripHtmlTags(logs);
+    const plain = stripHtmlTags(logsLatest.current.join('')).trim();
+    if (!plain) return 'empty';
+
     try {
-      await navigator.clipboard.writeText(plainText);
+      await navigator.clipboard.writeText(plain);
       return 'success';
     } catch (error) {
       console.error('Failed to copy logs:', error);
       return 'error';
     }
-  }, [logs]);
-
-  /**
-   * 监听日志滚动位置，决定是否自动滚动到底部
-   */
-  const handleLogsScroll = useCallback((event: UIEvent<HTMLDivElement>) => {
-    const { scrollHeight, scrollTop, clientHeight } = event.currentTarget;
-    const distanceToBottom = scrollHeight - scrollTop - clientHeight;
-    setIsAutoScrollEnabled(distanceToBottom <= 24);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /**
-   * 自动滚动到底部
+   * 监听滚动位置，距底部超过阈值时关闭自动滚动。
+   * 程序化滚动期间忽略此事件。
    */
-  const scrollToBottom = useCallback(() => {
+  const handleLogsScroll = useCallback((event: UIEvent<HTMLDivElement>) => {
+    if (isScrollingRef.current) return;
+
+    const { scrollHeight, scrollTop, clientHeight } = event.currentTarget;
+    setIsAutoScrollEnabled(
+      scrollHeight - scrollTop - clientHeight <= AUTO_SCROLL_THRESHOLD_PX,
+    );
+  }, []);
+
+  /**
+   * 日志更新时若自动滚动已开启则滚动到底部。
+   *
+   * deps 只列 logs — 日志内容变化才需要滚动；
+   * isAutoScrollEnabled 通过闭包在 effect 内读取最新值，不作为触发条件
+   * （避免开关从 true→false 时意外触发一次滚动）。
+   */
+  useEffect(() => {
+    if (!isAutoScrollEnabled) return;
+
+    isScrollingRef.current = true;
     requestAnimationFrame(() => {
       if (logsRef.current) {
         logsRef.current.scrollTop = logsRef.current.scrollHeight;
       }
+      requestAnimationFrame(() => {
+        isScrollingRef.current = false;
+      });
     });
-  }, []);
-
-  /**
-   * 当日志更新时自动滚动
-   */
-  useEffect(() => {
-    if (isAutoScrollEnabled) {
-      scrollToBottom();
-    }
-  }, [isAutoScrollEnabled, logs, scrollToBottom]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [logs]);
 
   return {
     logs,
