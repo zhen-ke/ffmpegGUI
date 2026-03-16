@@ -13,6 +13,7 @@ import { resolveHtmlPath } from './util';
 import { ffmpegService } from './services/FFmpegService';
 import { ptyService } from './services/PtyService';
 import { setupAllIpcHandlers } from './ipc/setupIpcHandlers';
+import { initLocale } from './locales';
 
 declare global {
   namespace Electron {
@@ -182,6 +183,7 @@ if (!gotTheLock) {
   app
     .whenReady()
     .then(() => {
+      initLocale();
       setupAllIpcHandlers(getMainWindow);
       createWindow();
 

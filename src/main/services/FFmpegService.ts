@@ -14,6 +14,7 @@ import {
 } from '../utils/commandParser';
 import { safeReply } from '../utils/ipcUtils';
 import { getFfmpegPath } from '../utils/pathUtils';
+import { t } from '../locales';
 
 // ========== 类型 ==========
 
@@ -150,28 +151,20 @@ class FFmpegService {
 
     if (outputFile && fs.existsSync(outputFile)) {
       if (!mainWindow) {
-        return safeReply(
-          event,
-          'ffmpeg-error',
-          'Cannot confirm overwrite because the main window is unavailable.',
-        );
+        return safeReply(event, 'ffmpeg-error', t('cannotConfirmOverwrite'));
       }
 
       const { response } = await dialog.showMessageBox(mainWindow, {
         type: 'question',
-        buttons: ['Yes', 'No'],
+        buttons: [t('yes'), t('no')],
         defaultId: 1,
         cancelId: 1,
-        title: 'Confirm Overwrite',
-        message: `File '${outputFile}' already exists. Overwrite?`,
+        title: t('confirmOverwrite'),
+        message: t('fileAlreadyExists', { filename: outputFile }),
       });
 
       if (response === 1) {
-        return safeReply(
-          event,
-          'ffmpeg-cancelled',
-          'Operation cancelled: file was not overwritten.',
-        );
+        return safeReply(event, 'ffmpeg-cancelled', t('operationCancelled'));
       }
 
       // 用户确认覆盖，注入 -y 跳过 FFmpeg 自身的交互提示
@@ -280,7 +273,11 @@ class FFmpegService {
       console.error('FFmpeg process error:', err);
       // 仅在非用户主动停止时上报错误；若用户已停止，等待 close 事件统一处理
       if (!this.state?.isStopping) {
-        safeReply(event, 'ffmpeg-error', `FFmpeg process error: ${err.message}`);
+        safeReply(
+          event,
+          'ffmpeg-error',
+          `FFmpeg process error: ${err.message}`,
+        );
         this.teardown();
       }
     });
@@ -311,7 +308,11 @@ class FFmpegService {
       return;
     }
 
-    safeReply(event, 'ffmpeg-error', `FFmpeg process exited with code ${code}.`);
+    safeReply(
+      event,
+      'ffmpeg-error',
+      `FFmpeg process exited with code ${code}.`,
+    );
   }
 
   private sendLines(lines: string[], event: IpcMainEvent): void {
@@ -408,7 +409,11 @@ class FFmpegService {
     const hours = parseInt(h, 10);
     const minutes = parseInt(m, 10);
     const seconds = parseFloat(s);
-    if (!Number.isFinite(hours) || !Number.isFinite(minutes) || !Number.isFinite(seconds)) {
+    if (
+      !Number.isFinite(hours) ||
+      !Number.isFinite(minutes) ||
+      !Number.isFinite(seconds)
+    ) {
       return NaN;
     }
     return hours * 3600 + minutes * 60 + seconds;
