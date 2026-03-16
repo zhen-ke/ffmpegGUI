@@ -1,10 +1,10 @@
 import React, {
-    createContext,
-    ReactNode,
-    useCallback,
-    useContext,
-    useEffect,
-    useState,
+  createContext,
+  ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
 } from 'react';
 
 type Language = 'en' | 'zh';
@@ -22,6 +22,7 @@ const LanguageContext = createContext<LanguageContextType | undefined>(
 export const translations: Record<Language, Record<string, string>> = {
   en: {
     'Add Template': 'Add Template',
+    Template: 'Template',
     'FFmpeg Tool': 'FFmpeg Tool',
     'Command Template': 'Command Template',
     'Select a template': 'Select a template',
@@ -67,7 +68,9 @@ export const translations: Record<Language, Record<string, string>> = {
     Cancel: 'Cancel',
     Save: 'Save',
     'Select Input File': 'Select Input File',
+    'Input File': 'Input File',
     'Select Output Folder': 'Select Output Folder',
+    'Output Folder': 'Output Folder',
     'Selecting a template will replace the current command. Continue?':
       'Selecting a template will replace the current command. Continue?',
     'Delete this custom template?': 'Delete this custom template?',
@@ -92,9 +95,12 @@ export const translations: Record<Language, Record<string, string>> = {
       'Please provide at least one name and description, and a command.',
     'Drag & drop files or type manually': 'Drag & drop files or type manually',
     characters: 'characters',
+    'Select a template or enter a command to begin':
+      'Select a template or enter a command to begin',
   },
   zh: {
     'Add Template': '添加模板',
+    Template: '模板',
     'FFmpeg Tool': 'FFmpeg 工具',
     Terminal: '终端',
     'Command Template': '命令模板',
@@ -113,6 +119,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'Copy raw text': '复制原始文本',
     'Clear console': '清空控制台',
     'Ready to process...': '准备就绪，等待处理...',
+    'Select a template or enter a command to begin': '选择模板或输入命令以开始',
     Paused: '已暂停自动滚动',
     'Processing...': '处理中...',
     'Waiting for progress...': '等待进度...',
@@ -140,7 +147,9 @@ export const translations: Record<Language, Record<string, string>> = {
     Cancel: '取消',
     Save: '保存',
     'Select Input File': '选择输入文件',
+    'Input File': '输入文件',
     'Select Output Folder': '选择输出文件夹',
+    'Output Folder': '输出文件夹',
     'Selecting a template will replace the current command. Continue?':
       '选择模板将覆盖当前命令，是否继续？',
     'Delete this custom template?': '确认删除该自定义模板吗？',

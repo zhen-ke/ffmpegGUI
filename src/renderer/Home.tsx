@@ -74,9 +74,11 @@ function DragHandle({
         flex-shrink-0 relative flex items-center justify-center
         h-3 cursor-row-resize select-none z-30 group
         transition-colors duration-150
-        ${isDragging
-          ? 'bg-primary-100/80 dark:bg-primary-900/40'
-          : 'hover:bg-slate-100 dark:hover:bg-slate-700/50'}
+        ${
+          isDragging
+            ? 'bg-primary-100/80 dark:bg-primary-900/40'
+            : 'hover:bg-slate-100 dark:hover:bg-slate-700/50'
+        }
       `}
     >
       <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-px bg-slate-200 dark:bg-slate-700" />
@@ -84,9 +86,11 @@ function DragHandle({
         className={`
           relative z-10 flex items-center gap-0.5 px-2.5 py-0.5 rounded-full border
           transition-all duration-150 shadow-sm
-          ${isDragging
-            ? 'bg-primary-50 dark:bg-primary-900/60 border-primary-300 dark:border-primary-700 scale-110'
-            : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 group-hover:border-primary-300 dark:group-hover:border-primary-600 group-hover:scale-105'}
+          ${
+            isDragging
+              ? 'bg-primary-50 dark:bg-primary-900/60 border-primary-300 dark:border-primary-700 scale-110'
+              : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 group-hover:border-primary-300 dark:group-hover:border-primary-600 group-hover:scale-105'
+          }
         `}
       >
         {[0, 1, 2].map((i) => (
@@ -144,7 +148,6 @@ function CommandBox({
       <div className="absolute -inset-0.5 bg-gradient-to-r from-primary-400 via-purple-500 to-pink-500 rounded-xl opacity-0 group-hover:opacity-10 dark:group-hover:opacity-[0.08] transition duration-500 blur-sm pointer-events-none" />
 
       <div className="relative bg-white dark:bg-slate-800 rounded-xl border-2 border-slate-100 dark:border-slate-700 group-hover:border-slate-200 dark:group-hover:border-slate-600 shadow-sm transition-all duration-300">
-
         {/* 顶部工具栏 */}
         <div className="flex items-center justify-between px-4 py-2 border-b border-slate-100 dark:border-slate-700/80 bg-slate-50/60 dark:bg-slate-900/40 rounded-t-xl">
           <div className="flex items-center gap-2">
@@ -184,7 +187,9 @@ function CommandBox({
           onChange={(e) => onCommandChange(e.target.value)}
           onDragOver={onDragOver}
           onDrop={onDrop}
-          placeholder={placeholder ?? t('Enter FFmpeg command or drag & drop files here')}
+          placeholder={
+            placeholder ?? t('Enter FFmpeg command or drag & drop files here')
+          }
           spellCheck={false}
           rows={3}
           className="w-full px-4 pt-3 pb-2 bg-transparent border-none resize-none font-mono text-sm text-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-primary-500 focus:ring-inset leading-relaxed placeholder:text-slate-400 dark:placeholder:text-slate-500 outline-none"
@@ -205,16 +210,18 @@ function CommandBox({
               transition-all duration-200 focus:outline-none
               focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2
               dark:focus-visible:ring-offset-slate-800
-              ${canStart
-                ? 'bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 text-white shadow-md shadow-primary-500/25 hover:shadow-lg hover:shadow-primary-500/30 hover:-translate-y-0.5 active:translate-y-0'
-                : 'bg-slate-100 dark:bg-slate-700/50 text-slate-400 dark:text-slate-500 cursor-not-allowed'
+              ${
+                canStart
+                  ? 'bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 text-white shadow-md shadow-primary-500/25 hover:shadow-lg hover:shadow-primary-500/30 hover:-translate-y-0.5 active:translate-y-0'
+                  : 'bg-slate-100 dark:bg-slate-700/50 text-slate-400 dark:text-slate-500 cursor-not-allowed'
               }
             `}
           >
-            {isRunning || isStopping
-              ? <Loader2 size={14} className="animate-spin" />
-              : <Play size={14} className={canStart ? 'fill-current' : ''} />
-            }
+            {isRunning || isStopping ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <Play size={14} className={canStart ? 'fill-current' : ''} />
+            )}
             <span>{t('Start')}</span>
           </button>
         </div>
@@ -289,9 +296,18 @@ function LogHeader({
             title={t('Copy raw text')}
             className="p-1.5 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700/50 rounded-lg transition-all hover:scale-105"
           >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+              />
             </svg>
           </button>
           <button
@@ -300,9 +316,18 @@ function LogHeader({
             title={t('Clear console')}
             className="p-1.5 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700/50 rounded-lg transition-all hover:scale-105"
           >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"
+              />
             </svg>
           </button>
 
@@ -316,16 +341,21 @@ function LogHeader({
             className={`
               flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold
               transition-all duration-200 border
-              ${!isRunning || isStopping
-                ? 'bg-slate-50 dark:bg-slate-700/30 text-slate-300 dark:text-slate-600 border-slate-200/50 dark:border-slate-700/30 cursor-not-allowed'
-                : 'bg-white dark:bg-slate-700 border-red-200 dark:border-red-800/50 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 hover:border-red-300 hover:shadow-sm'
+              ${
+                !isRunning || isStopping
+                  ? 'bg-slate-50 dark:bg-slate-700/30 text-slate-300 dark:text-slate-600 border-slate-200/50 dark:border-slate-700/30 cursor-not-allowed'
+                  : 'bg-white dark:bg-slate-700 border-red-200 dark:border-red-800/50 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 hover:border-red-300 hover:shadow-sm'
               }
             `}
           >
-            {isStopping
-              ? <Loader2 size={12} className="animate-spin" />
-              : <Square size={12} fill={isRunning && !isStopping ? 'currentColor' : 'none'} />
-            }
+            {isStopping ? (
+              <Loader2 size={12} className="animate-spin" />
+            ) : (
+              <Square
+                size={12}
+                fill={isRunning && !isStopping ? 'currentColor' : 'none'}
+              />
+            )}
             <span>{isStopping ? t('Stopping...') : t('Stop')}</span>
           </button>
         </div>
@@ -381,8 +411,13 @@ function Home() {
   // ── Hooks ──
 
   const {
-    logs, logsRef, addLog, clearLogs, copyLogs,
-    handleLogsScroll, isAutoScrollEnabled,
+    logs,
+    logsRef,
+    addLog,
+    clearLogs,
+    copyLogs,
+    handleLogsScroll,
+    isAutoScrollEnabled,
   } = useLogs();
 
   const handleOperationalError = useCallback(
@@ -391,24 +426,43 @@ function Home() {
   );
 
   const {
-    inputFile, outputFolder,
-    handleSelectInputFile, handleSelectOutputFolder,
-    clearInputFile, clearOutputFolder,
+    inputFile,
+    outputFolder,
+    handleSelectInputFile,
+    handleSelectOutputFolder,
+    clearInputFile,
+    clearOutputFolder,
   } = useFileSelection({ onError: handleOperationalError });
 
   const {
-    command, updateCommand, updateCommandWithPaths,
-    handleDragOver, handleDrop, clearCommand, copyCommand,
+    command,
+    updateCommand,
+    updateCommandWithPaths,
+    handleDragOver,
+    handleDrop,
+    clearCommand,
+    copyCommand,
   } = useCommandManager({ inputFile, outputFolder });
 
   const {
-    selectedTemplateId, customTemplates, isTemplateDialogOpen, editingTemplate,
-    transformTemplate, handleTemplateSelect, handleSaveTemplate, handleDeleteTemplate,
-    handleEditTemplate, openNewTemplateDialog, closeTemplateDialog,
+    selectedTemplateId,
+    customTemplates,
+    isTemplateDialogOpen,
+    editingTemplate,
+    transformTemplate,
+    handleTemplateSelect,
+    handleSaveTemplate,
+    handleDeleteTemplate,
+    handleEditTemplate,
+    openNewTemplateDialog,
+    closeTemplateDialog,
   } = useTemplateManager({ onError: handleOperationalError });
 
   const templateOptions = useMemo(
-    () => [...customTemplates.map(transformTemplate), ...commandTemplates.map(transformTemplate)],
+    () => [
+      ...customTemplates.map(transformTemplate),
+      ...commandTemplates.map(transformTemplate),
+    ],
     [customTemplates, transformTemplate],
   );
 
@@ -453,8 +507,11 @@ function Home() {
       if (isCollapsed) return;
       const container = containerRef.current;
       if (!container) return;
-      const controlEl = container.querySelector<HTMLElement>('[data-panel="control"]');
-      const currentHeight = controlEl?.getBoundingClientRect().height ?? DEFAULT_SPLIT_HEIGHT;
+      const controlEl = container.querySelector<HTMLElement>(
+        '[data-panel="control"]',
+      );
+      const currentHeight =
+        controlEl?.getBoundingClientRect().height ?? DEFAULT_SPLIT_HEIGHT;
       dragStartYRef.current = e.clientY;
       dragStartHeightRef.current = currentHeight;
       setIsDragging(true);
@@ -470,7 +527,10 @@ function Home() {
       const containerHeight = container.getBoundingClientRect().height;
       const maxH = Math.floor(containerHeight * MAX_CONTROL_RATIO);
       const delta = e.clientY - dragStartYRef.current;
-      const newH = Math.min(maxH, Math.max(MIN_CONTROL_HEIGHT, dragStartHeightRef.current + delta));
+      const newH = Math.min(
+        maxH,
+        Math.max(MIN_CONTROL_HEIGHT, dragStartHeightRef.current + delta),
+      );
       if (containerHeight - newH - 12 < MIN_LOG_HEIGHT) return;
       setSplitHeight(newH);
       userSplitHeightRef.current = newH;
@@ -478,7 +538,11 @@ function Home() {
     const onUp = () => {
       setIsDragging(false);
       if (userSplitHeightRef.current !== null) {
-        try { localStorage.setItem(LS_KEY, String(userSplitHeightRef.current)); } catch { /* ignore */ }
+        try {
+          localStorage.setItem(LS_KEY, String(userSplitHeightRef.current));
+        } catch {
+          /* ignore */
+        }
       }
     };
     window.addEventListener('mousemove', onMove);
@@ -493,7 +557,10 @@ function Home() {
 
   const isInitialRender = useRef(true);
   useEffect(() => {
-    if (isInitialRender.current) { isInitialRender.current = false; return; }
+    if (isInitialRender.current) {
+      isInitialRender.current = false;
+      return;
+    }
     if (inputFile || outputFolder) updateCommandWithPaths();
   }, [inputFile, outputFolder, updateCommandWithPaths]);
 
@@ -519,10 +586,18 @@ function Home() {
       if (template.id === selectedTemplateIdRef.current) return;
       const f = inputFileRef.current;
       const o = outputFolderRef.current;
-      const nextCmd = (f || o) ? updateCommandPaths(template.command, f, o) : template.command;
+      const nextCmd =
+        f || o ? updateCommandPaths(template.command, f, o) : template.command;
       const current = commandRef.current.trim();
       if (current && current !== nextCmd.trim()) {
-        if (!window.confirm(t('Selecting a template will replace the current command. Continue?'))) return;
+        if (
+          !window.confirm(
+            t(
+              'Selecting a template will replace the current command. Continue?',
+            ),
+          )
+        )
+          return;
       }
       handleTemplateSelect(template);
     },
@@ -577,8 +652,18 @@ function Home() {
 
   const controlPanelStyle = useMemo<React.CSSProperties>(() => {
     if (showTerminal) return {};
-    if (isCollapsed) return { height: MIN_CONTROL_HEIGHT, minHeight: MIN_CONTROL_HEIGHT, maxHeight: MIN_CONTROL_HEIGHT };
-    if (splitHeight !== null) return { height: splitHeight, minHeight: MIN_CONTROL_HEIGHT, flexShrink: 0 };
+    if (isCollapsed)
+      return {
+        height: MIN_CONTROL_HEIGHT,
+        minHeight: MIN_CONTROL_HEIGHT,
+        maxHeight: MIN_CONTROL_HEIGHT,
+      };
+    if (splitHeight !== null)
+      return {
+        height: splitHeight,
+        minHeight: MIN_CONTROL_HEIGHT,
+        flexShrink: 0,
+      };
     return { flexShrink: 0 };
   }, [isCollapsed, splitHeight, showTerminal]);
 
@@ -592,7 +677,9 @@ function Home() {
             <div className="w-16 h-16 border-4 border-primary-100 dark:border-primary-900/50 rounded-full" />
             <Loader2 className="absolute inset-0 w-16 h-16 animate-spin text-primary-500" />
           </div>
-          <p className="text-slate-500 dark:text-slate-400 font-medium">Loading...</p>
+          <p className="text-slate-500 dark:text-slate-400 font-medium">
+            Loading...
+          </p>
         </div>
       </div>
     );
@@ -609,15 +696,13 @@ function Home() {
       ref={containerRef}
       className="h-full flex flex-col bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 overflow-hidden transition-colors duration-300"
     >
-
       {/* ══════════════════════════════════════
           导航条：Logo · 模式切换 · 右侧工具
           独立一行，视觉层级最高
       ══════════════════════════════════════ */}
-      <header className="flex-shrink-0 flex items-center justify-between px-6 pb-3 bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm border-b border-slate-200/60 dark:border-slate-700/60 shadow-sm z-20">
-
+      <header className="flex-shrink-0 grid grid-cols-3 items-center px-6 pb-3 bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm border-b border-slate-200/60 dark:border-slate-700/60 shadow-sm z-20">
         {/* 左：Logo + 标题 */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 justify-start">
           <div className="p-2 bg-gradient-to-br from-primary-500 to-primary-600 rounded-xl shadow-md shadow-primary-500/20 flex-shrink-0">
             <Zap className="w-5 h-5 text-white" />
           </div>
@@ -632,7 +717,7 @@ function Home() {
         </div>
 
         {/* 中：模式切换 Tab */}
-        <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-700/50 rounded-xl border border-slate-200/60 dark:border-slate-600/50">
+        <div className="flex items-center justify-center gap-1 p-1 bg-slate-100 dark:bg-slate-700/50 rounded-xl border border-slate-200/60 dark:border-slate-600/50 justify-self-center">
           <button
             type="button"
             onClick={() => showTerminal && handleOpenTerminal()}
@@ -643,8 +728,18 @@ function Home() {
                 : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-600/50'
             }`}
           >
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+            <svg
+              className="w-3.5 h-3.5"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M13 10V3L4 14h7v7l9-11h-7z"
+              />
             </svg>
             FFmpeg
           </button>
@@ -658,15 +753,25 @@ function Home() {
                 : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-600/50'
             }`}
           >
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+            <svg
+              className="w-3.5 h-3.5"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+              />
             </svg>
             {t('Terminal')}
           </button>
         </div>
 
         {/* 右：语言 · Add Template · 折叠按钮 */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 justify-end">
           <button
             type="button"
             onClick={toggleLanguage}
@@ -675,7 +780,7 @@ function Home() {
             {language === 'en' ? '中文' : 'EN'}
           </button>
 
-          {!showTerminal && (
+          {!showTerminal ? (
             <>
               <button
                 type="button"
@@ -692,10 +797,14 @@ function Home() {
                 title={isCollapsed ? '展开控制面板' : '折叠控制面板'}
                 className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/50 rounded-lg transition-all"
               >
-                {isCollapsed ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
+                {isCollapsed ? (
+                  <ChevronDown size={16} />
+                ) : (
+                  <ChevronUp size={16} />
+                )}
               </button>
             </>
-          )}
+          ) : null}
         </div>
       </header>
 
@@ -713,18 +822,17 @@ function Home() {
         `}
       >
         {showTerminal ? (
-          <div className="flex-1 min-h-0 p-4">
+          <div className="flex-1 min-h-0 p-4 max-w-7xl mx-auto w-full">
             <Terminal />
           </div>
         ) : (
           <div className="flex-1 min-h-0 overflow-y-auto">
             <div className="max-w-7xl mx-auto w-full px-6 py-4 space-y-4">
-
               {/* 主操作行：模板 5 · 输入 4 · 输出 3（权重递减） */}
               <div className="grid grid-cols-12 gap-3 items-end">
                 <div className="col-span-5">
                   <label className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1.5">
-                    Template
+                    {t('Template')}
                   </label>
                   <Dropdown
                     options={templateOptions}
@@ -774,10 +882,11 @@ function Home() {
                 onStart={onStart}
                 isRunning={isRunning}
                 isStopping={isStopping}
-                placeholder={t('Enter FFmpeg command or drag & drop files here')}
+                placeholder={t(
+                  'Enter FFmpeg command or drag & drop files here',
+                )}
                 hasMultipleInputs={hasMultipleInputs}
               />
-
             </div>
           </div>
         )}
@@ -807,7 +916,6 @@ function Home() {
       ══════════════════════════════════════ */}
       {!showTerminal && (
         <div className="flex-1 flex flex-col min-h-0 bg-gradient-to-b from-slate-50 to-slate-100/80 dark:from-slate-800/50 dark:to-slate-900/50 transition-colors duration-300">
-
           <LogHeader
             isRunning={isRunning}
             isStopping={isStopping}
@@ -831,14 +939,20 @@ function Home() {
               {logs.length > 0 ? (
                 <div className="p-4">
                   {logs.map((logHtml, index) => (
-                    <div key={index} dangerouslySetInnerHTML={{ __html: logHtml }} />
+                    <div
+                      key={index}
+                      dangerouslySetInnerHTML={{ __html: logHtml }}
+                    />
                   ))}
                 </div>
               ) : (
                 <div className="h-full flex flex-col items-center justify-center pointer-events-none select-none">
                   <div className="relative mb-4">
                     <div className="w-16 h-16 bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-700 dark:to-slate-800 rounded-2xl flex items-center justify-center shadow-inner">
-                      <TerminalIcon size={36} className="text-slate-400 dark:text-slate-500" />
+                      <TerminalIcon
+                        size={36}
+                        className="text-slate-400 dark:text-slate-500"
+                      />
                     </div>
                     <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center shadow-md">
                       <Play size={10} className="text-white ml-0.5" />
@@ -848,7 +962,7 @@ function Home() {
                     {t('Ready to process...')}
                   </p>
                   <p className="text-slate-300 dark:text-slate-600 text-sm mt-1">
-                    Select a template or enter a command to begin
+                    {t('Select a template or enter a command to begin')}
                   </p>
                 </div>
               )}
