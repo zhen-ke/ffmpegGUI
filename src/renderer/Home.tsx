@@ -1,28 +1,31 @@
 /**
- * Home - FFmpeg GUI 主界面（新布局版）
+ * Home - FFmpeg GUI 主界面（抽屉式日志版）
  *
  * 布局结构：
  * ┌─────────────────────────────────────────────┐
  * │  导航条：Logo · 模式切换 · 语言              │  固定，极简
  * ├─────────────────────────────────────────────┤
- * │  模板(5) · 输入文件(4) · 输出目录(3)         │  主操作行
- * │  ┌─────────────────────────────────────────┐│
- * │  │ $ ffmpeg ...命令框...        [▶ 运行]   ││  命令框 + 运行按钮合为一体
- * │  └─────────────────────────────────────────┘│
- * ╠═════════════════════════════════════════════╣  可拖拽分割线
- * │  [● 47.4% ████░░]  控制台输出  [■ 停止]     │  进度 + 停止合入日志 header
- * │  ...日志内容...                              │
+ * │  flex-1 滚动区                               │
+ * │    模板 · 输入 · 输出                         │
+ * │    命令框 + 内嵌运行按钮                      │
+ * ├─────────────────────────────────────────────┤
+ * │  ┌──── 抽屉 Tab 栏（常驻）───────────────┐  │
+ * │  │ ● Console  [进度条] [47%] [■ Stop]   │  │  ← 始终可见
+ * │  │                   [紧凑][标准][展开]  │  │
+ * │  └───────────────────────────────────────┘  │
+ * │  抽屉内容区（高度由 DrawerSize 控制）         │
  * └─────────────────────────────────────────────┘
  *
+ * 状态简化：
+ *   drawerSize: 'sm' | 'md' | 'lg'
+ *   运行时自动 → 'lg'，结束还原 → 'md'
+ *   彻底移除 isCollapsed / splitHeight / isDragging
  */
 
 import {
-  ChevronDown,
-  ChevronUp,
   Loader2,
   Play,
   PlusCircle,
-  Square,
   Terminal as TerminalIcon,
   Zap,
 } from 'lucide-react';
@@ -46,67 +49,18 @@ import { FileSelector } from './components/FileSelector';
 import { countInputArguments, updateCommandPaths } from './utils/commandUtils';
 
 // ─────────────────────────────────────────────
-// 常量
+// 类型 & 常量
 // ─────────────────────────────────────────────
 
-const MIN_CONTROL_HEIGHT = 48;
-const DEFAULT_SPLIT_HEIGHT = 300;
-const MAX_CONTROL_RATIO = 0.75;
-const MIN_LOG_HEIGHT = 140;
-const LS_KEY = 'ffmpeg-split-height-v2';
+type DrawerSize = 'sm' | 'md' | 'lg';
 
-// ─────────────────────────────────────────────
-// DragHandle
-// ─────────────────────────────────────────────
+const DRAWER_HEIGHT: Record<DrawerSize, number> = {
+  sm: 48,   // 仅 tab 栏可见，日志收起
+  md: 260,  // 默认高度，约 8 行日志
+  lg: 420,  // 运行时展开，约 14 行日志
+};
 
-function DragHandle({
-  onMouseDown,
-  isDragging,
-}: {
-  onMouseDown: (e: React.MouseEvent) => void;
-  isDragging: boolean;
-}) {
-  return (
-    <div
-      onMouseDown={onMouseDown}
-      title="拖拽调整面板高度"
-      className={`
-        flex-shrink-0 relative flex items-center justify-center
-        h-3 cursor-row-resize select-none z-30 group
-        transition-colors duration-150
-        ${
-          isDragging
-            ? 'bg-primary-100/80 dark:bg-primary-900/40'
-            : 'hover:bg-slate-100 dark:hover:bg-slate-700/50'
-        }
-      `}
-    >
-      <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-px bg-slate-200 dark:bg-slate-700" />
-      <div
-        className={`
-          relative z-10 flex items-center gap-0.5 px-2.5 py-0.5 rounded-full border
-          transition-all duration-150 shadow-sm
-          ${
-            isDragging
-              ? 'bg-primary-50 dark:bg-primary-900/60 border-primary-300 dark:border-primary-700 scale-110'
-              : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 group-hover:border-primary-300 dark:group-hover:border-primary-600 group-hover:scale-105'
-          }
-        `}
-      >
-        {[0, 1, 2].map((i) => (
-          <div
-            key={i}
-            className={`w-4 h-0.5 rounded-full transition-colors duration-150 ${
-              isDragging
-                ? 'bg-primary-400 dark:bg-primary-500'
-                : 'bg-slate-300 dark:bg-slate-500 group-hover:bg-primary-400 dark:group-hover:bg-primary-500'
-            }`}
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
+const LS_DRAWER_KEY = 'ffmpeg-drawer-size-v1';
 
 // ─────────────────────────────────────────────
 // CommandBox：命令框 + 内嵌运行按钮
@@ -144,7 +98,6 @@ function CommandBox({
 
   return (
     <div className="relative group">
-      {/* 外发光 hover 效果 */}
       <div className="absolute -inset-0.5 bg-gradient-to-r from-primary-400 via-purple-500 to-pink-500 rounded-xl opacity-0 group-hover:opacity-10 dark:group-hover:opacity-[0.08] transition duration-500 blur-sm pointer-events-none" />
 
       <div className="relative bg-white dark:bg-slate-800 rounded-xl border-2 border-slate-100 dark:border-slate-700 group-hover:border-slate-200 dark:group-hover:border-slate-600 shadow-sm transition-all duration-300">
@@ -231,151 +184,156 @@ function CommandBox({
 }
 
 // ─────────────────────────────────────────────
-// LogHeader：日志区专属 header（含进度条 + 停止）
+// DrawerTabBar：抽屉标题栏（常驻，含进度+停止+尺寸切换）
 // ─────────────────────────────────────────────
 
-interface LogHeaderProps {
+interface DrawerTabBarProps {
   isRunning: boolean;
   isStopping: boolean;
   progress: number;
   onStop: () => void;
-  onClear: () => void;
-  onCopy: () => void;
+  onClearLogs: () => void;
+  onCopyLogs: () => void;
+  drawerSize: DrawerSize;
+  onDrawerSizeChange: (s: DrawerSize) => void;
   isAutoScrollEnabled: boolean;
 }
 
-function LogHeader({
+const DRAWER_SIZE_LABELS: Record<DrawerSize, string> = {
+  sm: '−',
+  md: '▣',
+  lg: '□',
+};
+
+function DrawerTabBar({
   isRunning,
   isStopping,
   progress,
   onStop,
-  onClear,
-  onCopy,
+  onClearLogs,
+  onCopyLogs,
+  drawerSize,
+  onDrawerSizeChange,
   isAutoScrollEnabled,
-}: LogHeaderProps) {
+}: DrawerTabBarProps) {
   const { t } = useLanguage();
   const clampedProgress = Math.max(0, Math.min(100, progress));
   const hasProgress = clampedProgress > 0;
 
   return (
-    <div className="flex-shrink-0 border-b border-slate-200/60 dark:border-slate-700/60 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm">
-      {/* 主 header 行 */}
-      <div className="flex items-center justify-between px-4 py-2.5">
-        {/* 左：Mac 圆点 + 标题 + 运行状态徽章 */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5">
-            <div className="w-3 h-3 rounded-full bg-red-400/80" />
-            <div className="w-3 h-3 rounded-full bg-amber-400/80" />
-            <div className="w-3 h-3 rounded-full bg-green-400/80" />
-          </div>
-          <span className="text-sm font-medium text-slate-600 dark:text-slate-300 ml-1">
-            {t('Console Output')}
-          </span>
-
-          {/* 运行中：百分比徽章 */}
-          {isRunning && (
-            <span className="flex items-center gap-1.5 text-[11px] font-semibold text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/30 px-2 py-0.5 rounded-full border border-primary-200/60 dark:border-primary-700/40">
-              <span className="w-1.5 h-1.5 rounded-full bg-primary-500 animate-pulse" />
-              {hasProgress ? `${clampedProgress.toFixed(1)}%` : t('Running...')}
-            </span>
-          )}
-
-          {/* 滚动暂停提示 */}
-          {!isRunning && !isAutoScrollEnabled && (
-            <span className="text-[11px] text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 px-2 py-0.5 rounded-full border border-amber-200/60 dark:border-amber-700/40">
-              {t('Paused')}
-            </span>
-          )}
+    <div className="flex-shrink-0 flex items-center gap-2 px-4 h-11 bg-white dark:bg-slate-800 border-t border-slate-200/80 dark:border-slate-700/80 shadow-[0_-1px_8px_rgba(0,0,0,0.04)] dark:shadow-[0_-1px_8px_rgba(0,0,0,0.2)]">
+      {/* Mac 三点 + 标题 */}
+      <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex items-center gap-1">
+          <div className="w-2.5 h-2.5 rounded-full bg-red-400/70" />
+          <div className="w-2.5 h-2.5 rounded-full bg-amber-400/70" />
+          <div className="w-2.5 h-2.5 rounded-full bg-green-400/70" />
         </div>
-
-        {/* 右：工具按钮 + 停止 */}
-        <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={onCopy}
-            title={t('Copy raw text')}
-            className="p-1.5 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700/50 rounded-lg transition-all hover:scale-105"
-          >
-            <svg
-              className="w-4 h-4"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-              />
-            </svg>
-          </button>
-          <button
-            type="button"
-            onClick={onClear}
-            title={t('Clear console')}
-            className="p-1.5 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700/50 rounded-lg transition-all hover:scale-105"
-          >
-            <svg
-              className="w-4 h-4"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"
-              />
-            </svg>
-          </button>
-
-          <div className="w-px h-4 bg-slate-200 dark:bg-slate-600 mx-0.5" />
-
-          {/* 停止按钮 —— 位于日志区，折叠控制区后仍可操作 */}
-          <button
-            type="button"
-            onClick={onStop}
-            disabled={!isRunning || isStopping}
-            className={`
-              flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold
-              transition-all duration-200 border
-              ${
-                !isRunning || isStopping
-                  ? 'bg-slate-50 dark:bg-slate-700/30 text-slate-300 dark:text-slate-600 border-slate-200/50 dark:border-slate-700/30 cursor-not-allowed'
-                  : 'bg-white dark:bg-slate-700 border-red-200 dark:border-red-800/50 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 hover:border-red-300 hover:shadow-sm'
-              }
-            `}
-          >
-            {isStopping ? (
-              <Loader2 size={12} className="animate-spin" />
-            ) : (
-              <Square
-                size={12}
-                fill={isRunning && !isStopping ? 'currentColor' : 'none'}
-              />
-            )}
-            <span>{isStopping ? t('Stopping...') : t('Stop')}</span>
-          </button>
-        </div>
+        <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+          {t('Console Output')}
+        </span>
       </div>
 
-      {/* 进度条 —— 从 header 底部滑出，高度极小不抢日志空间 */}
-      <div
-        className={`overflow-hidden transition-all duration-300 ease-in-out ${
-          isRunning ? 'max-h-8 opacity-100' : 'max-h-0 opacity-0'
-        }`}
-      >
-        <div className="px-4 pb-2.5">
-          <div className="h-1.5 w-full bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+      {/* 运行中：进度条 + 百分比 */}
+      {isRunning && (
+        <div className="flex items-center gap-2 flex-1 min-w-0 mx-2">
+          <div className="flex-1 min-w-0 h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
             <div
-              className={`h-full rounded-full transition-all duration-500 ease-out bg-gradient-to-r from-primary-500 via-primary-400 to-cyan-500 shadow-[0_0_8px_rgba(59,130,246,0.4)] ${
+              className={`h-full rounded-full transition-all duration-500 ease-out bg-gradient-to-r from-primary-500 via-primary-400 to-cyan-500 ${
                 hasProgress ? '' : 'animate-pulse'
               }`}
-              style={{ width: hasProgress ? `${clampedProgress}%` : '30%' }}
+              style={{ width: hasProgress ? `${clampedProgress}%` : '25%' }}
             />
           </div>
+          <span className="text-[11px] font-semibold text-primary-600 dark:text-primary-400 tabular-nums flex-shrink-0 min-w-[36px] text-right">
+            {hasProgress ? `${clampedProgress.toFixed(1)}%` : t('Running...')}
+          </span>
+        </div>
+      )}
+
+      {/* 滚动暂停提示（非运行时） */}
+      {!isRunning && !isAutoScrollEnabled && (
+        <span className="text-[11px] text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 px-2 py-0.5 rounded-full border border-amber-200/60 dark:border-amber-700/40 flex-shrink-0">
+          {t('Paused')}
+        </span>
+      )}
+
+      {/* 右侧：工具按钮组 */}
+      <div className="flex items-center gap-1 ml-auto flex-shrink-0">
+        {/* 复制日志 */}
+        <button
+          type="button"
+          onClick={onCopyLogs}
+          title={t('Copy raw text')}
+          className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/50 rounded-md transition-all"
+        >
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+          </svg>
+        </button>
+
+        {/* 清除日志 */}
+        <button
+          type="button"
+          onClick={onClearLogs}
+          title={t('Clear console')}
+          className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/50 rounded-md transition-all"
+        >
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+          </svg>
+        </button>
+
+        <div className="w-px h-3.5 bg-slate-200 dark:bg-slate-600 mx-0.5" />
+
+        {/* 停止按钮 */}
+        <button
+          type="button"
+          onClick={onStop}
+          disabled={!isRunning || isStopping}
+          className={`
+            flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold
+            transition-all duration-200 border
+            ${
+              !isRunning || isStopping
+                ? 'bg-slate-50 dark:bg-slate-700/30 text-slate-300 dark:text-slate-600 border-slate-200/50 dark:border-slate-700/30 cursor-not-allowed'
+                : 'bg-white dark:bg-slate-700 border-red-200 dark:border-red-800/50 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 hover:border-red-300 hover:shadow-sm active:scale-95'
+            }
+          `}
+        >
+          {isStopping ? (
+            <Loader2 size={11} className="animate-spin" />
+          ) : (
+            <svg className="w-2.5 h-2.5" viewBox="0 0 10 10" fill="currentColor">
+              <rect x="1" y="1" width="8" height="8" rx="1" />
+            </svg>
+          )}
+          <span>{isStopping ? t('Stopping...') : t('Stop')}</span>
+        </button>
+
+        <div className="w-px h-3.5 bg-slate-200 dark:bg-slate-600 mx-0.5" />
+
+        {/* 抽屉尺寸切换 */}
+        <div className="flex items-center gap-0.5 bg-slate-100 dark:bg-slate-700/50 rounded-md p-0.5">
+          {(['sm', 'md', 'lg'] as DrawerSize[]).map((sz) => (
+            <button
+              key={sz}
+              type="button"
+              onClick={() => onDrawerSizeChange(sz)}
+              title={sz === 'sm' ? t('Collapse') : sz === 'md' ? t('Default') : t('Expand')}
+              className={`
+                w-6 h-6 flex items-center justify-center rounded text-[11px] font-mono
+                transition-all duration-150
+                ${
+                  drawerSize === sz
+                    ? 'bg-white dark:bg-slate-600 text-primary-600 dark:text-primary-400 shadow-sm'
+                    : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'
+                }
+              `}
+            >
+              {DRAWER_SIZE_LABELS[sz]}
+            </button>
+          ))}
         </div>
       </div>
     </div>
@@ -391,22 +349,24 @@ function Home() {
   const { ffmpegExists } = useElectronIPC();
   const [showTerminal, setShowTerminal] = useState(false);
 
-  // ── 分割面板状态 ──
+  // ── 抽屉状态（替代原 isCollapsed + splitHeight + isDragging）──
 
-  const [splitHeight, setSplitHeight] = useState<number | null>(() => {
+  const [drawerSize, setDrawerSize] = useState<DrawerSize>(() => {
     try {
-      const saved = localStorage.getItem(LS_KEY);
-      return saved ? Number(saved) : null;
+      const saved = localStorage.getItem(LS_DRAWER_KEY);
+      return (saved as DrawerSize) ?? 'md';
     } catch {
-      return null;
+      return 'md';
     }
   });
-  const [isCollapsed, setIsCollapsed] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
-  const dragStartYRef = useRef(0);
-  const dragStartHeightRef = useRef(0);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const userSplitHeightRef = useRef<number | null>(splitHeight);
+  // 运行前记住用户上次的尺寸，结束后还原
+  const userDrawerSizeRef = useRef<DrawerSize>(drawerSize);
+
+  const handleDrawerSizeChange = useCallback((sz: DrawerSize) => {
+    setDrawerSize(sz);
+    userDrawerSizeRef.current = sz;
+    try { localStorage.setItem(LS_DRAWER_KEY, sz); } catch { /* ignore */ }
+  }, []);
 
   // ── Hooks ──
 
@@ -485,73 +445,22 @@ function Home() {
   commandRef.current = command;
   selectedTemplateIdRef.current = selectedTemplateId;
 
-  // ── 运行时自动折叠（方案 B）──
+  // ── 运行时自动切换抽屉尺寸 ──
 
   const prevIsRunningRef = useRef(false);
   useEffect(() => {
     const wasRunning = prevIsRunningRef.current;
     prevIsRunningRef.current = isRunning;
+
     if (!wasRunning && isRunning) {
-      if (splitHeight !== null) userSplitHeightRef.current = splitHeight;
-      setIsCollapsed(true);
+      // 开始运行：记录当前尺寸，切到展开
+      userDrawerSizeRef.current = drawerSize;
+      setDrawerSize('lg');
     } else if (wasRunning && !isRunning) {
-      setIsCollapsed(false);
+      // 运行结束：还原用户上次的尺寸
+      setDrawerSize(userDrawerSizeRef.current);
     }
-  }, [isRunning, splitHeight]);
-
-  // ── 拖拽分割线（方案 A）──
-
-  const handleDragHandleMouseDown = useCallback(
-    (e: React.MouseEvent) => {
-      e.preventDefault();
-      if (isCollapsed) return;
-      const container = containerRef.current;
-      if (!container) return;
-      const controlEl = container.querySelector<HTMLElement>(
-        '[data-panel="control"]',
-      );
-      const currentHeight =
-        controlEl?.getBoundingClientRect().height ?? DEFAULT_SPLIT_HEIGHT;
-      dragStartYRef.current = e.clientY;
-      dragStartHeightRef.current = currentHeight;
-      setIsDragging(true);
-    },
-    [isCollapsed],
-  );
-
-  useEffect(() => {
-    if (!isDragging) return;
-    const onMove = (e: MouseEvent) => {
-      const container = containerRef.current;
-      if (!container) return;
-      const containerHeight = container.getBoundingClientRect().height;
-      const maxH = Math.floor(containerHeight * MAX_CONTROL_RATIO);
-      const delta = e.clientY - dragStartYRef.current;
-      const newH = Math.min(
-        maxH,
-        Math.max(MIN_CONTROL_HEIGHT, dragStartHeightRef.current + delta),
-      );
-      if (containerHeight - newH - 12 < MIN_LOG_HEIGHT) return;
-      setSplitHeight(newH);
-      userSplitHeightRef.current = newH;
-    };
-    const onUp = () => {
-      setIsDragging(false);
-      if (userSplitHeightRef.current !== null) {
-        try {
-          localStorage.setItem(LS_KEY, String(userSplitHeightRef.current));
-        } catch {
-          /* ignore */
-        }
-      }
-    };
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-    return () => {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-    };
-  }, [isDragging]);
+  }, [isRunning, drawerSize]);
 
   // ── 文件变化 → 更新命令路径 ──
 
@@ -592,9 +501,7 @@ function Home() {
       if (current && current !== nextCmd.trim()) {
         if (
           !window.confirm(
-            t(
-              'Selecting a template will replace the current command. Continue?',
-            ),
+            t('Selecting a template will replace the current command. Continue?'),
           )
         )
           return;
@@ -648,25 +555,6 @@ function Home() {
     setShowTerminal((prev) => !prev);
   }, []);
 
-  // ── 控制区高度计算 ──
-
-  const controlPanelStyle = useMemo<React.CSSProperties>(() => {
-    if (showTerminal) return {};
-    if (isCollapsed)
-      return {
-        height: MIN_CONTROL_HEIGHT,
-        minHeight: MIN_CONTROL_HEIGHT,
-        maxHeight: MIN_CONTROL_HEIGHT,
-      };
-    if (splitHeight !== null)
-      return {
-        height: splitHeight,
-        minHeight: MIN_CONTROL_HEIGHT,
-        flexShrink: 0,
-      };
-    return { flexShrink: 0 };
-  }, [isCollapsed, splitHeight, showTerminal]);
-
   // ── 加载态 ──
 
   if (ffmpegExists === null) {
@@ -677,9 +565,7 @@ function Home() {
             <div className="w-16 h-16 border-4 border-primary-100 dark:border-primary-900/50 rounded-full" />
             <Loader2 className="absolute inset-0 w-16 h-16 animate-spin text-primary-500" />
           </div>
-          <p className="text-slate-500 dark:text-slate-400 font-medium">
-            Loading...
-          </p>
+          <p className="text-slate-500 dark:text-slate-400 font-medium">Loading...</p>
         </div>
       </div>
     );
@@ -692,16 +578,13 @@ function Home() {
   // ─────────────────────────────────────────────
 
   return (
-    <div
-      ref={containerRef}
-      className="h-full flex flex-col bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 overflow-hidden transition-colors duration-300"
-    >
+    <div className="h-full flex flex-col bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 overflow-hidden transition-colors duration-300">
+
       {/* ══════════════════════════════════════
-          导航条：Logo · 模式切换 · 右侧工具
-          独立一行，视觉层级最高
+          导航条
       ══════════════════════════════════════ */}
       <header className="flex-shrink-0 grid grid-cols-3 items-center px-6 pb-3 bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm border-b border-slate-200/60 dark:border-slate-700/60 shadow-sm z-20">
-        {/* 左：Logo + 标题 */}
+        {/* 左：Logo */}
         <div className="flex items-center gap-3 justify-start">
           <div className="p-2 bg-gradient-to-br from-primary-500 to-primary-600 rounded-xl shadow-md shadow-primary-500/20 flex-shrink-0">
             <Zap className="w-5 h-5 text-white" />
@@ -728,18 +611,8 @@ function Home() {
                 : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-600/50'
             }`}
           >
-            <svg
-              className="w-3.5 h-3.5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M13 10V3L4 14h7v7l9-11h-7z"
-              />
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
             FFmpeg
           </button>
@@ -753,24 +626,14 @@ function Home() {
                 : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-600/50'
             }`}
           >
-            <svg
-              className="w-3.5 h-3.5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
-              />
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
             </svg>
             {t('Terminal')}
           </button>
         </div>
 
-        {/* 右：语言 · Add Template · 折叠按钮 */}
+        {/* 右：语言 · Add Template */}
         <div className="flex items-center gap-2 justify-end">
           <button
             type="button"
@@ -780,55 +643,34 @@ function Home() {
             {language === 'en' ? '中文' : 'EN'}
           </button>
 
-          {!showTerminal ? (
-            <>
-              <button
-                type="button"
-                onClick={openNewTemplateDialog}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20 hover:bg-primary-100 dark:hover:bg-primary-900/30 rounded-lg border border-primary-200/60 dark:border-primary-700/30 transition-all hover:shadow-sm"
-              >
-                <PlusCircle size={14} />
-                {t('Add Template')}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setIsCollapsed((v) => !v)}
-                title={isCollapsed ? '展开控制面板' : '折叠控制面板'}
-                className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/50 rounded-lg transition-all"
-              >
-                {isCollapsed ? (
-                  <ChevronDown size={16} />
-                ) : (
-                  <ChevronUp size={16} />
-                )}
-              </button>
-            </>
-          ) : null}
+          {!showTerminal && (
+            <button
+              type="button"
+              onClick={openNewTemplateDialog}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20 hover:bg-primary-100 dark:hover:bg-primary-900/30 rounded-lg border border-primary-200/60 dark:border-primary-700/30 transition-all hover:shadow-sm"
+            >
+              <PlusCircle size={14} />
+              {t('Add Template')}
+            </button>
+          )}
         </div>
       </header>
 
       {/* ══════════════════════════════════════
-          控制区：模板 · 文件选择 · 命令框
+          主内容区：Terminal 模式 OR FFmpeg 模式
       ══════════════════════════════════════ */}
-      <div
-        data-panel="control"
-        style={controlPanelStyle}
-        className={`
-          bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm
-          border-b border-slate-200/60 dark:border-slate-700/60
-          z-10 transition-[height] duration-300 ease-in-out
-          ${showTerminal ? 'flex-1 flex flex-col min-h-0' : 'flex flex-col overflow-hidden'}
-        `}
-      >
-        {showTerminal ? (
-          <div className="flex-1 min-h-0 p-4 max-w-7xl mx-auto w-full">
-            <Terminal />
-          </div>
-        ) : (
-          <div className="flex-1 min-h-0 overflow-y-auto">
+      {showTerminal ? (
+        /* Terminal 模式：全屏占满 */
+        <div className="flex-1 min-h-0 p-4 max-w-7xl mx-auto w-full">
+          <Terminal />
+        </div>
+      ) : (
+        /* FFmpeg 模式：控制区 + 抽屉 */
+        <>
+          {/* 控制区：flex-1 可滚动，运行时不折叠，始终可见 */}
+          <div className="flex-1 min-h-0 overflow-y-auto bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm">
             <div className="max-w-7xl mx-auto w-full px-6 py-4 space-y-4">
-              {/* 主操作行：模板 5 · 输入 4 · 输出 3（权重递减） */}
+              {/* 主操作行：模板 5 · 输入 4 · 输出 3 */}
               <div className="grid grid-cols-12 gap-3 items-end">
                 <div className="col-span-5">
                   <label className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1.5">
@@ -882,24 +724,77 @@ function Home() {
                 onStart={onStart}
                 isRunning={isRunning}
                 isStopping={isStopping}
-                placeholder={t(
-                  'Enter FFmpeg command or drag & drop files here',
-                )}
+                placeholder={t('Enter FFmpeg command or drag & drop files here')}
                 hasMultipleInputs={hasMultipleInputs}
               />
             </div>
           </div>
-        )}
-      </div>
 
-      {/* ══════════════════════════════════════
-          拖拽分割线（非 Terminal、非折叠时）
-      ══════════════════════════════════════ */}
-      {!showTerminal && !isCollapsed && (
-        <DragHandle
-          onMouseDown={handleDragHandleMouseDown}
-          isDragging={isDragging}
-        />
+          {/* ══════════════════════════════════════
+              抽屉：Tab 栏（常驻）+ 内容区（高度受控）
+          ══════════════════════════════════════ */}
+          <div className="flex-shrink-0 flex flex-col">
+            {/* Tab 栏：始终可见 */}
+            <DrawerTabBar
+              isRunning={isRunning}
+              isStopping={isStopping}
+              progress={progress}
+              onStop={handleStop}
+              onClearLogs={clearLogs}
+              onCopyLogs={handleCopyLogs}
+              drawerSize={drawerSize}
+              onDrawerSizeChange={handleDrawerSizeChange}
+              isAutoScrollEnabled={isAutoScrollEnabled}
+            />
+
+            {/* 日志内容区：高度由 drawerSize 控制，CSS transition 平滑 */}
+            <div
+              style={{
+                height: DRAWER_HEIGHT[drawerSize],
+                transition: 'height 0.28s cubic-bezier(0.4, 0, 0.2, 1)',
+                overflow: 'hidden',
+              }}
+              className="bg-white dark:bg-slate-900"
+            >
+              <div
+                ref={logsRef}
+                role="log"
+                aria-live="polite"
+                aria-label="FFmpeg log output"
+                onScroll={handleLogsScroll}
+                className="h-full overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-600 scrollbar-track-transparent font-mono text-sm"
+              >
+                {logs.length > 0 ? (
+                  <div className="p-4">
+                    {logs.map((logHtml, index) => (
+                      <div
+                        key={index}
+                        dangerouslySetInnerHTML={{ __html: logHtml }}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="h-full flex flex-col items-center justify-center pointer-events-none select-none">
+                    <div className="relative mb-3">
+                      <div className="w-12 h-12 bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-700 dark:to-slate-800 rounded-xl flex items-center justify-center shadow-inner">
+                        <TerminalIcon size={24} className="text-slate-400 dark:text-slate-500" />
+                      </div>
+                      <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center shadow-md">
+                        <Play size={8} className="text-white ml-0.5" />
+                      </div>
+                    </div>
+                    <p className="text-slate-400 dark:text-slate-500 font-medium text-sm">
+                      {t('Ready to process...')}
+                    </p>
+                    <p className="text-slate-300 dark:text-slate-600 text-xs mt-1">
+                      {t('Select a template or enter a command to begin')}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </>
       )}
 
       {/* Template Dialog */}
@@ -909,72 +804,6 @@ function Home() {
         onSave={handleSaveTemplate}
         initialTemplate={editingTemplate}
       />
-
-      {/* ══════════════════════════════════════
-          日志区：LogHeader（进度 + 停止）+ 内容
-          flex-1 占满所有剩余空间
-      ══════════════════════════════════════ */}
-      {!showTerminal && (
-        <div className="flex-1 flex flex-col min-h-0 bg-gradient-to-b from-slate-50 to-slate-100/80 dark:from-slate-800/50 dark:to-slate-900/50 transition-colors duration-300">
-          <LogHeader
-            isRunning={isRunning}
-            isStopping={isStopping}
-            progress={progress}
-            onStop={handleStop}
-            onClear={clearLogs}
-            onCopy={handleCopyLogs}
-            isAutoScrollEnabled={isAutoScrollEnabled}
-          />
-
-          {/* 日志滚动内容 */}
-          <div className="flex-1 relative bg-white dark:bg-slate-900 shadow-inner">
-            <div
-              ref={logsRef}
-              role="log"
-              aria-live="polite"
-              aria-label="FFmpeg log output"
-              onScroll={handleLogsScroll}
-              className="absolute inset-0 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-600 scrollbar-track-transparent font-mono text-sm"
-            >
-              {logs.length > 0 ? (
-                <div className="p-4">
-                  {logs.map((logHtml, index) => (
-                    <div
-                      key={index}
-                      dangerouslySetInnerHTML={{ __html: logHtml }}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <div className="h-full flex flex-col items-center justify-center pointer-events-none select-none">
-                  <div className="relative mb-4">
-                    <div className="w-16 h-16 bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-700 dark:to-slate-800 rounded-2xl flex items-center justify-center shadow-inner">
-                      <TerminalIcon
-                        size={36}
-                        className="text-slate-400 dark:text-slate-500"
-                      />
-                    </div>
-                    <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center shadow-md">
-                      <Play size={10} className="text-white ml-0.5" />
-                    </div>
-                  </div>
-                  <p className="text-slate-400 dark:text-slate-500 font-medium">
-                    {t('Ready to process...')}
-                  </p>
-                  <p className="text-slate-300 dark:text-slate-600 text-sm mt-1">
-                    {t('Select a template or enter a command to begin')}
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 拖拽时防止文本选中的全局遮罩 */}
-      {isDragging && (
-        <div className="fixed inset-0 z-50 cursor-row-resize select-none" />
-      )}
     </div>
   );
 }
