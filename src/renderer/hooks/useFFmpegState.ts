@@ -73,13 +73,37 @@ export function useFFmpegState({
    * 重置全部状态（包括直接写 ref，避免 totalDurationRef 在当帧读到旧值）。
    */
   const handleStart = useCallback((command: string) => {
-    setIsRunning(true);
     setIsStopping(false);
     setProgress(0);
     setTotalDuration(0);
     // 立即同步 ref，防止本帧内 updateProgress 读到上一次的 totalDuration
     totalDurationRef.current = 0;
-    window.electron.ipcRenderer.sendMessage('start-ffmpeg', command);
+    const trimmed = command?.trim();
+    if (!trimmed) return;
+
+    window.electron.ipcRenderer
+      .invoke('start-ffmpeg', trimmed)
+      .then((result: unknown) => {
+        if (
+          result &&
+          typeof result === 'object' &&
+          'success' in result &&
+          (result as { success: boolean }).success === true
+        ) {
+          setIsRunning(true);
+          return;
+        }
+        setIsRunning(false);
+        setIsStopping(false);
+      })
+      .catch((error: unknown) => {
+        setIsRunning(false);
+        setIsStopping(false);
+        onLogRef.current(
+          'error',
+          error instanceof Error ? error.message : 'Failed to start FFmpeg.',
+        );
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -89,9 +113,30 @@ export function useFFmpegState({
    */
   const handleStop = useCallback(() => {
     if (!isRunningRef.current || isStoppingRef.current) return;
-    setIsStopping(true);
-    onLogRef.current('info', 'Stopping FFmpeg process...');
-    window.electron.ipcRenderer.sendMessage('stop-ffmpeg', null);
+
+    window.electron.ipcRenderer
+      .invoke('stop-ffmpeg')
+      .then((result: unknown) => {
+        if (
+          result &&
+          typeof result === 'object' &&
+          'success' in result &&
+          (result as { success: boolean }).success === true
+        ) {
+          setIsStopping(true);
+          onLogRef.current('info', 'Stopping FFmpeg process...');
+          return;
+        }
+        // stop 失败时主进程会回 ffmpeg-error，这里不抢占状态
+        setIsStopping(false);
+      })
+      .catch((error: unknown) => {
+        setIsStopping(false);
+        onLogRef.current(
+          'error',
+          error instanceof Error ? error.message : 'Failed to stop FFmpeg.',
+        );
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

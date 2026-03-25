@@ -10,7 +10,7 @@ import { autoUpdater } from 'electron-updater';
 import path from 'path';
 import MenuBuilder from './menu';
 import { resolveHtmlPath } from './util';
-import { ffmpegService } from './services/FFmpegService';
+import { ffmpegService } from './services/FFmpegController';
 import { ptyService } from './services/PtyService';
 import { setupAllIpcHandlers } from './ipc/setupIpcHandlers';
 import { initLocale } from './locales';

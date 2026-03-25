@@ -1,0 +1,169 @@
+/**
+ * Electron 端 FFmpeg 控制器
+ * - 负责命令解析/校验/覆盖确认/完成通知等 Electron UI 逻辑
+ * - 使用 FFmpegProcessManager 做纯进程管理
+ */
+
+import { dialog, Notification, shell, type BrowserWindow, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron';
+import fs from 'fs';
+import path from 'path';
+import {
+  containsUnsupportedShellOperators,
+  extractOutputFile,
+  parseFFmpegCommand,
+} from '../utils/commandParser';
+import { safeReply } from '../utils/ipcUtils';
+import { getFfmpegPath } from '../utils/pathUtils';
+import { t } from '../locales';
+import { FFmpegProcessManager, type FFmpegProcessCallbacks } from './FFmpegProcessManager';
+
+type IpcResult<T = undefined> =
+  | (T extends undefined ? { success: true } : { success: true; data: T })
+  | { success: false; error: string };
+
+type FFmpegProgress = { time: number };
+type FFmpegDuration = { duration: number };
+
+class FFmpegController {
+  private manager = new FFmpegProcessManager();
+
+  async start(
+    command: string,
+    event: IpcMainEvent | IpcMainInvokeEvent,
+    mainWindow: BrowserWindow | null,
+  ): Promise<IpcResult> {
+    // IpcMainInvokeEvent / IpcMainEvent 在运行时都具备 sender + reply
+    // 当前安全回复逻辑以 IpcMainEvent 类型断言消除类型不一致问题
+    const ipcEvent = event as IpcMainEvent;
+
+    if (this.manager.isRunning()) {
+      const error = 'An FFmpeg process is already running. Please stop it first.';
+      safeReply(ipcEvent, 'ffmpeg-error', error);
+      return { success: false, error };
+    }
+
+    const trimmed = command?.trim();
+    if (!trimmed) {
+      const error = 'Empty command. Please provide a valid FFmpeg command.';
+      safeReply(ipcEvent, 'ffmpeg-error', error);
+      return { success: false, error };
+    }
+
+    let args: string[];
+    try {
+      args = parseFFmpegCommand(trimmed);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to parse command.';
+      safeReply(ipcEvent, 'ffmpeg-error', message);
+      return { success: false, error: message };
+    }
+
+    if (args.length === 0) {
+      const error = 'Command has no arguments. Please provide a valid FFmpeg command.';
+      safeReply(ipcEvent, 'ffmpeg-error', error);
+      return { success: false, error };
+    }
+
+    if (containsUnsupportedShellOperators(args)) {
+      const error =
+        'Only a single FFmpeg command is supported. Remove shell operators such as &&, ||, |, or redirects.';
+      safeReply(ipcEvent, 'ffmpeg-error', error);
+      return { success: false, error };
+    }
+
+    const outputFile = extractOutputFile(args);
+
+    if (outputFile && fs.existsSync(outputFile)) {
+      if (!mainWindow) {
+        const error = t('cannotConfirmOverwrite');
+        safeReply(ipcEvent, 'ffmpeg-error', error);
+        return { success: false, error };
+      }
+
+      const { response } = await dialog.showMessageBox(mainWindow, {
+        type: 'question',
+        buttons: [t('yes'), t('no')],
+        defaultId: 1,
+        cancelId: 1,
+        title: t('confirmOverwrite'),
+        message: t('fileAlreadyExists', { filename: outputFile }),
+      });
+
+      if (response === 1) {
+        const message = t('operationCancelled');
+        safeReply(ipcEvent, 'ffmpeg-cancelled', message);
+        return { success: false, error: message };
+      }
+
+      // 用户确认覆盖，注入 -y 跳过 FFmpeg 自身的交互提示
+      args = ['-y', ...args];
+    }
+
+    const callbacks: FFmpegProcessCallbacks = {
+      onOutput: (line) => safeReply(ipcEvent, 'ffmpeg-output', line),
+      onProgress: (time) =>
+        safeReply(ipcEvent, 'ffmpeg-progress', { time } satisfies FFmpegProgress),
+      onDuration: (duration) =>
+        safeReply(ipcEvent, 'ffmpeg-duration', { duration } satisfies FFmpegDuration),
+      onCancelled: () =>
+        safeReply(ipcEvent, 'ffmpeg-cancelled', 'FFmpeg process stopped.'),
+      onComplete: (completedOutputFile) => {
+        safeReply(ipcEvent, 'ffmpeg-complete');
+        const file = completedOutputFile ?? outputFile;
+        if (file) this.notifyCompletion(file);
+      },
+      onError: (message) => safeReply(ipcEvent, 'ffmpeg-error', message),
+    };
+
+    // 进程启动是异步效果；我们不等待其完成
+    this.manager.start(args, callbacks, outputFile);
+    return { success: true };
+  }
+
+  stop(): boolean {
+    return this.manager.stop();
+  }
+
+  cleanup(): void {
+    this.manager.cleanup();
+  }
+
+  isRunning(): boolean {
+    return this.manager.isRunning();
+  }
+
+  async checkExists(): Promise<boolean> {
+    try {
+      await fs.promises.access(
+        getFfmpegPath(),
+        fs.constants.F_OK | fs.constants.X_OK,
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private notifyCompletion(outputFile: string): void {
+    if (!Notification.isSupported()) return;
+
+    const resolved = path.resolve(outputFile);
+    const notification = new Notification({
+      title: 'FFmpeg Process Complete',
+      body: 'The FFmpeg process has completed successfully.',
+      silent: false,
+      sound: process.platform === 'darwin' ? 'Ping' : undefined,
+    });
+
+    notification.on('click', () => shell.showItemInFolder(resolved));
+
+    try {
+      notification.show();
+    } catch (error) {
+      console.warn('Failed to show completion notification:', error);
+    }
+  }
+}
+
+export const ffmpegService = new FFmpegController();
+

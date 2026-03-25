@@ -9,6 +9,10 @@ import { extractFull } from 'node-7z';
 import path from 'path';
 import { get7zaPath } from './pathUtils';
 
+// yauzl 没有 TypeScript 类型声明；这里使用 as any 避免 TS 编译失败
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const yauzl = require('yauzl') as any;
+
 // ========== 常量 ==========
 
 const IS_WINDOWS = process.platform === 'win32';
@@ -32,33 +36,52 @@ async function extractZip(
   destination: string,
   progressCallback: (progress: number) => void,
 ): Promise<void> {
-  // 先统计总条目数以计算百分比
-  let totalEntries = 0;
+  progressCallback(0);
+
+  // 先“遍历条目”统计总数：只读 zip 元信息，不把文件写入磁盘
+  const totalEntries = await countZipEntries(source);
   let processedEntries = 0;
 
-  // 第一次 pass：仅统计条目数（extract-zip 无内置 total 属性）
-  await extract(source, {
-    dir: path.resolve(destination),
-    onEntry: () => {
-      totalEntries++;
-    },
-  });
-
-  // 第二次 pass：实际解压并上报进度
-  // 注：两次 pass 的开销在 FFmpeg 这类单文件归档中可忽略不计
-  // 若性能敏感可改为单 pass + 估算，但准确性会下降
-  processedEntries = 0;
   await extract(source, {
     dir: path.resolve(destination),
     onEntry: () => {
       processedEntries++;
       if (totalEntries > 0) {
-        progressCallback(Math.round((processedEntries / totalEntries) * 100));
+        progressCallback(
+          Math.round((processedEntries / totalEntries) * 100),
+        );
       }
     },
   });
 
   progressCallback(100);
+}
+
+/**
+ * 统计 zip 内条目数（不实际解压写入磁盘）
+ * 用于在抽取时计算百分比进度。
+ */
+function countZipEntries(zipPath: string): Promise<number> {
+  return new Promise<number>((resolve, reject) => {
+    yauzl.open(zipPath, { lazyEntries: true }, (err: unknown, zipfile: any) => {
+      if (err) {
+        reject(err instanceof Error ? err : new Error(String(err)));
+        return;
+      }
+
+      let totalEntries = 0;
+
+      zipfile.on('entry', () => {
+        totalEntries++;
+        zipfile.readEntry();
+      });
+
+      zipfile.once('end', () => resolve(totalEntries));
+      zipfile.once('error', (e: unknown) => reject(e));
+
+      zipfile.readEntry();
+    });
+  });
 }
 
 /**

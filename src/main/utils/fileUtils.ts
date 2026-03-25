@@ -63,6 +63,13 @@ export async function removeDir(dirPath: string): Promise<void> {
 
 // ========== 下载 ==========
 
+export interface DownloadOptions {
+  /** 超时时间（毫秒），超过则中止下载 */
+  timeoutMs?: number;
+  /** 最大允许下载字节数（不含解压），超过则中止下载 */
+  maxBytes?: number;
+}
+
 /**
  * 下载文件到指定路径。
  *
@@ -79,11 +86,12 @@ export async function downloadFile(
   url: string,
   destPath: string,
   progressCallback: (progress: number) => void,
+  options: DownloadOptions = {},
 ): Promise<void> {
   if (process.platform === 'darwin') {
-    return downloadWithCurl(url, destPath, progressCallback);
+    return downloadWithCurl(url, destPath, progressCallback, options);
   }
-  return downloadWithFetch(url, destPath, progressCallback);
+  return downloadWithFetch(url, destPath, progressCallback, options);
 }
 
 // ——— curl（macOS）———
@@ -97,12 +105,25 @@ function downloadWithCurl(
   url: string,
   destPath: string,
   progressCallback: (progress: number) => void,
+  options: DownloadOptions,
 ): Promise<void> {
   return new Promise<void>((resolve, reject) => {
+    const args: string[] = ['-L', '--progress-bar', '--fail'];
+
+    // curl 的 --max-time 单位为秒
+    if (options.timeoutMs && options.timeoutMs > 0) {
+      const timeoutSeconds = Math.ceil(options.timeoutMs / 1000);
+      args.push(`--max-time ${timeoutSeconds}`);
+    }
+
+    if (options.maxBytes && options.maxBytes > 0) {
+      args.push(`--max-filesize ${Math.floor(options.maxBytes)}`);
+    }
+
     // --progress-bar 输出形如 `  3.5%` 至 `100.0%`，比 -# 更易解析
     // 使用变量名 `curlProc` 避免与全局 `process` 冲突
     const curlProc = exec(
-      `curl -L --progress-bar -o "${destPath}" "${url}"`,
+      `curl ${args.join(' ')} -o "${destPath}" "${url}"`,
     );
 
     let lastProgress = 0;
@@ -153,18 +174,39 @@ async function downloadWithFetch(
   url: string,
   destPath: string,
   progressCallback: (progress: number) => void,
+  options: DownloadOptions,
 ): Promise<void> {
-  const response = await fetch(url);
+  const controller = new AbortController();
+  const timeoutMs = options.timeoutMs;
+  const maxBytes = options.maxBytes;
 
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status} while downloading: ${url}`);
-  }
+  const timer =
+    timeoutMs && timeoutMs > 0
+      ? setTimeout(() => controller.abort(), timeoutMs)
+      : null;
 
-  const contentLength = Number(response.headers.get('content-length') ?? '0');
   const writer = fs.createWriteStream(destPath);
   let downloaded = 0;
 
   try {
+    const response = await fetch(url, { signal: controller.signal });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status} while downloading: ${url}`);
+    }
+
+    const contentLength = Number(response.headers.get('content-length') ?? '0');
+    if (
+      maxBytes &&
+      maxBytes > 0 &&
+      contentLength > 0 &&
+      contentLength > maxBytes
+    ) {
+      throw new Error(
+        `Download exceeds maxBytes: content-length=${contentLength}, maxBytes=${maxBytes}`,
+      );
+    }
+
     const reader = response.body?.getReader();
     if (!reader) throw new Error('Response body is not readable.');
 
@@ -177,6 +219,14 @@ async function downloadWithFetch(
       });
 
       downloaded += value.byteLength;
+
+      if (maxBytes && maxBytes > 0 && downloaded > maxBytes) {
+        controller.abort();
+        throw new Error(
+          `Download exceeds maxBytes: downloaded=${downloaded}, maxBytes=${maxBytes}`,
+        );
+      }
+
       if (contentLength > 0) {
         progressCallback(Math.round((downloaded / contentLength) * 100));
       }
@@ -191,5 +241,7 @@ async function downloadWithFetch(
     // 确保文件句柄关闭后再抛出
     writer.destroy();
     throw error;
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 }

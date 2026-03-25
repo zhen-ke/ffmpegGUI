@@ -4,7 +4,7 @@
 
 import { ipcMain, type BrowserWindow } from 'electron';
 import { downloadService } from '../services/DownloadService';
-import { ffmpegService } from '../services/FFmpegService';
+import { ffmpegService } from '../services/FFmpegController';
 
 /** OSXExperts 页面地址，使用 HTTPS 防止中间人篡改下载链接 */
 const OSX_EXPERTS_URL = 'https://www.osxexperts.net/';

@@ -44,6 +44,17 @@ function validateUrl(url: string): void {
   }
 }
 
+const DOWNLOAD_TIMEOUT_MS = 180_000; // 3 分钟
+const MAX_DOWNLOAD_BYTES_DEFAULT = 250 * 1024 * 1024; // 250MB
+
+function getMaxDownloadBytes(): number {
+  const env = process.env.FFMPEG_GUI_MAX_DOWNLOAD_BYTES;
+  if (!env) return MAX_DOWNLOAD_BYTES_DEFAULT;
+  const parsed = Number(env);
+  if (!Number.isFinite(parsed) || parsed <= 0) return MAX_DOWNLOAD_BYTES_DEFAULT;
+  return parsed;
+}
+
 // ========== DownloadService ==========
 
 /**
@@ -83,7 +94,7 @@ class DownloadService {
       // downloadFile 返回 void，严格写入 archivePath，无需捕获返回值
       await downloadFile(url, archivePath, (progress) => {
         safeReply(event, 'ffmpeg-download-progress', progress);
-      });
+      }, { timeoutMs: DOWNLOAD_TIMEOUT_MS, maxBytes: getMaxDownloadBytes() });
 
       // ── 阶段 2：解压 ──────────────────────────────────────
       safeReply(event, 'ffmpeg-extract-progress', 0);
