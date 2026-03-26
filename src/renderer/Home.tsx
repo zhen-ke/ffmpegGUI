@@ -1,5 +1,5 @@
 /**
- * Home - FFmpeg GUI 主界面（抽屉式日志版）
+ * Home - FFmpeg GUI 主界面（重构版）
  *
  * 布局结构：
  * ┌─────────────────────────────────────────────┐
@@ -15,11 +15,6 @@
  * │  └───────────────────────────────────────┘  │
  * │  抽屉内容区（高度由 DrawerSize 控制）         │
  * └─────────────────────────────────────────────┘
- *
- * 状态简化：
- *   drawerSize: 'sm' | 'md' | 'lg'
- *   运行时自动 → 'lg'，结束还原 → 'md'
- *   彻底移除 isCollapsed / splitHeight / isDragging
  */
 
 import {
@@ -29,7 +24,6 @@ import {
   Terminal as TerminalIcon,
   Zap,
 } from 'lucide-react';
-import type { DragEvent } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Dropdown, { type DropdownOption } from './components/Dropdown';
 import FFmpegDownloader from './components/FFmpegDownloader';
@@ -42,23 +36,22 @@ import { useCommandManager } from './hooks/useCommandManager';
 import { useElectronIPC } from './hooks/useElectronIPC';
 import { useFFmpegState } from './hooks/useFFmpegState';
 import { useFileSelection } from './hooks/useFileSelection';
-import { useLogs } from './hooks/useLogs';
 import { useTemplateManager } from './hooks/useTemplateManager';
 
 import { FileSelector } from './components/FileSelector';
+import { FFmpegTerminal, type TerminalLogType } from './components/FFmpegTerminal';
 import { countInputArguments, updateCommandPaths } from './utils/commandUtils';
+import { CommandBox } from './components/CommandBox';
+import { DrawerSize, DrawerTabBar } from './components/DrawerTabBar';
 
 // ─────────────────────────────────────────────
 // 类型 & 常量
 // ─────────────────────────────────────────────
 
-import { CommandBox } from './components/CommandBox';
-import { DrawerSize, DrawerTabBar } from './components/DrawerTabBar';
-
 const DRAWER_HEIGHT: Record<DrawerSize, number> = {
-  sm: 48,   // 仅 tab 栏可见，日志收起
-  md: 260,  // 默认高度，约 8 行日志
-  lg: 420,  // 运行时展开，约 14 行日志
+  sm: 48,
+  md: 260,
+  lg: 420,
 };
 
 const LS_DRAWER_KEY = 'ffmpeg-drawer-size-v1';
@@ -72,7 +65,7 @@ function Home() {
   const { ffmpegExists } = useElectronIPC();
   const [showTerminal, setShowTerminal] = useState(false);
 
-  // ── 抽屉状态（替代原 isCollapsed + splitHeight + isDragging）──
+  // ── 抽屉状态 ──
 
   const [drawerSize, setDrawerSize] = useState<DrawerSize>(() => {
     try {
@@ -82,30 +75,38 @@ function Home() {
       return 'md';
     }
   });
-  // 运行前记住用户上次的尺寸，结束后还原
   const userDrawerSizeRef = useRef<DrawerSize>(drawerSize);
 
   const handleDrawerSizeChange = useCallback((sz: DrawerSize) => {
     setDrawerSize(sz);
     userDrawerSizeRef.current = sz;
-    try { localStorage.setItem(LS_DRAWER_KEY, sz); } catch { /* ignore */ }
+    try {
+      localStorage.setItem(LS_DRAWER_KEY, sz);
+    } catch {
+      /* ignore */
+    }
   }, []);
+
+  // ── xterm 命令式 API refs（由 FFmpegTerminal 通过 useEffect 注入）──
+
+  const xtermClearRef = useRef<(() => void) | null>(null);
+  const xtermCopyRef = useRef<(() => string) | null>(null);
+  /**
+   * 替代原 addLog：系统提示也写入 xterm，不再走 React State。
+   * 使用方式：xtermWriteLogRef.current?.('success', '命令已复制')
+   */
+  const xtermWriteLogRef = useRef<
+    ((type: TerminalLogType, message: string) => void) | null
+  >(null);
 
   // ── Hooks ──
 
-  const {
-    logs,
-    logsRef,
-    addLog,
-    clearLogs,
-    copyLogs,
-    handleLogsScroll,
-    isAutoScrollEnabled,
-  } = useLogs();
-
+  // 错误处理：写入 xterm（组件挂载前 ref 可能为 null，静默忽略）
   const handleOperationalError = useCallback(
-    (message: string) => addLog('error', t(message)),
-    [addLog, t],
+    (message: string) => {
+      xtermWriteLogRef.current?.('error', t(message));
+    },
+    [t],
   );
 
   const {
@@ -154,8 +155,9 @@ function Home() {
     [templateOptions, selectedTemplateId],
   );
 
+  // useFFmpegState 已移除 onLog 参数，日志由 FFmpegTerminal 统一处理
   const { isRunning, isStopping, progress, handleStart, handleStop } =
-    useFFmpegState({ onLog: addLog });
+    useFFmpegState();
 
   // ── Refs for stale-closure safety ──
 
@@ -176,11 +178,9 @@ function Home() {
     prevIsRunningRef.current = isRunning;
 
     if (!wasRunning && isRunning) {
-      // 开始运行：记录当前尺寸，切到展开
       userDrawerSizeRef.current = drawerSize;
       setDrawerSize('lg');
     } else if (wasRunning && !isRunning) {
-      // 运行结束：还原用户上次的尺寸
       setDrawerSize(userDrawerSizeRef.current);
     }
   }, [isRunning, drawerSize]);
@@ -239,23 +239,37 @@ function Home() {
   const onStart = useCallback(() => {
     const cmd = command.trim();
     if (!cmd) return;
-    clearLogs();
+    // 直接清空 xterm 缓冲区，不再需要 clearLogs fallback
+    xtermClearRef.current?.();
     handleStart(cmd);
-  }, [clearLogs, handleStart, command]);
+  }, [handleStart, command]);
 
   const handleCopyCommand = useCallback(async () => {
     const r = await copyCommand();
-    if (r === 'success') addLog('success', t('Command copied to clipboard.'));
-    else if (r === 'empty') addLog('info', t('Nothing to copy.'));
-    else addLog('error', t('Failed to copy command.'));
-  }, [addLog, copyCommand, t]);
+    if (r === 'success')
+      xtermWriteLogRef.current?.('success', t('Command copied to clipboard.'));
+    else if (r === 'empty')
+      xtermWriteLogRef.current?.('info', t('Nothing to copy.'));
+    else
+      xtermWriteLogRef.current?.('error', t('Failed to copy command.'));
+  }, [copyCommand, t]);
 
   const handleCopyLogs = useCallback(async () => {
-    const r = await copyLogs();
-    if (r === 'success') addLog('success', t('Log copied to clipboard.'));
-    else if (r === 'empty') addLog('info', t('Nothing to copy.'));
-    else addLog('error', t('Failed to copy logs.'));
-  }, [addLog, copyLogs, t]);
+    const getText = xtermCopyRef.current;
+    if (!getText) return;
+
+    const text = getText();
+    if (!text.trim()) {
+      xtermWriteLogRef.current?.('info', t('Nothing to copy.'));
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      xtermWriteLogRef.current?.('success', t('Log copied to clipboard.'));
+    } catch {
+      xtermWriteLogRef.current?.('error', t('Failed to copy logs.'));
+    }
+  }, [t]);
 
   const handleDeleteTemplateWithConfirm = useCallback(
     (templateId: string) => {
@@ -288,7 +302,9 @@ function Home() {
             <div className="w-16 h-16 border-4 border-primary-100 dark:border-primary-900/50 rounded-full" />
             <Loader2 className="absolute inset-0 w-16 h-16 animate-spin text-primary-500" />
           </div>
-          <p className="text-slate-500 dark:text-slate-400 font-medium">Loading...</p>
+          <p className="text-slate-500 dark:text-slate-400 font-medium">
+            Loading...
+          </p>
         </div>
       </div>
     );
@@ -302,7 +318,6 @@ function Home() {
 
   return (
     <div className="h-full flex flex-col bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 overflow-hidden transition-colors duration-300">
-
       {/* ══════════════════════════════════════
           导航条
       ══════════════════════════════════════ */}
@@ -383,17 +398,14 @@ function Home() {
           主内容区：Terminal 模式 OR FFmpeg 模式
       ══════════════════════════════════════ */}
       {showTerminal ? (
-        /* Terminal 模式：全屏占满 */
         <div className="flex-1 min-h-0 p-4 max-w-7xl mx-auto w-full">
           <Terminal />
         </div>
       ) : (
-        /* FFmpeg 模式：控制区 + 抽屉 */
         <>
-          {/* 控制区：flex-1 可滚动，运行时不折叠，始终可见 */}
+          {/* 控制区 */}
           <div className="flex-1 min-h-0 overflow-y-auto bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm">
             <div className="max-w-7xl mx-auto w-full px-6 py-4 space-y-4">
-              {/* 主操作行：模板 5 · 输入 4 · 输出 3 */}
               <div className="grid grid-cols-12 gap-3 items-end">
                 <div className="col-span-5">
                   <label className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1.5">
@@ -436,7 +448,6 @@ function Home() {
                 </div>
               </div>
 
-              {/* 命令框（内嵌运行按钮） */}
               <CommandBox
                 command={command}
                 onCommandChange={updateCommand}
@@ -457,66 +468,67 @@ function Home() {
               抽屉：Tab 栏（常驻）+ 内容区（高度受控）
           ══════════════════════════════════════ */}
           <div className="flex-shrink-0 flex flex-col">
-            {/* Tab 栏：始终可见 */}
             <DrawerTabBar
               isRunning={isRunning}
               isStopping={isStopping}
               progress={progress}
               onStop={handleStop}
-              onClearLogs={clearLogs}
+              onClearLogs={() => xtermClearRef.current?.()}
               onCopyLogs={handleCopyLogs}
               drawerSize={drawerSize}
               onDrawerSizeChange={handleDrawerSizeChange}
-              isAutoScrollEnabled={isAutoScrollEnabled}
             />
 
-            {/* 日志内容区：高度由 drawerSize 控制，CSS transition 平滑 */}
+            {/* 日志内容区：FFmpegTerminal 始终挂载，用 CSS 控制显隐，保留 xterm 缓冲区 */}
             <div
               style={{
                 height: DRAWER_HEIGHT[drawerSize],
                 transition: 'height 0.28s cubic-bezier(0.4, 0, 0.2, 1)',
                 overflow: 'hidden',
               }}
-              className="bg-white dark:bg-slate-900"
+              className="bg-white dark:bg-slate-900 relative"
             >
+              {/* FFmpegTerminal 始终存在，sm 时用绝对定位隐藏，不卸载组件 */}
               <div
-                ref={logsRef}
-                role="log"
-                aria-live="polite"
-                aria-label="FFmpeg log output"
-                onScroll={handleLogsScroll}
-                className="h-full overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-600 scrollbar-track-transparent font-mono text-sm"
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  // sm 高度为 48px（仅 tab 栏），内容区实际为 0，xterm 不可见但不销毁
+                  visibility: drawerSize === 'sm' ? 'hidden' : 'visible',
+                  pointerEvents: drawerSize === 'sm' ? 'none' : 'auto',
+                }}
               >
-                {logs.length > 0 ? (
-                  <div
-                    className="p-4"
-                    dangerouslySetInnerHTML={{ __html: logs.join('') }}
-                  />
-                ) : (
-                  <div className="h-full flex flex-col items-center justify-center pointer-events-none select-none">
-                    <div className="relative mb-3">
-                      <div className="w-12 h-12 bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-700 dark:to-slate-800 rounded-xl flex items-center justify-center shadow-inner">
-                        <TerminalIcon size={24} className="text-slate-400 dark:text-slate-500" />
-                      </div>
-                      <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center shadow-md">
-                        <Play size={8} className="text-white ml-0.5" />
-                      </div>
-                    </div>
-                    <p className="text-slate-400 dark:text-slate-500 font-medium text-sm">
-                      {t('Ready to process...')}
-                    </p>
-                    <p className="text-slate-300 dark:text-slate-600 text-xs mt-1">
-                      {t('Select a template or enter a command to begin')}
-                    </p>
-                  </div>
-                )}
+                <FFmpegTerminal
+                  onClearRef={xtermClearRef}
+                  onCopyRef={xtermCopyRef}
+                  onWriteLogRef={xtermWriteLogRef}
+                />
               </div>
+
+              {/* sm 时的占位图（覆盖在上层） */}
+              {drawerSize === 'sm' && (
+                <div className="h-full flex flex-col items-center justify-center pointer-events-none select-none">
+                  <div className="relative mb-3">
+                    <div className="w-12 h-12 bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-700 dark:to-slate-800 rounded-xl flex items-center justify-center shadow-inner">
+                      <TerminalIcon size={24} className="text-slate-400 dark:text-slate-500" />
+                    </div>
+                    <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center shadow-md">
+                      <Play size={8} className="text-white ml-0.5" />
+                    </div>
+                  </div>
+                  <p className="text-slate-400 dark:text-slate-500 font-medium text-sm">
+                    {t('Ready to process...')}
+                  </p>
+                  <p className="text-slate-300 dark:text-slate-600 text-xs mt-1">
+                    {t('Select a template or enter a command to begin')}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </>
       )}
 
-      {/* Template Dialog */}
       <TemplateDialog
         isOpen={isTemplateDialogOpen}
         onClose={closeTemplateDialog}

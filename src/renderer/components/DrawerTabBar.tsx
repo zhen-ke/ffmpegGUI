@@ -12,7 +12,7 @@ export interface DrawerTabBarProps {
   onCopyLogs: () => void;
   drawerSize: DrawerSize;
   onDrawerSizeChange: (s: DrawerSize) => void;
-  isAutoScrollEnabled: boolean;
+  isAutoScrollEnabled?: boolean;
 }
 
 const DRAWER_SIZE_LABELS: Record<DrawerSize, string> = {
@@ -35,6 +35,7 @@ export function DrawerTabBar({
   const { t } = useLanguage();
   const clampedProgress = Math.max(0, Math.min(100, progress));
   const hasProgress = clampedProgress > 0;
+  const autoScrollEnabled = isAutoScrollEnabled ?? true;
 
   return (
     <div className="flex-shrink-0 flex items-center gap-2 px-4 h-11 bg-white dark:bg-slate-800 border-t border-slate-200/80 dark:border-slate-700/80 shadow-[0_-1px_8px_rgba(0,0,0,0.04)] dark:shadow-[0_-1px_8px_rgba(0,0,0,0.2)]">
@@ -68,7 +69,7 @@ export function DrawerTabBar({
       )}
 
       {/* 滚动暂停提示（非运行时） */}
-      {!isRunning && !isAutoScrollEnabled && (
+      {!isRunning && !autoScrollEnabled && (
         <span className="text-[11px] text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 px-2 py-0.5 rounded-full border border-amber-200/60 dark:border-amber-700/40 flex-shrink-0">
           {t('Paused')}
         </span>
@@ -83,8 +84,18 @@ export function DrawerTabBar({
           title={t('Copy raw text')}
           className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/50 rounded-md transition-all"
         >
-          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+          <svg
+            className="w-3.5 h-3.5"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+            />
           </svg>
         </button>
 
@@ -95,8 +106,18 @@ export function DrawerTabBar({
           title={t('Clear console')}
           className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/50 rounded-md transition-all"
         >
-          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+          <svg
+            className="w-3.5 h-3.5"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"
+            />
           </svg>
         </button>
 
@@ -120,7 +141,11 @@ export function DrawerTabBar({
           {isStopping ? (
             <Loader2 size={11} className="animate-spin" />
           ) : (
-            <svg className="w-2.5 h-2.5" viewBox="0 0 10 10" fill="currentColor">
+            <svg
+              className="w-2.5 h-2.5"
+              viewBox="0 0 10 10"
+              fill="currentColor"
+            >
               <rect x="1" y="1" width="8" height="8" rx="1" />
             </svg>
           )}
@@ -136,7 +161,13 @@ export function DrawerTabBar({
               key={sz}
               type="button"
               onClick={() => onDrawerSizeChange(sz)}
-              title={sz === 'sm' ? t('Collapse') : sz === 'md' ? t('Default') : t('Expand')}
+              title={
+                sz === 'sm'
+                  ? t('Collapse')
+                  : sz === 'md'
+                    ? t('Default')
+                    : t('Expand')
+              }
               className={`
                 w-6 h-6 flex items-center justify-center rounded text-[11px] font-mono
                 transition-all duration-150
@@ -155,3 +186,7 @@ export function DrawerTabBar({
     </div>
   );
 }
+
+DrawerTabBar.defaultProps = {
+  isAutoScrollEnabled: true,
+};

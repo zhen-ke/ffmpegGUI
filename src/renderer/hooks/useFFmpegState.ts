@@ -1,11 +1,12 @@
 /**
- * FFmpeg 状态管理 Hook
- * 管理 FFmpeg 执行状态、进度和 IPC 通信
+ * FFmpeg 状态管理 Hook（重构版）
+ *
+ * 职责：只管 isRunning / isStopping / progress / totalDuration 状态。
  */
 
-import { useCallback, useEffect, useState } from 'react';
-import { LogType } from '../utils/logUtils';
+import { useCallback, useEffect } from 'react';
 import { useLatest } from './useLatest';
+import { useState } from 'react';
 
 // ========== IPC 数据类型 ==========
 
@@ -20,28 +21,23 @@ interface FFmpegProgressData {
 // ========== Hook Props ==========
 
 interface UseFFmpegStateProps {
-  onLog: (type: LogType, message: string) => void;
+  /**
+   * 进度更新回调（可选），用于需要同步当前时间到外部的场景。
+   */
   onProgressUpdate?: (currentTime: number) => void;
 }
 
 // ========== Hook ==========
 
-export function useFFmpegState({
-  onLog,
-  onProgressUpdate,
-}: UseFFmpegStateProps) {
-  const [isRunning, setIsRunning]       = useState(false);
-  const [isStopping, setIsStopping]     = useState(false);
-  const [progress, setProgress]         = useState(0);
+export function useFFmpegState({ onProgressUpdate }: UseFFmpegStateProps = {}) {
+  const [isRunning, setIsRunning] = useState(false);
+  const [isStopping, setIsStopping] = useState(false);
+  const [progress, setProgress] = useState(0);
   const [totalDuration, setTotalDuration] = useState(0);
 
-  // useLatest 统一管理"最新值"，替代三个独立的同步 useEffect
-  const onLogRef            = useLatest(onLog);
   const onProgressUpdateRef = useLatest(onProgressUpdate);
-  const totalDurationRef    = useLatest(totalDuration);
-
-  // isRunning / isStopping 用 ref 存储，消除 handleStop 对这两个状态的依赖
-  const isRunningRef  = useLatest(isRunning);
+  const totalDurationRef = useLatest(totalDuration);
+  const isRunningRef = useLatest(isRunning);
   const isStoppingRef = useLatest(isStopping);
 
   /**
@@ -59,14 +55,13 @@ export function useFFmpegState({
 
   /**
    * 启动 FFmpeg。
-   * 重置全部状态（包括直接写 ref，避免 totalDurationRef 在当帧读到旧值）。
    */
   const handleStart = useCallback((command: string) => {
     setIsStopping(false);
     setProgress(0);
     setTotalDuration(0);
-    // 立即同步 ref，防止本帧内 updateProgress 读到上一次的 totalDuration
     totalDurationRef.current = 0;
+
     const trimmed = command?.trim();
     if (!trimmed) return;
 
@@ -85,20 +80,16 @@ export function useFFmpegState({
         setIsRunning(false);
         setIsStopping(false);
       })
-      .catch((error: unknown) => {
+      .catch(() => {
         setIsRunning(false);
         setIsStopping(false);
-        onLogRef.current(
-          'error',
-          error instanceof Error ? error.message : 'Failed to start FFmpeg.',
-        );
+        // 错误日志由 FFmpegTerminal 监听 ffmpeg-error 事件输出，这里不重复写
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /**
    * 停止 FFmpeg。
-   * 通过 ref 读取最新状态，不将 isRunning / isStopping 列为依赖。
    */
   const handleStop = useCallback(() => {
     if (!isRunningRef.current || isStoppingRef.current) return;
@@ -113,80 +104,46 @@ export function useFFmpegState({
           (result as { success: boolean }).success === true
         ) {
           setIsStopping(true);
-          onLogRef.current('info', 'Stopping FFmpeg process...');
           return;
         }
-        // stop 失败时主进程会回 ffmpeg-error，这里不抢占状态
         setIsStopping(false);
       })
-      .catch((error: unknown) => {
+      .catch(() => {
         setIsStopping(false);
-        onLogRef.current(
-          'error',
-          error instanceof Error ? error.message : 'Failed to stop FFmpeg.',
-        );
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /**
-   * 注册全部 FFmpeg IPC 事件监听器。
-   * deps 为 [] — updateProgress 引用稳定，监听器只需注册一次。
+   * 只监听进度相关事件：duration / progress / error状态重置 / cancelled / complete
+   * 不监听 ffmpeg-output（纯日志，由 FFmpegTerminal 处理）
    */
   useEffect(() => {
     const listeners = [
-      window.electron.ipcRenderer.on(
-        'ffmpeg-duration',
-        (data: unknown) => {
-          setTotalDuration((data as FFmpegDurationData).duration);
-        },
-      ),
+      window.electron.ipcRenderer.on('ffmpeg-duration', (data: unknown) => {
+        setTotalDuration((data as FFmpegDurationData).duration);
+      }),
 
-      window.electron.ipcRenderer.on(
-        'ffmpeg-progress',
-        (data: unknown) => {
-          updateProgress((data as FFmpegProgressData).time);
-        },
-      ),
+      window.electron.ipcRenderer.on('ffmpeg-progress', (data: unknown) => {
+        updateProgress((data as FFmpegProgressData).time);
+      }),
 
-      window.electron.ipcRenderer.on(
-        'ffmpeg-output',
-        (data: unknown) => {
-          onLogRef.current('info', data as string);
-        },
-      ),
+      // 只重置运行状态，日志由 FFmpegTerminal 负责
+      window.electron.ipcRenderer.on('ffmpeg-error', () => {
+        setIsRunning(false);
+        setIsStopping(false);
+      }),
 
-      window.electron.ipcRenderer.on(
-        'ffmpeg-error',
-        (error: unknown) => {
-          // error 已是主进程传来的消息字符串，不再拼接 "Error: " 前缀
-          onLogRef.current('error', error as string);
-          setIsRunning(false);
-          setIsStopping(false);
-        },
-      ),
+      window.electron.ipcRenderer.on('ffmpeg-cancelled', () => {
+        setIsRunning(false);
+        setIsStopping(false);
+      }),
 
-      window.electron.ipcRenderer.on(
-        'ffmpeg-cancelled',
-        (message: unknown) => {
-          onLogRef.current(
-            'info',
-            (message as string | undefined) ?? 'FFmpeg process stopped.',
-          );
-          setIsRunning(false);
-          setIsStopping(false);
-        },
-      ),
-
-      window.electron.ipcRenderer.on(
-        'ffmpeg-complete',
-        () => {
-          setProgress(100);
-          setIsRunning(false);
-          setIsStopping(false);
-          onLogRef.current('success', 'FFmpeg process completed successfully.');
-        },
-      ),
+      window.electron.ipcRenderer.on('ffmpeg-complete', () => {
+        setProgress(100);
+        setIsRunning(false);
+        setIsStopping(false);
+      }),
     ];
 
     return () => listeners.forEach((remove) => remove());
