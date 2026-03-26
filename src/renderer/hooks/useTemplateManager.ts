@@ -3,19 +3,12 @@
  * 管理命令模板的选择、创建、编辑和删除
  */
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { CommandTemplate } from '../constants/commandTemplates';
 import { useLanguage } from '../LanguageContext';
 import { templateService } from '../services/templateService';
 import { Template } from '../types/template';
-
-// ========== 工具 ==========
-
-function useLatest<T>(value: T) {
-  const ref = useRef(value);
-  ref.current = value;
-  return ref;
-}
+import { useLatest } from './useLatest';
 
 // ========== 类型 ==========
 

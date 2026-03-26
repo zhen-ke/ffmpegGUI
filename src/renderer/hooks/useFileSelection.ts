@@ -3,18 +3,8 @@
  * 管理输入文件和输出文件夹的选择和联动
  */
 
-import { useCallback, useRef, useState } from 'react';
-
-// ========== 工具 ==========
-
-/**
- * 始终持有最新值的 ref，在渲染阶段同步。
- */
-function useLatest<T>(value: T) {
-  const ref = useRef(value);
-  ref.current = value;
-  return ref;
-}
+import { useCallback, useState } from 'react';
+import { useLatest } from './useLatest';
 
 /**
  * 从文件路径中提取所在目录（兼容 `/` 和 `\` 分隔符）。
@@ -58,10 +48,10 @@ export function useFileSelection({ onError }: UseFileSelectionProps = {}) {
    */
   const handleSelectInputFile = useCallback(async () => {
     try {
-      const result: DialogResult = await window.electron.ipcRenderer.invoke(
+      const result = (await window.electron.ipcRenderer.invoke(
         'select-input-file',
         inputFileRef.current,
-      );
+      )) as DialogResult;
 
       if (result.canceled || result.filePaths.length === 0) return;
 
@@ -82,10 +72,10 @@ export function useFileSelection({ onError }: UseFileSelectionProps = {}) {
    */
   const handleSelectOutputFolder = useCallback(async () => {
     try {
-      const result: DialogResult = await window.electron.ipcRenderer.invoke(
+      const result = (await window.electron.ipcRenderer.invoke(
         'select-output-folder',
         outputFolderRef.current,
-      );
+      )) as DialogResult;
 
       if (result.canceled || result.filePaths.length === 0) return;
 

@@ -3,20 +3,9 @@
  * 管理 FFmpeg 执行状态、进度和 IPC 通信
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { LogType } from '../utils/logUtils';
-
-// ========== 工具 Hook ==========
-
-/**
- * 始终持有最新值的 ref，在渲染阶段同步。
- * 用于在 useCallback / useEffect 内读取最新 prop/state，同时保持依赖数组稳定。
- */
-function useLatest<T>(value: T) {
-  const ref = useRef(value);
-  ref.current = value;
-  return ref;
-}
+import { useLatest } from './useLatest';
 
 // ========== IPC 数据类型 ==========
 

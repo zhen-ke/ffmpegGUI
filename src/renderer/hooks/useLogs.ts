@@ -5,14 +5,7 @@
 
 import { UIEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { formatLog, LogType, stripHtmlTags } from '../utils/logUtils';
-
-// ========== 工具 ==========
-
-function useLatest<T>(value: T) {
-  const ref = useRef(value);
-  ref.current = value;
-  return ref;
-}
+import { useLatest } from './useLatest';
 
 // ========== 常量 ==========
 
@@ -38,10 +31,13 @@ export function useLogs() {
   const logsLatest = useLatest(logs);
 
   /**
-   * 追加一条日志（HTML 格式）。
+   * 追加一条日志（HTML 格式）。最多保留 2000 条以防内存和 DOM 溢出。
    */
   const addLog = useCallback((type: LogType, message: string) => {
-    setLogs((prev) => [...prev, formatLog(type, message)]);
+    setLogs((prev) => {
+      const newLogs = [...prev, formatLog(type, message)];
+      return newLogs.length > 2000 ? newLogs.slice(newLogs.length - 2000) : newLogs;
+    });
   }, []);
 
   /**

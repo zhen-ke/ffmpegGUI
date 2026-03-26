@@ -3,23 +3,12 @@
  * 管理 FFmpeg 命令的构建、更新和拖放处理
  */
 
-import { DragEvent, useCallback, useRef, useState } from 'react';
+import { DragEvent, useCallback, useState } from 'react';
 import {
   insertFilesIntoCommand,
   updateCommandPaths,
 } from '../utils/commandUtils';
-
-// ========== 工具 Hook ==========
-
-/**
- * 始终持有最新值的 ref，避免在 useCallback deps 中重复列举状态值。
- * 在渲染阶段同步，保证回调内读取时值是最新的。
- */
-function useLatest<T>(value: T) {
-  const ref = useRef(value);
-  ref.current = value;
-  return ref;
-}
+import { useLatest } from './useLatest';
 
 // ========== 类型 ==========
 
