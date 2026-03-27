@@ -68,7 +68,7 @@ select,
   }
 
   .btn {
-    @apply px-5 py-2.5 rounded-xl bg-primary hover:bg-primary-dark text-white transition-colors duration-200 font-medium shadow-md hover:shadow-lg;
+    @apply px-5 py-2.5 rounded-xl bg-primary hover:bg-primary-600 text-white transition-colors duration-200 font-medium shadow-md hover:shadow-lg;
   }
 
   .input {
