@@ -1,5 +1,5 @@
 import { Loader2, Play, Terminal as TerminalIcon } from 'lucide-react';
-import type { DragEvent } from 'react';
+import { useId, type DragEvent } from 'react';
 import { useLanguage } from '../LanguageContext';
 
 export interface CommandBoxProps {
@@ -10,8 +10,10 @@ export interface CommandBoxProps {
   onCopy: () => void;
   onClear: () => void;
   onStart: () => void;
+  canStart: boolean;
   isRunning: boolean;
   isStopping: boolean;
+  id?: string;
   placeholder?: string;
   hasMultipleInputs: boolean;
 }
@@ -24,19 +26,28 @@ export function CommandBox({
   onCopy,
   onClear,
   onStart,
+  canStart,
   isRunning,
   isStopping,
+  id,
   placeholder,
   hasMultipleInputs,
 }: CommandBoxProps) {
   const { t } = useLanguage();
-  const canStart = command.trim().length > 0 && !isRunning && !isStopping;
+  const generatedId = useId();
+  const textareaId = id ?? generatedId;
+  const helperTextId = `${textareaId}-helper`;
+  const statusText = hasMultipleInputs
+    ? t(
+        'This command has multiple input files; only the first -i is auto-bound from the input selector.',
+      )
+    : t('Drag & drop files or type manually');
 
   return (
     <div className="relative group">
-      <div className="absolute -inset-0.5 bg-gradient-to-r from-primary-400 via-purple-500 to-pink-500 rounded-xl opacity-0 group-hover:opacity-10 dark:group-hover:opacity-[0.08] transition duration-500 blur-sm pointer-events-none" />
+      <div className="absolute -inset-0.5 bg-gradient-to-r from-primary-400 via-cyan-500 to-emerald-500 rounded-xl opacity-0 blur-sm pointer-events-none transition-opacity duration-500 group-hover:opacity-10 dark:group-hover:opacity-[0.08] motion-reduce:transition-none" />
 
-      <div className="relative bg-white dark:bg-slate-800 rounded-xl border-2 border-slate-100 dark:border-slate-700 group-hover:border-slate-200 dark:group-hover:border-slate-600 shadow-sm transition-all duration-300">
+      <div className="relative bg-white dark:bg-slate-800 rounded-xl border-2 border-slate-100 dark:border-slate-700 group-hover:border-slate-200 dark:group-hover:border-slate-600 shadow-sm transition-[border-color,box-shadow,background-color] duration-300 motion-reduce:transition-none">
         {/* 顶部工具栏 */}
         <div className="flex items-center justify-between px-4 py-2 border-b border-slate-100 dark:border-slate-700/80 bg-slate-50/60 dark:bg-slate-900/40 rounded-t-xl">
           <div className="flex items-center gap-2">
@@ -56,14 +67,14 @@ export function CommandBox({
             <button
               type="button"
               onClick={onCopy}
-              className="px-2 py-1 text-[11px] font-medium rounded-md text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-slate-700 dark:hover:text-slate-200 transition-all"
+              className="px-2 py-1 text-[11px] font-medium rounded-md text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-slate-700 dark:hover:text-slate-200 transition-colors duration-200"
             >
               {t('Copy')}
             </button>
             <button
               type="button"
               onClick={onClear}
-              className="px-2 py-1 text-[11px] font-medium rounded-md text-slate-500 dark:text-slate-400 hover:bg-red-50 dark:hover:bg-red-900/30 hover:text-red-600 dark:hover:text-red-400 transition-all"
+              className="px-2 py-1 text-[11px] font-medium rounded-md text-slate-500 dark:text-slate-400 hover:bg-red-50 dark:hover:bg-red-900/30 hover:text-red-600 dark:hover:text-red-400 transition-colors duration-200"
             >
               {t('Clear')}
             </button>
@@ -71,11 +82,16 @@ export function CommandBox({
         </div>
 
         {/* 命令文本域 */}
+        <label htmlFor={textareaId} className="sr-only">
+          {t('FFmpeg Command')}
+        </label>
         <textarea
+          id={textareaId}
           value={command}
           onChange={(e) => onCommandChange(e.target.value)}
           onDragOver={onDragOver}
           onDrop={onDrop}
+          aria-describedby={helperTextId}
           placeholder={
             placeholder ?? t('Enter FFmpeg command or drag & drop files here')
           }
@@ -86,17 +102,23 @@ export function CommandBox({
 
         {/* 底部：字符数 + 内嵌运行按钮 */}
         <div className="flex items-center justify-between px-4 pb-3 pt-1">
-          <span className="text-[11px] text-slate-400 dark:text-slate-500 font-mono select-none">
-            {command.length > 0 ? `${command.length} chars` : ''}
+          <span
+            id={helperTextId}
+            className="text-[11px] text-slate-400 dark:text-slate-500 font-mono select-none"
+          >
+            {command.length > 0
+              ? `${command.length} ${t('characters')}`
+              : statusText}
           </span>
 
           <button
             type="button"
             onClick={onStart}
             disabled={!canStart}
+            aria-disabled={!canStart}
             className={`
               flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-semibold
-              transition-all duration-200 focus:outline-none
+              transition-[transform,box-shadow,background-color,color] duration-200 focus:outline-none
               focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2
               dark:focus-visible:ring-offset-slate-800
               ${
@@ -118,3 +140,8 @@ export function CommandBox({
     </div>
   );
 }
+
+CommandBox.defaultProps = {
+  id: undefined,
+  placeholder: undefined,
+};

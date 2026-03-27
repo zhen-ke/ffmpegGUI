@@ -4,6 +4,7 @@ import React, {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useState,
 } from 'react';
 
@@ -33,6 +34,34 @@ export const translations: Record<Language, Record<string, string>> = {
     Start: 'Start',
     Stop: 'Stop',
     'Stopping...': 'Stopping...',
+    Activity: 'Activity',
+    Shell: 'Shell',
+    Workspace: 'Workspace',
+    Ready: 'Ready',
+    Running: 'Running',
+    'Needs Setup': 'Needs Setup',
+    'Pick a template, input, and output to get started.':
+      'Pick a template, input, and output to get started.',
+    'Review the generated command and start when ready.':
+      'Review the generated command and start when ready.',
+    'Processing is in progress. You can watch live output below.':
+      'Processing is in progress. You can watch live output below.',
+    'Stopping the current process…': 'Stopping the current process…',
+    'Open Shell': 'Open Shell',
+    'Show Activity': 'Show Activity',
+    'Working from template': 'Working from template',
+    'Custom command': 'Custom command',
+    'No template selected': 'No template selected',
+    'Step 1': 'Step 1',
+    'Step 2': 'Step 2',
+    'Step 3': 'Step 3',
+    'Choose template': 'Choose template',
+    'Pick input': 'Pick input',
+    'Pick output': 'Pick output',
+    'Activity stays here while the converter stays above.':
+      'Activity stays here while the converter stays above.',
+    'Open a shell for quick checks without leaving the converter.':
+      'Open a shell for quick checks without leaving the converter.',
     Progress: 'Progress',
     Logs: 'Logs',
     Clear: 'Clear',
@@ -95,6 +124,10 @@ export const translations: Record<Language, Record<string, string>> = {
       'Please provide at least one name and description, and a command.',
     'Drag & drop files or type manually': 'Drag & drop files or type manually',
     characters: 'characters',
+    'Loading…': 'Loading…',
+    'No templates available': 'No templates available',
+    'Modify existing template': 'Modify existing template',
+    'Create a new custom template': 'Create a new custom template',
     'Select a template or enter a command to begin':
       'Select a template or enter a command to begin',
   },
@@ -111,6 +144,34 @@ export const translations: Record<Language, Record<string, string>> = {
     Start: '开始',
     Stop: '停止',
     'Stopping...': '停止中...',
+    Activity: '运行日志',
+    Shell: '终端',
+    Workspace: '工作台',
+    Ready: '就绪',
+    Running: '进行中',
+    'Needs Setup': '待设置',
+    'Pick a template, input, and output to get started.':
+      '先选择模板、输入文件和输出位置。',
+    'Review the generated command and start when ready.':
+      '检查生成的命令，确认后即可开始。',
+    'Processing is in progress. You can watch live output below.':
+      '处理中，可在下方查看实时输出。',
+    'Stopping the current process…': '正在停止当前任务…',
+    'Open Shell': '打开终端',
+    'Show Activity': '查看日志',
+    'Working from template': '使用模板',
+    'Custom command': '自定义命令',
+    'No template selected': '未选择模板',
+    'Step 1': '步骤 1',
+    'Step 2': '步骤 2',
+    'Step 3': '步骤 3',
+    'Choose template': '选择模板',
+    'Pick input': '选择输入',
+    'Pick output': '选择输出',
+    'Activity stays here while the converter stays above.':
+      '转换流程始终保留在上方，运行信息集中在这里。',
+    'Open a shell for quick checks without leaving the converter.':
+      '无需离开当前页面，也可以打开终端做快速检查。',
     Progress: '进度',
     Logs: '日志',
     Clear: '清除',
@@ -174,12 +235,14 @@ export const translations: Record<Language, Record<string, string>> = {
       '请至少填写一侧名称和描述，并提供命令。',
     'Drag & drop files or type manually': '拖拽文件或手动输入',
     characters: '个字符',
+    'Loading…': '加载中…',
+    'No templates available': '暂无可用模板',
+    'Modify existing template': '修改现有模板',
+    'Create a new custom template': '创建新的自定义模板',
   },
 };
 
-export const LanguageProvider: React.FC<{ children: ReactNode }> = ({
-  children,
-}) => {
+export function LanguageProvider({ children }: { children: ReactNode }) {
   const [language, setLanguage] = useState<Language>(() => {
     const savedLanguage = localStorage.getItem('language') as Language | null;
     return savedLanguage || 'en';
@@ -196,12 +259,17 @@ export const LanguageProvider: React.FC<{ children: ReactNode }> = ({
     [language],
   );
 
+  const contextValue = useMemo(
+    () => ({ language, setLanguage, t }),
+    [language, t],
+  );
+
   return (
-    <LanguageContext.Provider value={{ language, setLanguage, t }}>
+    <LanguageContext.Provider value={contextValue}>
       {children}
     </LanguageContext.Provider>
   );
-};
+}
 
 export const useLanguage = () => {
   const context = useContext(LanguageContext);

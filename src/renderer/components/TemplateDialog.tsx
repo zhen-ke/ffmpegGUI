@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import { X, FileCode, Sparkles } from 'lucide-react';
+import React, { useState, useEffect, useId, useRef } from 'react';
 import { useLanguage } from '../LanguageContext';
 import { Template } from '../types/template';
-import { X, FileCode, Sparkles } from 'lucide-react';
 
 interface TemplateDialogProps {
   isOpen: boolean;
@@ -10,32 +10,41 @@ interface TemplateDialogProps {
   initialTemplate?: Template;
 }
 
-export const TemplateDialog: React.FC<TemplateDialogProps> = ({
+const EMPTY_TEMPLATE: Partial<Template> = {
+  name: { en: '', zh: '' },
+  command: '',
+  description: { en: '', zh: '' },
+};
+
+export function TemplateDialog({
   isOpen,
   onClose,
   onSave,
   initialTemplate,
-}) => {
+}: TemplateDialogProps) {
   const { t } = useLanguage();
   const [template, setTemplate] = useState<Partial<Template>>(
-    initialTemplate || {
-      name: { en: '', zh: '' },
-      command: '',
-      description: { en: '', zh: '' },
-    },
+    initialTemplate || EMPTY_TEMPLATE,
   );
   const [validationError, setValidationError] = useState('');
+  const titleId = useId();
+  const errorId = useId();
+  const nameEnId = useId();
+  const nameZhId = useId();
+  const commandId = useId();
+  const descEnId = useId();
+  const descZhId = useId();
+  const firstFieldRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    setTemplate(
-      initialTemplate || {
-        name: { en: '', zh: '' },
-        command: '',
-        description: { en: '', zh: '' },
-      },
-    );
+    setTemplate(initialTemplate || EMPTY_TEMPLATE);
     setValidationError('');
   }, [initialTemplate, isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    firstFieldRef.current?.focus();
+  }, [isOpen]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -80,13 +89,21 @@ export const TemplateDialog: React.FC<TemplateDialogProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Backdrop */}
-      <div
+      <button
+        type="button"
+        aria-label={t('Cancel')}
         className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-fade-in"
         onClick={onClose}
       />
 
       {/* Dialog */}
-      <div className="relative w-full max-w-2xl mx-4 bg-white dark:bg-slate-800 rounded-2xl shadow-2xl dark:shadow-slate-900/50 border border-slate-200 dark:border-slate-700 animate-scale-in overflow-hidden">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={validationError ? errorId : undefined}
+        className="relative w-full max-w-2xl mx-4 bg-white dark:bg-slate-800 rounded-2xl shadow-2xl dark:shadow-slate-900/50 border border-slate-200 dark:border-slate-700 animate-scale-in overflow-hidden"
+      >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
           <div className="flex items-center gap-3">
@@ -98,7 +115,10 @@ export const TemplateDialog: React.FC<TemplateDialogProps> = ({
               )}
             </div>
             <div>
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+              <h2
+                id={titleId}
+                className="text-lg font-bold text-slate-900 dark:text-white"
+              >
                 {initialTemplate ? t('Edit Template') : t('Add New Template')}
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -111,7 +131,8 @@ export const TemplateDialog: React.FC<TemplateDialogProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 dark:hover:text-slate-300 transition-all"
+            aria-label={t('Cancel')}
+            className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 dark:hover:text-slate-300 transition-colors duration-200"
           >
             <X size={20} />
           </button>
@@ -122,10 +143,15 @@ export const TemplateDialog: React.FC<TemplateDialogProps> = ({
           {/* Name Fields */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+              <label
+                htmlFor={nameEnId}
+                className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5"
+              >
                 {t('Name (English)')}
               </label>
               <input
+                ref={firstFieldRef}
+                id={nameEnId}
                 type="text"
                 value={template.name?.en || ''}
                 onChange={(e) =>
@@ -135,16 +161,20 @@ export const TemplateDialog: React.FC<TemplateDialogProps> = ({
                   }))
                 }
                 onInput={() => setValidationError('')}
-                placeholder="e.g., Convert to MP4"
-                className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-xl text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all"
+                placeholder="e.g., Convert to MP4…"
+                className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-xl text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-[border-color,box-shadow,background-color] duration-200"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+              <label
+                htmlFor={nameZhId}
+                className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5"
+              >
                 {t('Name (Chinese)')}
               </label>
               <input
+                id={nameZhId}
                 type="text"
                 value={template.name?.zh || ''}
                 onChange={(e) =>
@@ -154,18 +184,22 @@ export const TemplateDialog: React.FC<TemplateDialogProps> = ({
                   }))
                 }
                 onInput={() => setValidationError('')}
-                placeholder="例如：转换为 MP4"
-                className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-xl text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all"
+                placeholder="例如：转换为 MP4…"
+                className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-xl text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-[border-color,box-shadow,background-color] duration-200"
               />
             </div>
           </div>
 
           {/* Command Field */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+            <label
+              htmlFor={commandId}
+              className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5"
+            >
               {t('Command')}
             </label>
             <textarea
+              id={commandId}
               value={template.command || ''}
               onChange={(e) =>
                 setTemplate((prev) => ({
@@ -175,8 +209,8 @@ export const TemplateDialog: React.FC<TemplateDialogProps> = ({
               }
               onInput={() => setValidationError('')}
               spellCheck="false"
-              placeholder="ffmpeg -i input.mp4 -c:v libx264 -c:a aac output.mp4"
-              className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-xl text-sm font-mono text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all resize-none"
+              placeholder="ffmpeg -i input.mp4 -c:v libx264 -c:a aac output.mp4…"
+              className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-xl text-sm font-mono text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-[border-color,box-shadow,background-color] duration-200 resize-none"
               rows={3}
             />
           </div>
@@ -184,10 +218,14 @@ export const TemplateDialog: React.FC<TemplateDialogProps> = ({
           {/* Description Fields */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+              <label
+                htmlFor={descEnId}
+                className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5"
+              >
                 {t('Description (English)')}
               </label>
               <textarea
+                id={descEnId}
                 value={template.description?.en || ''}
                 onChange={(e) =>
                   setTemplate((prev) => ({
@@ -197,16 +235,20 @@ export const TemplateDialog: React.FC<TemplateDialogProps> = ({
                 }
                 onInput={() => setValidationError('')}
                 spellCheck="false"
-                placeholder="Convert video to MP4 format using H.264"
-                className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-xl text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all resize-none"
+                placeholder="Convert video to MP4 format using H.264…"
+                className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-xl text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-[border-color,box-shadow,background-color] duration-200 resize-none"
                 rows={3}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+              <label
+                htmlFor={descZhId}
+                className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5"
+              >
                 {t('Description (Chinese)')}
               </label>
               <textarea
+                id={descZhId}
                 value={template.description?.zh || ''}
                 onChange={(e) =>
                   setTemplate((prev) => ({
@@ -216,8 +258,8 @@ export const TemplateDialog: React.FC<TemplateDialogProps> = ({
                 }
                 onInput={() => setValidationError('')}
                 spellCheck="false"
-                placeholder="使用 H.264 将视频转换为 MP4 格式"
-                className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-xl text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all resize-none"
+                placeholder="使用 H.264 将视频转换为 MP4 格式…"
+                className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-xl text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-[border-color,box-shadow,background-color] duration-200 resize-none"
                 rows={3}
               />
             </div>
@@ -225,7 +267,11 @@ export const TemplateDialog: React.FC<TemplateDialogProps> = ({
 
           {/* Validation Error */}
           {validationError && (
-            <div className="flex items-center gap-2 px-4 py-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/30 rounded-xl">
+            <div
+              id={errorId}
+              aria-live="polite"
+              className="flex items-center gap-2 px-4 py-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/30 rounded-xl"
+            >
               <span className="text-sm text-red-600 dark:text-red-400">
                 {validationError}
               </span>
@@ -237,13 +283,13 @@ export const TemplateDialog: React.FC<TemplateDialogProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-5 py-2.5 text-sm font-medium text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-slate-800 transition-all"
+              className="px-5 py-2.5 text-sm font-medium text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-slate-800 transition-[background-color,border-color,box-shadow,color] duration-200"
             >
               {t('Cancel')}
             </button>
             <button
               type="submit"
-              className="px-5 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-primary-500 to-primary-600 rounded-xl shadow-lg shadow-primary-500/25 hover:from-primary-600 hover:to-primary-700 hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-slate-800 transition-all"
+              className="px-5 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-primary-500 to-primary-600 rounded-xl shadow-lg shadow-primary-500/25 hover:from-primary-600 hover:to-primary-700 hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-slate-800 transition-[transform,box-shadow,background-image] duration-200"
             >
               {t('Save')}
             </button>
@@ -252,4 +298,10 @@ export const TemplateDialog: React.FC<TemplateDialogProps> = ({
       </div>
     </div>
   );
+}
+
+TemplateDialog.defaultProps = {
+  initialTemplate: undefined,
 };
+
+export default TemplateDialog;

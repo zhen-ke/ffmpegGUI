@@ -1,20 +1,11 @@
 /**
- * Home - FFmpeg GUI 主界面（重构版）
+ * Home - FFmpeg GUI 主界面（最优解重构版）
  *
- * 布局结构：
- * ┌─────────────────────────────────────────────┐
- * │  导航条：Logo · 模式切换 · 语言              │  固定，极简
- * ├─────────────────────────────────────────────┤
- * │  flex-1 滚动区                               │
- * │    模板 · 输入 · 输出                         │
- * │    命令框 + 内嵌运行按钮                      │
- * ├─────────────────────────────────────────────┤
- * │  ┌──── 抽屉 Tab 栏（常驻）───────────────┐  │
- * │  │ ● Console  [进度条] [47%] [■ Stop]   │  │  ← 始终可见
- * │  │                   [紧凑][标准][展开]  │  │
- * │  └───────────────────────────────────────┘  │
- * │  抽屉内容区（高度由 DrawerSize 控制）         │
- * └─────────────────────────────────────────────┘
+ * 改动要点：
+ * 1. useFFmpegState 升级为状态机，isRunning/isStopping 由 deriveFFmpegFlags 派生
+ * 2. 所有 window.confirm 替换为 <ConfirmModal>，Electron 内视觉一致
+ * 3. 彻底移除 useLogs，系统提示统一写入 xterm（xtermWriteLogRef）
+ * 4. FFmpegTerminal 始终挂载（visibility 控制），drawerSize=sm 不销毁 xterm
  */
 
 import {
@@ -24,7 +15,14 @@ import {
   Terminal as TerminalIcon,
   Zap,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import Dropdown, { type DropdownOption } from './components/Dropdown';
 import FFmpegDownloader from './components/FFmpegDownloader';
 import { TemplateDialog } from './components/TemplateDialog';
@@ -38,14 +36,22 @@ import { useFFmpegState } from './hooks/useFFmpegState';
 import { useFileSelection } from './hooks/useFileSelection';
 import { useTemplateManager } from './hooks/useTemplateManager';
 
-import { FileSelector } from './components/FileSelector';
-import { FFmpegTerminal, type TerminalLogType } from './components/FFmpegTerminal';
-import { countInputArguments, updateCommandPaths } from './utils/commandUtils';
 import { CommandBox } from './components/CommandBox';
-import { DrawerSize, DrawerTabBar } from './components/DrawerTabBar';
+import { ConfirmModal } from './components/ConfirmModal';
+import {
+  DrawerSize,
+  DrawerTabBar,
+  type WorkspacePane,
+} from './components/DrawerTabBar';
+import {
+  FFmpegTerminal,
+  type TerminalLogType,
+} from './components/FFmpegTerminal';
+import { FileSelector } from './components/FileSelector';
+import { countInputArguments, updateCommandPaths } from './utils/commandUtils';
 
 // ─────────────────────────────────────────────
-// 类型 & 常量
+// 常量
 // ─────────────────────────────────────────────
 
 const DRAWER_HEIGHT: Record<DrawerSize, number> = {
@@ -55,6 +61,21 @@ const DRAWER_HEIGHT: Record<DrawerSize, number> = {
 };
 
 const LS_DRAWER_KEY = 'ffmpeg-drawer-size-v1';
+const LS_WORKSPACE_PANE_KEY = 'ffmpeg-workspace-pane-v1';
+
+// ─────────────────────────────────────────────
+// ConfirmModal 状态类型
+// ─────────────────────────────────────────────
+
+type ConfirmState =
+  | { isOpen: false }
+  | {
+      isOpen: true;
+      title: string;
+      description?: string;
+      danger?: boolean;
+      onConfirm: () => void;
+    };
 
 // ─────────────────────────────────────────────
 // 主组件
@@ -63,14 +84,26 @@ const LS_DRAWER_KEY = 'ffmpeg-drawer-size-v1';
 function Home() {
   const { language, setLanguage, t } = useLanguage();
   const { ffmpegExists } = useElectronIPC();
-  const [showTerminal, setShowTerminal] = useState(false);
+  const [activePane, setActivePane] = useState<WorkspacePane>(() => {
+    try {
+      return (
+        (localStorage.getItem(LS_WORKSPACE_PANE_KEY) as WorkspacePane) ??
+        'activity'
+      );
+    } catch {
+      return 'activity';
+    }
+  });
+  const templateControlId = useId();
+  const inputControlId = useId();
+  const outputControlId = useId();
+  const commandControlId = useId();
 
   // ── 抽屉状态 ──
 
   const [drawerSize, setDrawerSize] = useState<DrawerSize>(() => {
     try {
-      const saved = localStorage.getItem(LS_DRAWER_KEY);
-      return (saved as DrawerSize) ?? 'md';
+      return (localStorage.getItem(LS_DRAWER_KEY) as DrawerSize) ?? 'md';
     } catch {
       return 'md';
     }
@@ -87,27 +120,55 @@ function Home() {
     }
   }, []);
 
-  // ── xterm 命令式 API refs（由 FFmpegTerminal 通过 useEffect 注入）──
+  const handleActivePaneChange = useCallback((pane: WorkspacePane) => {
+    setActivePane(pane);
+    try {
+      localStorage.setItem(LS_WORKSPACE_PANE_KEY, pane);
+    } catch {
+      /* ignore */
+    }
+    setDrawerSize((prev) => (prev === 'sm' ? 'md' : prev));
+  }, []);
+
+  // ── 统一 ConfirmModal 状态（替代所有 window.confirm）──
+
+  const [confirmState, setConfirmState] = useState<ConfirmState>({
+    isOpen: false,
+  });
+
+  const openConfirm = useCallback(
+    (
+      title: string,
+      onConfirm: () => void,
+      opts?: { description?: string; danger?: boolean },
+    ) => {
+      setConfirmState({ isOpen: true, title, onConfirm, ...opts });
+    },
+    [],
+  );
+
+  const closeConfirm = useCallback(() => {
+    setConfirmState({ isOpen: false });
+  }, []);
+
+  // ── xterm 命令式 API refs ──
 
   const xtermClearRef = useRef<(() => void) | null>(null);
   const xtermCopyRef = useRef<(() => string) | null>(null);
-  /**
-   * 替代原 addLog：系统提示也写入 xterm，不再走 React State。
-   * 使用方式：xtermWriteLogRef.current?.('success', '命令已复制')
-   */
   const xtermWriteLogRef = useRef<
     ((type: TerminalLogType, message: string) => void) | null
   >(null);
 
-  // ── Hooks ──
+  // ── 错误处理：写入 xterm ──
 
-  // 错误处理：写入 xterm（组件挂载前 ref 可能为 null，静默忽略）
   const handleOperationalError = useCallback(
     (message: string) => {
       xtermWriteLogRef.current?.('error', t(message));
     },
     [t],
   );
+
+  // ── 业务 Hooks ──
 
   const {
     inputFile,
@@ -155,9 +216,17 @@ function Home() {
     [templateOptions, selectedTemplateId],
   );
 
-  // useFFmpegState 已移除 onLog 参数，日志由 FFmpegTerminal 统一处理
-  const { isRunning, isStopping, progress, handleStart, handleStop } =
-    useFFmpegState();
+  // FFmpeg 状态以 hook 的派生结果为单一真源，避免 UI 自己重复推导。
+  const {
+    canStart,
+    canStop,
+    isRunning,
+    isStopping,
+    status,
+    progress,
+    handleStart,
+    handleStop,
+  } = useFFmpegState();
 
   // ── Refs for stale-closure safety ──
 
@@ -213,36 +282,67 @@ function Home() {
     applyTemplateCommand(selectedTemplateCommand);
   }, [applyTemplateCommand, selectedTemplateCommand, selectedTemplateId]);
 
+  // ── 模板切换：有改动时弹 ConfirmModal ──
+
   const handleTemplateSelectWithConfirm = useCallback(
     (template: DropdownOption) => {
       if (template.id === selectedTemplateIdRef.current) return;
+
       const f = inputFileRef.current;
       const o = outputFolderRef.current;
       const nextCmd =
         f || o ? updateCommandPaths(template.command, f, o) : template.command;
       const current = commandRef.current.trim();
+
       if (current && current !== nextCmd.trim()) {
-        if (
-          !window.confirm(
-            t('Selecting a template will replace the current command. Continue?'),
-          )
-        )
-          return;
+        openConfirm(
+          t('Selecting a template will replace the current command. Continue?'),
+          () => {
+            handleTemplateSelect(template);
+            closeConfirm();
+          },
+        );
+        return;
       }
       handleTemplateSelect(template);
     },
-    [handleTemplateSelect, t],
+    [handleTemplateSelect, openConfirm, closeConfirm, t],
   );
 
-  // ── 操作处理 ──
+  // ── 模板删除：弹 ConfirmModal（danger 模式）──
+
+  const handleDeleteTemplateWithConfirm = useCallback(
+    (templateId: string) => {
+      openConfirm(
+        t('Delete this custom template?'),
+        () => {
+          handleDeleteTemplate(templateId);
+          closeConfirm();
+        },
+        { danger: true },
+      );
+    },
+    [handleDeleteTemplate, openConfirm, closeConfirm, t],
+  );
+
+  // ── 运行 ──
 
   const onStart = useCallback(() => {
     const cmd = command.trim();
-    if (!cmd) return;
-    // 直接清空 xterm 缓冲区，不再需要 clearLogs fallback
+    if (!cmd || !canStart) return;
+    handleActivePaneChange('activity');
     xtermClearRef.current?.();
     handleStart(cmd);
-  }, [handleStart, command]);
+  }, [canStart, command, handleActivePaneChange, handleStart]);
+
+  // ── 停止：用 canStop 守卫（状态机保证） ──
+
+  const onStop = useCallback(() => {
+    if (!canStop) return;
+    handleStop();
+  }, [canStop, handleStop]);
+
+  // ── 复制命令 ──
 
   const handleCopyCommand = useCallback(async () => {
     const r = await copyCommand();
@@ -250,14 +350,14 @@ function Home() {
       xtermWriteLogRef.current?.('success', t('Command copied to clipboard.'));
     else if (r === 'empty')
       xtermWriteLogRef.current?.('info', t('Nothing to copy.'));
-    else
-      xtermWriteLogRef.current?.('error', t('Failed to copy command.'));
+    else xtermWriteLogRef.current?.('error', t('Failed to copy command.'));
   }, [copyCommand, t]);
+
+  // ── 复制日志 ──
 
   const handleCopyLogs = useCallback(async () => {
     const getText = xtermCopyRef.current;
     if (!getText) return;
-
     const text = getText();
     if (!text.trim()) {
       xtermWriteLogRef.current?.('info', t('Nothing to copy.'));
@@ -271,26 +371,48 @@ function Home() {
     }
   }, [t]);
 
-  const handleDeleteTemplateWithConfirm = useCallback(
-    (templateId: string) => {
-      if (!window.confirm(t('Delete this custom template?'))) return;
-      handleDeleteTemplate(templateId);
-    },
-    [handleDeleteTemplate, t],
-  );
-
   const hasMultipleInputs = useMemo(
     () => countInputArguments(command) > 1,
     [command],
   );
+  const hasCommand = command.trim().length > 0;
 
   const toggleLanguage = useCallback(() => {
     setLanguage(language === 'en' ? 'zh' : 'en');
   }, [language, setLanguage]);
 
-  const handleOpenTerminal = useCallback(() => {
-    setShowTerminal((prev) => !prev);
-  }, []);
+  const openShellPane = useCallback(() => {
+    handleActivePaneChange('terminal');
+  }, [handleActivePaneChange]);
+
+  const openActivityPane = useCallback(() => {
+    handleActivePaneChange('activity');
+  }, [handleActivePaneChange]);
+
+  let workflowLabel = t('Needs Setup');
+  let workflowTone =
+    'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-700/60 dark:text-slate-200 dark:border-slate-600';
+
+  if (status === 'stopping') {
+    workflowLabel = t('Stopping...');
+    workflowTone =
+      'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-200 dark:border-amber-800/60';
+  } else if (status === 'running') {
+    workflowLabel = t('Running');
+    workflowTone =
+      'bg-primary-50 text-primary-700 border-primary-200 dark:bg-primary-900/30 dark:text-primary-200 dark:border-primary-800/60';
+  } else if (canStart && hasCommand) {
+    workflowLabel = t('Ready');
+    workflowTone =
+      'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-200 dark:border-emerald-800/60';
+  }
+
+  let commandSourceLabel = t('No template selected');
+  if (selectedTemplate) {
+    commandSourceLabel = t('Working from template');
+  } else if (hasCommand) {
+    commandSourceLabel = t('Custom command');
+  }
 
   // ── 加载态 ──
 
@@ -303,7 +425,7 @@ function Home() {
             <Loader2 className="absolute inset-0 w-16 h-16 animate-spin text-primary-500" />
           </div>
           <p className="text-slate-500 dark:text-slate-400 font-medium">
-            Loading...
+            {t('Loading…')}
           </p>
         </div>
       </div>
@@ -317,218 +439,239 @@ function Home() {
   // ─────────────────────────────────────────────
 
   return (
-    <div className="h-full flex flex-col bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 overflow-hidden transition-colors duration-300">
-      {/* ══════════════════════════════════════
-          导航条
-      ══════════════════════════════════════ */}
-      <header className="flex-shrink-0 grid grid-cols-3 items-center px-6 pb-3 bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm border-b border-slate-200/60 dark:border-slate-700/60 shadow-sm z-20">
-        {/* 左：Logo */}
-        <div className="flex items-center gap-3 justify-start">
-          <div className="p-2 bg-gradient-to-br from-primary-500 to-primary-600 rounded-xl shadow-md shadow-primary-500/20 flex-shrink-0">
-            <Zap className="w-5 h-5 text-white" />
+    <div className="h-full flex flex-col bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 overflow-hidden transition-colors duration-300 motion-reduce:transition-none">
+      {/* ══ 导航条 ══ */}
+      <header className="flex-shrink-0 px-4 pt-2 pb-2.5 sm:px-6 bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm border-b border-slate-200/60 dark:border-slate-700/60 shadow-sm z-20">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3 justify-start min-w-0">
+            <div className="p-2 bg-gradient-to-br from-primary-500 to-primary-600 rounded-xl shadow-md shadow-primary-500/20 flex-shrink-0">
+              <Zap className="w-5 h-5 text-white" />
+            </div>
+            <div className="min-w-0">
+              <h1 className="text-base font-bold text-slate-900 dark:text-white leading-tight text-balance">
+                {t('FFmpeg Tool')}
+              </h1>
+              <p className="text-[10px] text-slate-400 dark:text-slate-500 leading-tight">
+                {t('Video & Audio Processing')}
+              </p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-base font-bold text-slate-900 dark:text-white leading-tight">
-              {t('FFmpeg Tool')}
-            </h1>
-            <p className="text-[10px] text-slate-400 dark:text-slate-500 leading-tight">
-              {t('Video & Audio Processing')}
-            </p>
-          </div>
-        </div>
 
-        {/* 中：模式切换 Tab */}
-        <div className="flex items-center justify-center gap-1 p-1 bg-slate-100 dark:bg-slate-700/50 rounded-xl border border-slate-200/60 dark:border-slate-600/50 justify-self-center">
-          <button
-            type="button"
-            onClick={() => showTerminal && handleOpenTerminal()}
-            disabled={!showTerminal}
-            className={`flex items-center gap-1.5 px-4 py-1.5 text-sm font-medium rounded-lg transition-all duration-200 ${
-              !showTerminal
-                ? 'bg-white dark:bg-slate-600 text-primary-600 dark:text-primary-400 shadow-sm ring-1 ring-primary-500/20'
-                : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-600/50'
-            }`}
-          >
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-            </svg>
-            FFmpeg
-          </button>
-          <button
-            type="button"
-            onClick={() => !showTerminal && handleOpenTerminal()}
-            disabled={showTerminal}
-            className={`flex items-center gap-1.5 px-4 py-1.5 text-sm font-medium rounded-lg transition-all duration-200 ${
-              showTerminal
-                ? 'bg-white dark:bg-slate-600 text-primary-600 dark:text-primary-400 shadow-sm ring-1 ring-primary-500/20'
-                : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-600/50'
-            }`}
-          >
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-            </svg>
-            {t('Terminal')}
-          </button>
-        </div>
-
-        {/* 右：语言 · Add Template */}
-        <div className="flex items-center gap-2 justify-end">
-          <button
-            type="button"
-            onClick={toggleLanguage}
-            className="px-3 py-1.5 text-xs font-semibold bg-slate-100 dark:bg-slate-700/50 hover:bg-slate-200 dark:hover:bg-slate-600/50 text-slate-600 dark:text-slate-300 rounded-lg border border-slate-200/60 dark:border-slate-600/50 transition-all"
-          >
-            {language === 'en' ? '中文' : 'EN'}
-          </button>
-
-          {!showTerminal && (
+          <div className="flex items-center gap-2 justify-end flex-wrap">
+            <button
+              type="button"
+              onClick={
+                activePane === 'terminal' ? openActivityPane : openShellPane
+              }
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-slate-100 dark:bg-slate-700/50 hover:bg-slate-200 dark:hover:bg-slate-600/50 text-slate-600 dark:text-slate-300 rounded-lg border border-slate-200/60 dark:border-slate-600/50 transition-colors duration-200"
+            >
+              <TerminalIcon size={14} />
+              {activePane === 'terminal' ? t('Show Activity') : t('Open Shell')}
+            </button>
+            <button
+              type="button"
+              onClick={toggleLanguage}
+              aria-label={
+                language === 'en'
+                  ? 'Switch language to Chinese'
+                  : 'Switch language to English'
+              }
+              className="px-3 py-1.5 text-xs font-semibold bg-slate-100 dark:bg-slate-700/50 hover:bg-slate-200 dark:hover:bg-slate-600/50 text-slate-600 dark:text-slate-300 rounded-lg border border-slate-200/60 dark:border-slate-600/50 transition-colors duration-200"
+            >
+              {language === 'en' ? '中文' : 'EN'}
+            </button>
             <button
               type="button"
               onClick={openNewTemplateDialog}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20 hover:bg-primary-100 dark:hover:bg-primary-900/30 rounded-lg border border-primary-200/60 dark:border-primary-700/30 transition-all hover:shadow-sm"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20 hover:bg-primary-100 dark:hover:bg-primary-900/30 rounded-lg border border-primary-200/60 dark:border-primary-700/30 transition-[background-color,box-shadow,color] duration-200 hover:shadow-sm"
             >
               <PlusCircle size={14} />
               {t('Add Template')}
             </button>
-          )}
+          </div>
+        </div>
+
+        <div className="mt-3 flex flex-col gap-2">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span
+                className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${workflowTone}`}
+              >
+                {workflowLabel}
+              </span>
+              <span className="text-xs text-slate-500 dark:text-slate-400">
+                {commandSourceLabel}
+              </span>
+            </div>
+          </div>
         </div>
       </header>
 
-      {/* ══════════════════════════════════════
-          主内容区：Terminal 模式 OR FFmpeg 模式
-      ══════════════════════════════════════ */}
-      {showTerminal ? (
-        <div className="flex-1 min-h-0 p-4 max-w-7xl mx-auto w-full">
-          <Terminal />
-        </div>
-      ) : (
-        <>
-          {/* 控制区 */}
-          <div className="flex-1 min-h-0 overflow-y-auto bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm">
-            <div className="max-w-7xl mx-auto w-full px-6 py-4 space-y-4">
-              <div className="grid grid-cols-12 gap-3 items-end">
-                <div className="col-span-5">
-                  <label className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1.5">
-                    {t('Template')}
-                  </label>
-                  <Dropdown
-                    options={templateOptions}
-                    onChange={handleTemplateSelectWithConfirm}
-                    value={selectedTemplate}
-                    placeholder={t('Select a template')}
-                    onEdit={handleEditTemplate}
-                    onDelete={handleDeleteTemplateWithConfirm}
-                  />
-                </div>
-
-                <div className="col-span-4">
-                  <label className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1.5">
-                    {t('Input File')}
-                  </label>
-                  <FileSelector
-                    type="input"
-                    value={inputFile}
-                    onSelect={handleSelectInputFile}
-                    onClear={clearInputFile}
-                    label={t('Select Input File')}
-                  />
-                </div>
-
-                <div className="col-span-3">
-                  <label className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1.5">
-                    {t('Output Folder')}
-                  </label>
-                  <FileSelector
-                    type="output"
-                    value={outputFolder}
-                    onSelect={handleSelectOutputFolder}
-                    onClear={clearOutputFolder}
-                    label={t('Select Output Folder')}
-                  />
-                </div>
-              </div>
-
-              <CommandBox
-                command={command}
-                onCommandChange={updateCommand}
-                onDragOver={handleDragOver}
-                onDrop={handleDrop}
-                onCopy={handleCopyCommand}
-                onClear={clearCommand}
-                onStart={onStart}
-                isRunning={isRunning}
-                isStopping={isStopping}
-                placeholder={t('Enter FFmpeg command or drag & drop files here')}
-                hasMultipleInputs={hasMultipleInputs}
+      {/* ══ 主内容区 ══ */}
+      <div className="flex-1 min-h-0 overflow-y-auto bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm">
+        <div className="max-w-7xl mx-auto w-full px-6 py-4 space-y-4">
+          <div className="grid grid-cols-12 gap-3 items-end">
+            <div className="col-span-4 min-w-0">
+              <label
+                htmlFor={templateControlId}
+                className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1.5"
+              >
+                {t('Template')}
+              </label>
+              <Dropdown
+                id={templateControlId}
+                options={templateOptions}
+                onChange={handleTemplateSelectWithConfirm}
+                value={selectedTemplate}
+                placeholder={t('Select a template')}
+                onEdit={handleEditTemplate}
+                onDelete={handleDeleteTemplateWithConfirm}
+              />
+            </div>
+            <div className="col-span-4 min-w-0">
+              <label
+                htmlFor={inputControlId}
+                className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1.5"
+              >
+                {t('Input File')}
+              </label>
+              <FileSelector
+                id={inputControlId}
+                type="input"
+                value={inputFile}
+                onSelect={handleSelectInputFile}
+                onClear={clearInputFile}
+                label={t('Select Input File')}
+              />
+            </div>
+            <div className="col-span-4 min-w-0">
+              <label
+                htmlFor={outputControlId}
+                className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1.5"
+              >
+                {t('Output Folder')}
+              </label>
+              <FileSelector
+                id={outputControlId}
+                type="output"
+                value={outputFolder}
+                onSelect={handleSelectOutputFolder}
+                onClear={clearOutputFolder}
+                label={t('Select Output Folder')}
               />
             </div>
           </div>
 
-          {/* ══════════════════════════════════════
-              抽屉：Tab 栏（常驻）+ 内容区（高度受控）
-          ══════════════════════════════════════ */}
-          <div className="flex-shrink-0 flex flex-col">
-            <DrawerTabBar
-              isRunning={isRunning}
-              isStopping={isStopping}
-              progress={progress}
-              onStop={handleStop}
-              onClearLogs={() => xtermClearRef.current?.()}
-              onCopyLogs={handleCopyLogs}
-              drawerSize={drawerSize}
-              onDrawerSizeChange={handleDrawerSizeChange}
+          <CommandBox
+            id={commandControlId}
+            canStart={canStart && command.trim().length > 0}
+            command={command}
+            onCommandChange={updateCommand}
+            onDragOver={handleDragOver}
+            onDrop={handleDrop}
+            onCopy={handleCopyCommand}
+            onClear={clearCommand}
+            onStart={onStart}
+            isRunning={isRunning}
+            isStopping={isStopping}
+            placeholder={t('Enter FFmpeg command or drag & drop files here')}
+            hasMultipleInputs={hasMultipleInputs}
+          />
+        </div>
+      </div>
+
+      {/* ══ 抽屉 ══ */}
+      <div className="flex-shrink-0 flex flex-col">
+        <DrawerTabBar
+          activePane={activePane}
+          onActivePaneChange={handleActivePaneChange}
+          canStop={canStop}
+          isRunning={isRunning}
+          isStopping={isStopping}
+          progress={progress}
+          onStop={onStop}
+          onClearLogs={() => xtermClearRef.current?.()}
+          onCopyLogs={handleCopyLogs}
+          drawerSize={drawerSize}
+          onDrawerSizeChange={handleDrawerSizeChange}
+        />
+
+        <div
+          style={{
+            height: DRAWER_HEIGHT[drawerSize],
+            transition: 'height 0.28s cubic-bezier(0.4, 0, 0.2, 1)',
+            overflow: 'hidden',
+          }}
+          className="bg-white dark:bg-slate-900 relative"
+        >
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              visibility:
+                drawerSize === 'sm' || activePane !== 'activity'
+                  ? 'hidden'
+                  : 'visible',
+              pointerEvents:
+                drawerSize === 'sm' || activePane !== 'activity'
+                  ? 'none'
+                  : 'auto',
+            }}
+          >
+            <FFmpegTerminal
+              onClearRef={xtermClearRef}
+              onCopyRef={xtermCopyRef}
+              onWriteLogRef={xtermWriteLogRef}
             />
-
-            {/* 日志内容区：FFmpegTerminal 始终挂载，用 CSS 控制显隐，保留 xterm 缓冲区 */}
-            <div
-              style={{
-                height: DRAWER_HEIGHT[drawerSize],
-                transition: 'height 0.28s cubic-bezier(0.4, 0, 0.2, 1)',
-                overflow: 'hidden',
-              }}
-              className="bg-white dark:bg-slate-900 relative"
-            >
-              {/* FFmpegTerminal 始终存在，sm 时用绝对定位隐藏，不卸载组件 */}
-              <div
-                style={{
-                  position: 'absolute',
-                  inset: 0,
-                  // sm 高度为 48px（仅 tab 栏），内容区实际为 0，xterm 不可见但不销毁
-                  visibility: drawerSize === 'sm' ? 'hidden' : 'visible',
-                  pointerEvents: drawerSize === 'sm' ? 'none' : 'auto',
-                }}
-              >
-                <FFmpegTerminal
-                  onClearRef={xtermClearRef}
-                  onCopyRef={xtermCopyRef}
-                  onWriteLogRef={xtermWriteLogRef}
-                />
-              </div>
-
-              {/* sm 时的占位图（覆盖在上层） */}
-              {drawerSize === 'sm' && (
-                <div className="h-full flex flex-col items-center justify-center pointer-events-none select-none">
-                  <div className="relative mb-3">
-                    <div className="w-12 h-12 bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-700 dark:to-slate-800 rounded-xl flex items-center justify-center shadow-inner">
-                      <TerminalIcon size={24} className="text-slate-400 dark:text-slate-500" />
-                    </div>
-                    <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center shadow-md">
-                      <Play size={8} className="text-white ml-0.5" />
-                    </div>
-                  </div>
-                  <p className="text-slate-400 dark:text-slate-500 font-medium text-sm">
-                    {t('Ready to process...')}
-                  </p>
-                  <p className="text-slate-300 dark:text-slate-600 text-xs mt-1">
-                    {t('Select a template or enter a command to begin')}
-                  </p>
-                </div>
-              )}
-            </div>
           </div>
-        </>
-      )}
 
+          {drawerSize !== 'sm' && activePane === 'terminal' && (
+            <div className="absolute inset-0 bg-[#0B1120]">
+              <Terminal />
+            </div>
+          )}
+
+          {drawerSize === 'sm' && (
+            <div className="h-full flex flex-col items-center justify-center pointer-events-none select-none">
+              <div className="relative mb-3">
+                <div className="w-12 h-12 bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-700 dark:to-slate-800 rounded-xl flex items-center justify-center shadow-inner">
+                  <TerminalIcon
+                    size={24}
+                    className="text-slate-400 dark:text-slate-500"
+                  />
+                </div>
+                <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center shadow-md">
+                  <Play size={8} className="text-white ml-0.5" />
+                </div>
+              </div>
+              <p className="text-slate-400 dark:text-slate-500 font-medium text-sm">
+                {activePane === 'activity'
+                  ? t('Activity stays here while the converter stays above.')
+                  : t(
+                      'Open a shell for quick checks without leaving the converter.',
+                    )}
+              </p>
+              <p className="text-slate-300 dark:text-slate-600 text-xs mt-1">
+                {activePane === 'activity'
+                  ? t('Select a template or enter a command to begin')
+                  : t('Open Shell')}
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ══ ConfirmModal（替代所有 window.confirm）══ */}
+      <ConfirmModal
+        isOpen={confirmState.isOpen}
+        title={confirmState.isOpen ? confirmState.title : ''}
+        description={confirmState.isOpen ? confirmState.description : undefined}
+        danger={confirmState.isOpen ? confirmState.danger : undefined}
+        onConfirm={confirmState.isOpen ? confirmState.onConfirm : closeConfirm}
+        onCancel={closeConfirm}
+      />
+
+      {/* ══ Template Dialog ══ */}
       <TemplateDialog
         isOpen={isTemplateDialogOpen}
         onClose={closeTemplateDialog}
