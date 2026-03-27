@@ -83,17 +83,17 @@ export function useTemplateManager({
 
   /**
    * 将模板的多语言 name / description 转换为当前语言的字符串。
+   * 依赖 language，语言切换时自动重建，确保 templateOptions 即时更新。
    */
   const transformTemplate = useCallback(
     (template: Template | CommandTemplate): TransformedTemplate => ({
       id:          template.id,
       command:     template.command,
-      name:        template.name[languageRef.current],
-      description: template.description[languageRef.current],
+      name:        template.name[language],
+      description: template.description[language],
       isCustom:    isCustomTemplate(template),
     }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
+    [language],
   );
 
   /** 选中模板（调用方通过 selectedTemplateId 派生当前模板） */

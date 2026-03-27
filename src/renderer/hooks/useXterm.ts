@@ -9,31 +9,8 @@
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { useCallback, useEffect, useRef } from 'react';
-import { Terminal, type ITheme } from 'xterm';
-
-const TERMINAL_THEME: ITheme = {
-  background: '#0D1117',
-  foreground: '#E6EDF3',
-  cursor: '#58A6FF',
-  cursorAccent: '#0D1117',
-  selectionBackground: 'rgba(88,166,255,0.3)',
-  black: '#21262D',
-  brightBlack: '#6E7681',
-  red: '#FF7B72',
-  brightRed: '#FFA198',
-  green: '#3FB950',
-  brightGreen: '#56D364',
-  yellow: '#D29922',
-  brightYellow: '#E3B341',
-  blue: '#58A6FF',
-  brightBlue: '#79C0FF',
-  magenta: '#BC8CFF',
-  brightMagenta: '#D2A8FF',
-  cyan: '#39C5CF',
-  brightCyan: '#56D4DD',
-  white: '#B1BAC4',
-  brightWhite: '#F0F6FC',
-};
+import { Terminal } from 'xterm';
+import { TERMINAL_THEME } from '../constants/terminalTheme';
 
 const TERMINAL_OPTIONS = {
   cursorBlink: false,
@@ -58,24 +35,43 @@ export interface XtermHandle {
   getAllText: () => string;
   resize: (cols: number, rows: number) => void;
   fit: () => void;
+  focus: () => void;
 }
 
 export interface UseXtermOptions {
   autoFit?: boolean;
   webLinks?: boolean;
   scrollback?: number;
+  cursorBlink?: boolean;
   /** 隐藏光标，适用于纯展示型终端（如 FFmpegTerminal） */
   disableCursor?: boolean;
+  /** 每次 ResizeObserver/fit 触发后的回调，用于通知 PTY 等外部系统 */
+  onResize?: (cols: number, rows: number) => void;
+  /** 终端实例创建后的回调，用于连接 PTY 或绑定额外事件 */
+  onInit?: (term: Terminal) => (() => void) | void;
 }
 
 export const useXterm = (
   containerRef: React.RefObject<HTMLDivElement>,
   options: UseXtermOptions = {},
 ) => {
-  const { autoFit = true, webLinks = true, scrollback = 10000, disableCursor = false } = options;
+  const {
+    autoFit = true,
+    webLinks = true,
+    scrollback = 10000,
+    cursorBlink = false,
+    disableCursor = false,
+    onResize,
+    onInit,
+  } = options;
 
   const termRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
+  // 用 ref 保持 onResize/onInit 的最新引用，避免加入 effect deps
+  const onResizeRef = useRef(onResize);
+  const onInitRef = useRef(onInit);
+  onResizeRef.current = onResize;
+  onInitRef.current = onInit;
 
   useEffect(() => {
     const container = containerRef.current;
@@ -84,6 +80,7 @@ export const useXterm = (
     const term = new Terminal({
       ...TERMINAL_OPTIONS,
       scrollback,
+      cursorBlink,
       ...(disableCursor && {
         cursorBlink: false,
         cursorStyle: 'bar' as const,
@@ -106,23 +103,26 @@ export const useXterm = (
     termRef.current = term;
     fitAddonRef.current = fitAddon;
 
+    // onInit 回调：允许外部连接 PTY 等，并返回清理函数
+    const cleanupInit = onInitRef.current?.(term);
+
+    let ro: ResizeObserver | null = null;
     if (autoFit) {
-      const ro = new ResizeObserver(() => fitAddon.fit());
+      ro = new ResizeObserver(() => {
+        fitAddon.fit();
+        onResizeRef.current?.(term.cols, term.rows);
+      });
       ro.observe(container);
-      return () => {
-        ro.disconnect();
-        term.dispose();
-        termRef.current = null;
-        fitAddonRef.current = null;
-      };
     }
 
     return () => {
+      ro?.disconnect();
+      cleanupInit?.();
       term.dispose();
       termRef.current = null;
       fitAddonRef.current = null;
     };
-  }, [containerRef, autoFit, webLinks, scrollback, disableCursor]);
+  }, [containerRef, autoFit, webLinks, scrollback, cursorBlink, disableCursor]);
 
   // ── 使用 useCallback 保证引用稳定，避免 FFmpegTerminal useEffect 反复重注册 ──
 
@@ -165,5 +165,9 @@ export const useXterm = (
     if (autoFit && fitAddonRef.current) fitAddonRef.current.fit();
   }, [autoFit]);
 
-  return { term: termRef, write, writeln, clear, getSelection, getAllText, resize, fit };
+  const focus = useCallback(() => {
+    termRef.current?.focus();
+  }, []);
+
+  return { term: termRef, write, writeln, clear, getSelection, getAllText, resize, fit, focus };
 };

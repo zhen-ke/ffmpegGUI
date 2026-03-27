@@ -106,9 +106,4 @@ export function ConfirmModal({
   );
 }
 
-ConfirmModal.defaultProps = {
-  description: undefined,
-  confirmLabel: undefined,
-  cancelLabel: undefined,
-  danger: false,
-};
+

@@ -6,15 +6,10 @@
  * 2. 所有 window.confirm 替换为 <ConfirmModal>，Electron 内视觉一致
  * 3. 彻底移除 useLogs，系统提示统一写入 xterm（xtermWriteLogRef）
  * 4. FFmpegTerminal 始终挂载（visibility 控制），drawerSize=sm 不销毁 xterm
+ * 5. header/drawer 拆分为 AppHeader / WorkspaceDrawer 组件
  */
 
-import {
-  Loader2,
-  Play,
-  PlusCircle,
-  Terminal as TerminalIcon,
-  Zap,
-} from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import {
   useCallback,
   useEffect,
@@ -26,7 +21,6 @@ import {
 import Dropdown, { type DropdownOption } from './components/Dropdown';
 import FFmpegDownloader from './components/FFmpegDownloader';
 import { TemplateDialog } from './components/TemplateDialog';
-import Terminal from './components/Terminal/Terminal';
 import { commandTemplates } from './constants/commandTemplates';
 import { useLanguage } from './LanguageContext';
 
@@ -36,29 +30,18 @@ import { useFFmpegState } from './hooks/useFFmpegState';
 import { useFileSelection } from './hooks/useFileSelection';
 import { useTemplateManager } from './hooks/useTemplateManager';
 
+import { AppHeader } from './components/AppHeader';
 import { CommandBox } from './components/CommandBox';
 import { ConfirmModal } from './components/ConfirmModal';
-import {
-  DrawerSize,
-  DrawerTabBar,
-  type WorkspacePane,
-} from './components/DrawerTabBar';
-import {
-  FFmpegTerminal,
-  type TerminalLogType,
-} from './components/FFmpegTerminal';
+import { DrawerSize, type WorkspacePane } from './components/DrawerTabBar';
+import { type TerminalLogType } from './components/FFmpegTerminal';
 import { FileSelector } from './components/FileSelector';
+import { WorkspaceDrawer } from './components/WorkspaceDrawer';
 import { countInputArguments, updateCommandPaths } from './utils/commandUtils';
 
 // ─────────────────────────────────────────────
 // 常量
 // ─────────────────────────────────────────────
-
-const DRAWER_HEIGHT: Record<DrawerSize, number> = {
-  sm: 48,
-  md: 260,
-  lg: 420,
-};
 
 const LS_DRAWER_KEY = 'ffmpeg-drawer-size-v1';
 const LS_WORKSPACE_PANE_KEY = 'ffmpeg-workspace-pane-v1';
@@ -389,6 +372,8 @@ function Home() {
     handleActivePaneChange('activity');
   }, [handleActivePaneChange]);
 
+  // ── 派生展示状态 ──
+
   let workflowLabel = t('Needs Setup');
   let workflowTone =
     'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-700/60 dark:text-slate-200 dark:border-slate-600';
@@ -441,71 +426,18 @@ function Home() {
   return (
     <div className="h-full flex flex-col bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 overflow-hidden transition-colors duration-300 motion-reduce:transition-none">
       {/* ══ 导航条 ══ */}
-      <header className="flex-shrink-0 px-4 pt-2 pb-2.5 sm:px-6 bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm border-b border-slate-200/60 dark:border-slate-700/60 shadow-sm z-20">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3 justify-start min-w-0">
-            <div className="p-2 bg-gradient-to-br from-primary-500 to-primary-600 rounded-xl shadow-md shadow-primary-500/20 flex-shrink-0">
-              <Zap className="w-5 h-5 text-white" />
-            </div>
-            <div className="min-w-0">
-              <h1 className="text-base font-bold text-slate-900 dark:text-white leading-tight text-balance">
-                {t('FFmpeg Tool')}
-              </h1>
-              <p className="text-[10px] text-slate-400 dark:text-slate-500 leading-tight">
-                {t('Video & Audio Processing')}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 justify-end flex-wrap">
-            <button
-              type="button"
-              onClick={
-                activePane === 'terminal' ? openActivityPane : openShellPane
-              }
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-slate-100 dark:bg-slate-700/50 hover:bg-slate-200 dark:hover:bg-slate-600/50 text-slate-600 dark:text-slate-300 rounded-lg border border-slate-200/60 dark:border-slate-600/50 transition-colors duration-200"
-            >
-              <TerminalIcon size={14} />
-              {activePane === 'terminal' ? t('Show Activity') : t('Open Shell')}
-            </button>
-            <button
-              type="button"
-              onClick={toggleLanguage}
-              aria-label={
-                language === 'en'
-                  ? 'Switch language to Chinese'
-                  : 'Switch language to English'
-              }
-              className="px-3 py-1.5 text-xs font-semibold bg-slate-100 dark:bg-slate-700/50 hover:bg-slate-200 dark:hover:bg-slate-600/50 text-slate-600 dark:text-slate-300 rounded-lg border border-slate-200/60 dark:border-slate-600/50 transition-colors duration-200"
-            >
-              {language === 'en' ? '中文' : 'EN'}
-            </button>
-            <button
-              type="button"
-              onClick={openNewTemplateDialog}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20 hover:bg-primary-100 dark:hover:bg-primary-900/30 rounded-lg border border-primary-200/60 dark:border-primary-700/30 transition-[background-color,box-shadow,color] duration-200 hover:shadow-sm"
-            >
-              <PlusCircle size={14} />
-              {t('Add Template')}
-            </button>
-          </div>
-        </div>
-
-        <div className="mt-3 flex flex-col gap-2">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <span
-                className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${workflowTone}`}
-              >
-                {workflowLabel}
-              </span>
-              <span className="text-xs text-slate-500 dark:text-slate-400">
-                {commandSourceLabel}
-              </span>
-            </div>
-          </div>
-        </div>
-      </header>
+      <AppHeader
+        language={language}
+        toggleLanguage={toggleLanguage}
+        activePane={activePane}
+        openActivityPane={openActivityPane}
+        openShellPane={openShellPane}
+        openNewTemplateDialog={openNewTemplateDialog}
+        workflowLabel={workflowLabel}
+        workflowTone={workflowTone}
+        commandSourceLabel={commandSourceLabel}
+        t={t}
+      />
 
       {/* ══ 主内容区 ══ */}
       <div className="flex-1 min-h-0 overflow-y-auto bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm">
@@ -581,85 +513,22 @@ function Home() {
       </div>
 
       {/* ══ 抽屉 ══ */}
-      <div className="flex-shrink-0 flex flex-col">
-        <DrawerTabBar
-          activePane={activePane}
-          onActivePaneChange={handleActivePaneChange}
-          canStop={canStop}
-          isRunning={isRunning}
-          isStopping={isStopping}
-          progress={progress}
-          onStop={onStop}
-          onClearLogs={() => xtermClearRef.current?.()}
-          onCopyLogs={handleCopyLogs}
-          drawerSize={drawerSize}
-          onDrawerSizeChange={handleDrawerSizeChange}
-        />
-
-        <div
-          style={{
-            height: DRAWER_HEIGHT[drawerSize],
-            transition: 'height 0.28s cubic-bezier(0.4, 0, 0.2, 1)',
-            overflow: 'hidden',
-          }}
-          className="bg-white dark:bg-slate-900 relative"
-        >
-          <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              visibility:
-                drawerSize === 'sm' || activePane !== 'activity'
-                  ? 'hidden'
-                  : 'visible',
-              pointerEvents:
-                drawerSize === 'sm' || activePane !== 'activity'
-                  ? 'none'
-                  : 'auto',
-            }}
-          >
-            <FFmpegTerminal
-              onClearRef={xtermClearRef}
-              onCopyRef={xtermCopyRef}
-              onWriteLogRef={xtermWriteLogRef}
-            />
-          </div>
-
-          {drawerSize !== 'sm' && activePane === 'terminal' && (
-            <div className="absolute inset-0 bg-[#0B1120]">
-              <Terminal />
-            </div>
-          )}
-
-          {drawerSize === 'sm' && (
-            <div className="h-full flex flex-col items-center justify-center pointer-events-none select-none">
-              <div className="relative mb-3">
-                <div className="w-12 h-12 bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-700 dark:to-slate-800 rounded-xl flex items-center justify-center shadow-inner">
-                  <TerminalIcon
-                    size={24}
-                    className="text-slate-400 dark:text-slate-500"
-                  />
-                </div>
-                <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center shadow-md">
-                  <Play size={8} className="text-white ml-0.5" />
-                </div>
-              </div>
-              <p className="text-slate-400 dark:text-slate-500 font-medium text-sm">
-                {activePane === 'activity'
-                  ? t('Activity stays here while the converter stays above.')
-                  : t(
-                      'Open a shell for quick checks without leaving the converter.',
-                    )}
-              </p>
-              <p className="text-slate-300 dark:text-slate-600 text-xs mt-1">
-                {activePane === 'activity'
-                  ? t('Select a template or enter a command to begin')
-                  : t('Open Shell')}
-              </p>
-            </div>
-          )}
-        </div>
-      </div>
+      <WorkspaceDrawer
+        activePane={activePane}
+        onActivePaneChange={handleActivePaneChange}
+        drawerSize={drawerSize}
+        onDrawerSizeChange={handleDrawerSizeChange}
+        canStop={canStop}
+        isRunning={isRunning}
+        isStopping={isStopping}
+        progress={progress}
+        onStop={onStop}
+        onCopyLogs={handleCopyLogs}
+        xtermClearRef={xtermClearRef}
+        xtermCopyRef={xtermCopyRef}
+        xtermWriteLogRef={xtermWriteLogRef}
+        t={t}
+      />
 
       {/* ══ ConfirmModal（替代所有 window.confirm）══ */}
       <ConfirmModal

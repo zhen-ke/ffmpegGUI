@@ -141,7 +141,4 @@ export function CommandBox({
   );
 }
 
-CommandBox.defaultProps = {
-  id: undefined,
-  placeholder: undefined,
-};
+

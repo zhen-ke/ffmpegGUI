@@ -1,44 +1,14 @@
-import { FitAddon } from '@xterm/addon-fit';
-import { WebLinksAddon } from '@xterm/addon-web-links';
-import { useCallback, useEffect, useRef, type RefObject } from 'react';
-import { Terminal, type ITheme } from 'xterm';
+/**
+ * useTerminal — 交互式 PTY 终端 Hook
+ *
+ * 基于 useXterm 构建，添加 PTY 连接、输入/输出绑定和进程管理。
+ * useXterm 负责 xterm.js 实例的创建/销毁/FitAddon/WebLinksAddon/ResizeObserver，
+ * 本 hook 通过 onInit/onResize 回调接入 PTY 层。
+ */
 
-// ========== 常量 ==========
-
-const TERMINAL_THEME: ITheme = {
-  background: '#0D1117',
-  foreground: '#E6EDF3',
-  cursor: '#58A6FF',
-  cursorAccent: '#0D1117',
-  selectionBackground: 'rgba(88,166,255,0.3)',
-  black: '#21262D',
-  brightBlack: '#6E7681',
-  red: '#FF7B72',
-  brightRed: '#FFA198',
-  green: '#3FB950',
-  brightGreen: '#56D364',
-  yellow: '#D29922',
-  brightYellow: '#E3B341',
-  blue: '#58A6FF',
-  brightBlue: '#79C0FF',
-  magenta: '#BC8CFF',
-  brightMagenta: '#D2A8FF',
-  cyan: '#39C5CF',
-  brightCyan: '#56D4DD',
-  white: '#B1BAC4',
-  brightWhite: '#F0F6FC',
-};
-
-const TERMINAL_OPTIONS = {
-  cursorBlink: true,
-  fontSize: 13.5,
-  lineHeight: 1.2,
-  letterSpacing: 0.3,
-  fontFamily: "'Cascadia Code', 'JetBrains Mono', 'Fira Code', monospace",
-  convertEol: true,
-  scrollback: 5000,
-  theme: TERMINAL_THEME,
-} as const;
+import { useCallback, type RefObject } from 'react';
+import { type Terminal } from 'xterm';
+import { useXterm } from '../../hooks/useXterm';
 
 // ========== Hook ==========
 
@@ -58,34 +28,12 @@ export interface UseTerminalReturn {
 export function useTerminal(
   containerRef: RefObject<HTMLDivElement>,
 ): UseTerminalReturn {
-  // 用 ref 存储 fit 函数，让 ResizeObserver 回调始终拿到最新版本
-  const fitFnRef = useRef<() => void>(() => {});
-  const termRef = useRef<Terminal | null>(null);
+  const handleResize = useCallback((cols: number, rows: number) => {
+    window.terminalAPI.resize(cols, rows);
+  }, []);
 
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return () => {};
-
-    // ── 初始化 ────────────────────────────────────────────
-    const term = new Terminal(TERMINAL_OPTIONS);
-    const fitAddon = new FitAddon();
-
-    term.loadAddon(fitAddon);
-    term.loadAddon(new WebLinksAddon());
-    term.open(container);
-    fitAddon.fit();
-
-    // fit 定义在 effect 内，直接闭包访问 term / fitAddon，无需 useCallback
-    const fit = () => {
-      fitAddon.fit();
-      window.terminalAPI.resize(term.cols, term.rows);
-    };
-
-    // 同步到 ref，使 ResizeObserver 回调始终调用最新版本
-    fitFnRef.current = fit;
-    termRef.current = term;
-
-    // ── PTY 连接 ──────────────────────────────────────────
+  const handleInit = useCallback((term: Terminal) => {
+    // ── PTY 连接 ──
     window.terminalAPI.start(term.cols, term.rows).catch((err: unknown) => {
       const message = err instanceof Error ? err.message : String(err);
       term.writeln(
@@ -101,30 +49,25 @@ export function useTerminal(
       term.writeln(`\r\n\x1b[33m[Process exited with code ${code}]\x1b[0m`);
     });
 
-    term.onData((data) => window.terminalAPI.sendInput(data));
+    const onDataDisposable = term.onData((data) =>
+      window.terminalAPI.sendInput(data),
+    );
 
-    // ── 尺寸自适应 ────────────────────────────────────────
-    const ro = new ResizeObserver(fit);
-    ro.observe(container);
-
-    // ── 清理 ──────────────────────────────────────────────
+    // 返回清理函数
     return () => {
-      ro.disconnect(); // 先停止观察，防止 dispose 后触发 fit
+      onDataDisposable.dispose();
       unlistenOutput();
       unlistenExit();
       window.terminalAPI.kill();
-      term.dispose();
-      fitFnRef.current = () => {};
-      termRef.current = null;
     };
-  }, [containerRef]);
-
-  const focus = useCallback(() => {
-    termRef.current?.focus();
   }, []);
 
-  return {
-    fit: () => fitFnRef.current(),
-    focus,
-  };
+  const { fit, focus } = useXterm(containerRef, {
+    scrollback: 5000,
+    cursorBlink: true,
+    onResize: handleResize,
+    onInit: handleInit,
+  });
+
+  return { fit, focus };
 }

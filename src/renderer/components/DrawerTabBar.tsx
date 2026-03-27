@@ -37,12 +37,12 @@ export function DrawerTabBar({
   onCopyLogs,
   drawerSize,
   onDrawerSizeChange,
-  isAutoScrollEnabled,
+  isAutoScrollEnabled = true,
 }: DrawerTabBarProps) {
   const { t } = useLanguage();
   const clampedProgress = Math.max(0, Math.min(100, progress));
   const hasProgress = clampedProgress > 0;
-  const autoScrollEnabled = isAutoScrollEnabled ?? true;
+  const autoScrollEnabled = isAutoScrollEnabled;
   const isActivityPane = activePane === 'activity';
   const drawerTitles: Record<DrawerSize, string> = {
     sm: t('Collapse'),
@@ -219,6 +219,4 @@ export function DrawerTabBar({
   );
 }
 
-DrawerTabBar.defaultProps = {
-  isAutoScrollEnabled: true,
-};
+

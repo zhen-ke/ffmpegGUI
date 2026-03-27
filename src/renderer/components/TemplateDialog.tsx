@@ -300,8 +300,4 @@ export function TemplateDialog({
   );
 }
 
-TemplateDialog.defaultProps = {
-  initialTemplate: undefined,
-};
-
 export default TemplateDialog;

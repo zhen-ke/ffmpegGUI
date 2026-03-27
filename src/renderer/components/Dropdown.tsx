@@ -343,10 +343,6 @@ function Dropdown({
   );
 }
 
-Dropdown.defaultProps = {
-  id: undefined,
-  onEdit: undefined,
-  onDelete: undefined,
-};
+
 
 export default Dropdown;

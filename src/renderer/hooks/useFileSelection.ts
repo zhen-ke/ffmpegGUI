@@ -87,13 +87,15 @@ export function useFileSelection({ onError }: UseFileSelectionProps = {}) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const clearInputFile = useCallback(() => setInputFile(''), []);
+  const clearOutputFolder = useCallback(() => setOutputFolder(''), []);
+
   return {
     inputFile,
     outputFolder,
     handleSelectInputFile,
     handleSelectOutputFolder,
-    // setState 的引用天然稳定，直接暴露空值版本无需 useCallback 包裹
-    clearInputFile:    () => setInputFile(''),
-    clearOutputFolder: () => setOutputFolder(''),
+    clearInputFile,
+    clearOutputFolder,
   };
 }

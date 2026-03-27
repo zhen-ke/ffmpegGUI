@@ -130,6 +130,11 @@ export const translations: Record<Language, Record<string, string>> = {
     'Create a new custom template': 'Create a new custom template',
     'Select a template or enter a command to begin':
       'Select a template or enter a command to begin',
+    'Video & Audio Processing': 'Video & Audio Processing',
+    Collapse: 'Collapse',
+    Default: 'Default',
+    Expand: 'Expand',
+    'Running...': 'Running...',
   },
   zh: {
     'Add Template': '添加模板',
@@ -239,6 +244,11 @@ export const translations: Record<Language, Record<string, string>> = {
     'No templates available': '暂无可用模板',
     'Modify existing template': '修改现有模板',
     'Create a new custom template': '创建新的自定义模板',
+    'Video & Audio Processing': '视频 & 音频处理',
+    Collapse: '收起',
+    Default: '默认',
+    Expand: '展开',
+    'Running...': '运行中...',
   },
 };
 
@@ -254,7 +264,11 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
 
   const t = useCallback(
     (key: string): string => {
-      return translations[language][key] || key;
+      const value = translations[language][key];
+      if (!value && process.env.NODE_ENV === 'development') {
+        console.warn(`[i18n] Missing translation key: "${key}" (${language})`);
+      }
+      return value || key;
     },
     [language],
   );

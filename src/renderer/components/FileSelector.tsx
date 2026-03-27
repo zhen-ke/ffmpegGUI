@@ -100,8 +100,4 @@ export function FileSelector({
   );
 }
 
-FileSelector.defaultProps = {
-  id: undefined,
-};
-
 export default FileSelector;
