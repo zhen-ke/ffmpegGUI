@@ -5,7 +5,6 @@
  */
 
 import { spawn, type ChildProcessWithoutNullStreams } from 'child_process';
-import { getFfmpegPath } from '../utils/pathUtils';
 
 export interface FFmpegProcessCallbacks {
   onOutput: (line: string) => void;
@@ -54,10 +53,15 @@ const RE_DURATION = /Duration:\s*(\d{2}):(\d{2}):(\d{2}(?:\.\d+)?)/;
 export class FFmpegProcessManager {
   private state: ProcessState | null = null;
 
-  start(args: string[], callbacks: FFmpegProcessCallbacks, outputFile?: string) {
+  start(
+    executablePath: string,
+    args: string[],
+    callbacks: FFmpegProcessCallbacks,
+    outputFile?: string,
+  ) {
     if (this.state) return; // 上层应先检查 isRunning()
 
-    const proc = spawn(getFfmpegPath(), args, {
+    const proc = spawn(executablePath, args, {
       shell: false,
       windowsHide: true,
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -235,4 +239,3 @@ export class FFmpegProcessManager {
     return hours * 3600 + minutes * 60 + seconds;
   }
 }
-

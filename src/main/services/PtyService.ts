@@ -6,7 +6,11 @@ import type { IPty } from '@homebridge/node-pty-prebuilt-multiarch';
 import * as pty from '@homebridge/node-pty-prebuilt-multiarch';
 import type { WebContents } from 'electron';
 import path from 'path';
-import { getFfmpegPath } from '../utils/pathUtils';
+import {
+  getFfmpegBinDir,
+  getFfmpegSearchDirs,
+  getLegacyFfmpegPath,
+} from '../utils/pathUtils';
 
 // ========== 常量 ==========
 
@@ -48,7 +52,7 @@ class PtyService {
     }
 
     const shell = DEFAULT_SHELL[process.platform] ?? FALLBACK_SHELL;
-    const cwd = path.dirname(getFfmpegPath());
+    const cwd = getFfmpegBinDir();
 
     const proc = pty.spawn(shell, ['--login'], {
       name: 'xterm-256color',
@@ -139,15 +143,17 @@ class PtyService {
 
     // 补全 GUI 启动时缺失的常见工具路径
     const extraPaths = [
-      '/usr/local/bin',
-      '/usr/bin',
-      '/bin',
-      '/opt/homebrew/bin',         // Apple Silicon Homebrew
-      '/opt/homebrew/sbin',
-      `${process.env.HOME}/.fnm`,  // fnm
-    ].join(':');
+      cwd,
+      path.dirname(getLegacyFfmpegPath()),
+      ...getFfmpegSearchDirs(),
+      process.env.HOME ? path.join(process.env.HOME, '.fnm') : '',
+    ]
+      .filter(Boolean)
+      .join(path.delimiter);
 
-    base.PATH = `${cwd}:${extraPaths}:${base.PATH ?? ''}`;
+    base.PATH = [extraPaths, base.PATH ?? '']
+      .filter(Boolean)
+      .join(path.delimiter);
     return base;
   }
 

@@ -13,7 +13,7 @@ import {
   parseFFmpegCommand,
 } from '../utils/commandParser';
 import { safeReply } from '../utils/ipcUtils';
-import { getFfmpegPath } from '../utils/pathUtils';
+import { resolveFfmpegPath } from '../utils/pathUtils';
 import { t } from '../locales';
 import { FFmpegProcessManager, type FFmpegProcessCallbacks } from './FFmpegProcessManager';
 
@@ -115,8 +115,16 @@ class FFmpegController {
       onError: (message) => safeReply(ipcEvent, 'ffmpeg-error', message),
     };
 
+    const ffmpegPath = await resolveFfmpegPath();
+    if (!ffmpegPath) {
+      const error =
+        'FFmpeg is not available. Install it on your system or use the built-in downloader.';
+      safeReply(ipcEvent, 'ffmpeg-error', error);
+      return { success: false, error };
+    }
+
     // 进程启动是异步效果；我们不等待其完成
-    this.manager.start(args, callbacks, outputFile);
+    this.manager.start(ffmpegPath, args, callbacks, outputFile);
     return { success: true };
   }
 
@@ -133,15 +141,7 @@ class FFmpegController {
   }
 
   async checkExists(): Promise<boolean> {
-    try {
-      await fs.promises.access(
-        getFfmpegPath(),
-        fs.constants.F_OK | fs.constants.X_OK,
-      );
-      return true;
-    } catch {
-      return false;
-    }
+    return (await resolveFfmpegPath()) !== null;
   }
 
   private notifyCompletion(outputFile: string): void {
@@ -166,4 +166,3 @@ class FFmpegController {
 }
 
 export const ffmpegService = new FFmpegController();
-
