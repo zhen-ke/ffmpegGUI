@@ -1,4 +1,4 @@
-import React, {
+import {
   createContext,
   ReactNode,
   useCallback,
@@ -211,6 +211,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'Description (English)': '描述（英文）',
     'Description (Chinese)': '描述（中文）',
     Cancel: '取消',
+    Confirm: '确认',
     Save: '保存',
     'Select Input File': '选择输入文件',
     'Input File': '输入文件',
