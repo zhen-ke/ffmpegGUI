@@ -147,8 +147,21 @@ jobs:
           New-Item -ItemType Directory -Path "release/artifacts" -Force | Out-Null
           Compress-Archive -Path "$bundleDir/*" -DestinationPath $zipPath -Force
 
-      - name: Archive package (macOS / Linux)
-        if: runner.os != 'Windows'
+      - name: Archive package (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${{ needs.detect-version-bump.outputs.version }}"
+          target_id="${{ matrix.target_id }}"
+          bundle_dir="${{ matrix.bundle_dir }}"
+          zip_path="release/artifacts/FFmpegGUI-v${version}-${target_id}.zip"
+
+          mkdir -p release/artifacts
+          ditto -c -k --keepParent "$bundle_dir" "$zip_path"
+
+      - name: Archive package (Linux)
+        if: runner.os == 'Linux'
         shell: bash
         run: |
           set -euo pipefail
@@ -162,7 +175,7 @@ jobs:
           base_name="$(basename "$bundle_dir")"
           (
             cd "$parent_dir"
-            zip -rq "$GITHUB_WORKSPACE/$zip_path" "$base_name"
+            zip -qry "$GITHUB_WORKSPACE/$zip_path" "$base_name"
           )
 
       - name: Upload zip artifact
