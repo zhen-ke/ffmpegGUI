@@ -6,6 +6,9 @@ on:
       - package.json
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 concurrency:
   group: build-on-version-${{ github.ref }}
   cancel-in-progress: true
@@ -168,3 +171,48 @@ jobs:
           name: FFmpegGUI-v${{ needs.detect-version-bump.outputs.version }}-${{ matrix.target_id }}
           path: release/artifacts/FFmpegGUI-v${{ needs.detect-version-bump.outputs.version }}-${{ matrix.target_id }}.zip
           if-no-files-found: error
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: [detect-version-bump, build-and-package]
+    if: needs.detect-version-bump.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all zip artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: FFmpegGUI-v${{ needs.detect-version-bump.outputs.version }}-*
+          merge-multiple: true
+          path: release/release-assets
+
+      - name: Create or update release and upload assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          version="${{ needs.detect-version-bump.outputs.version }}"
+          tag="v${version}"
+          title="v${version}"
+
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release $tag already exists. Uploading/overwriting assets..."
+          else
+            gh release create "$tag" \
+              --title "$title" \
+              --notes "Automated release for version ${version}"
+          fi
+
+          shopt -s nullglob
+          files=(release/release-assets/*.zip)
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "No zip assets found for release upload."
+            ls -la release/release-assets || true
+            exit 1
+          fi
+
+          gh release upload "$tag" "${files[@]}" --clobber
