@@ -200,11 +200,17 @@ jobs:
           title="v${version}"
 
           if gh release view "$tag" >/dev/null 2>&1; then
-            echo "Release $tag already exists. Uploading/overwriting assets..."
+            echo "Release $tag already exists. Regenerating notes..."
+            notes="$(gh api "repos/${{ github.repository }}/releases/generate-notes" \
+              -f tag_name="$tag" \
+              -f target_commitish="${{ github.sha }}" \
+              --jq '.body')"
+            gh release edit "$tag" --title "$title" --notes "$notes"
           else
             gh release create "$tag" \
               --title "$title" \
-              --notes "Automated release for version ${version}"
+              --target "${{ github.sha }}" \
+              --generate-notes
           fi
 
           shopt -s nullglob
