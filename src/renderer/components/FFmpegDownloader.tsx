@@ -122,7 +122,7 @@ const FFmpegDownloader: React.FC = () => {
 
   if (installing) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-slate-50 via-primary-50/30 to-indigo-50/30 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 p-4">
+      <div className="flex items-center justify-center min-h-[calc(100vh-var(--titlebar-height))] bg-gradient-to-br from-slate-50 via-primary-50/30 to-indigo-50/30 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 p-4">
         <div className="max-w-md w-full p-8 bg-white dark:bg-slate-800 rounded-2xl shadow-2xl dark:shadow-slate-900/50 border border-slate-200 dark:border-slate-700">
           <div className="text-center mb-8">
             <div className="relative inline-flex">
@@ -165,7 +165,7 @@ const FFmpegDownloader: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-slate-50 via-primary-50/30 to-indigo-50/30 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
+      <div className="flex items-center justify-center min-h-[calc(100vh-var(--titlebar-height))] bg-gradient-to-br from-slate-50 via-primary-50/30 to-indigo-50/30 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
         <div className="text-center">
           <div className="relative inline-flex mb-6">
             <div className="p-4 bg-gradient-to-br from-primary-500 to-primary-600 rounded-2xl shadow-lg shadow-primary-500/25">
@@ -182,7 +182,7 @@ const FFmpegDownloader: React.FC = () => {
 
   if (error) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-red-50 via-orange-50 to-amber-50 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 p-4">
+      <div className="flex items-center justify-center min-h-[calc(100vh-var(--titlebar-height))] bg-gradient-to-br from-red-50 via-orange-50 to-amber-50 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 p-4">
         <div className="max-w-md w-full p-8 bg-white dark:bg-slate-800 rounded-2xl shadow-2xl dark:shadow-slate-900/50 border border-red-200 dark:border-red-900/30">
           <div className="text-center mb-6">
             <div className="inline-flex p-4 bg-red-100 dark:bg-red-900/30 rounded-2xl mb-4">
@@ -209,7 +209,7 @@ const FFmpegDownloader: React.FC = () => {
   }
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-slate-50 via-primary-50/30 to-indigo-50/30 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 p-4">
+    <div className="flex items-center justify-center min-h-[calc(100vh-var(--titlebar-height))] bg-gradient-to-br from-slate-50 via-primary-50/30 to-indigo-50/30 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 p-4">
       <div className="max-w-2xl w-full p-8 bg-white dark:bg-slate-800 rounded-2xl shadow-2xl dark:shadow-slate-900/50 border border-slate-200 dark:border-slate-700">
         {/* Header */}
         <div className="text-center mb-8">
