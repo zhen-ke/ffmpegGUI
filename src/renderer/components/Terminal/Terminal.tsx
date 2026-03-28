@@ -12,5 +12,11 @@ export default function Terminal() {
     focus();
   }, [focus]);
 
-  return <div ref={containerRef} className={styles.terminal} />;
+  return (
+    <div className={styles.terminal}>
+      <div className={styles.surface}>
+        <div ref={containerRef} className={styles.host} />
+      </div>
+    </div>
+  );
 }
