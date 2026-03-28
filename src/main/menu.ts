@@ -1,10 +1,13 @@
 import {
   app,
+  dialog,
   Menu,
   shell,
   BrowserWindow,
   MenuItemConstructorOptions,
 } from 'electron';
+import { downloadService } from './services/DownloadService';
+import { ffmpegService } from './services/FFmpegController';
 
 interface DarwinMenuItemConstructorOptions extends MenuItemConstructorOptions {
   selector?: string;
@@ -28,6 +31,45 @@ export default class MenuBuilder {
     Menu.setApplicationMenu(menu);
 
     return menu;
+  }
+
+  private async handleClearDownloadedFFmpeg(): Promise<void> {
+    const { response } = await dialog.showMessageBox(this.mainWindow, {
+      type: 'warning',
+      buttons: ['Clear Downloaded FFmpeg', 'Cancel'],
+      defaultId: 1,
+      cancelId: 1,
+      title: 'Clear Downloaded FFmpeg',
+      message:
+        'This will remove the FFmpeg files downloaded by this app. System-installed FFmpeg will not be affected.',
+    });
+
+    if (response !== 0) return;
+
+    try {
+      const removedCount = await downloadService.clearManagedInstall();
+      const exists = await ffmpegService.checkExists();
+      this.mainWindow.webContents.send('ffmpeg-status', exists);
+
+      await dialog.showMessageBox(this.mainWindow, {
+        type: 'info',
+        buttons: ['OK'],
+        title: 'Downloaded FFmpeg Cleared',
+        message:
+          removedCount > 0
+            ? 'Downloaded FFmpeg files have been removed.'
+            : 'No downloaded FFmpeg files were found.',
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Failed to clear downloaded FFmpeg.';
+      await dialog.showMessageBox(this.mainWindow, {
+        type: 'error',
+        buttons: ['OK'],
+        title: 'Clear Downloaded FFmpeg Failed',
+        message,
+      });
+    }
   }
 
   buildDarwinTemplate(): MenuItemConstructorOptions[] {
@@ -114,6 +156,13 @@ export default class MenuBuilder {
       label: 'Help',
       submenu: [
         {
+          label: 'Clear Downloaded FFmpeg',
+          click: () => {
+            void this.handleClearDownloadedFFmpeg();
+          },
+        },
+        { type: 'separator' },
+        {
           label: 'FFmpeg Documentation',
           click() {
             shell.openExternal('https://ffmpeg.org/documentation.html');
@@ -176,6 +225,13 @@ export default class MenuBuilder {
       {
         label: 'Help',
         submenu: [
+          {
+            label: 'Clear Downloaded FFmpeg',
+            click: () => {
+              void this.handleClearDownloadedFFmpeg();
+            },
+          },
+          { type: 'separator' },
           {
             label: 'FFmpeg Documentation',
             click() {

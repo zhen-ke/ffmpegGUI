@@ -9,7 +9,7 @@ import path from 'path';
 import { extractArchive } from '../utils/extractionUtils';
 import { downloadFile, ensureDir, moveFile, removeDir } from '../utils/fileUtils';
 import { safeReply } from '../utils/ipcUtils';
-import { getFfmpegPath } from '../utils/pathUtils';
+import { getFfmpegPath, getManagedFfmpegDirs } from '../utils/pathUtils';
 
 // ========== 工具函数 ==========
 
@@ -131,6 +131,31 @@ class DownloadService {
       // 无论成功或失败，始终清理临时目录
       await Promise.allSettled([removeDir(downloadDir), removeDir(extractDir)]);
     }
+  }
+
+  /**
+   * 清理应用自身下载的 FFmpeg 文件，不影响系统已安装的 FFmpeg。
+   *
+   * @returns 实际删除的目录数量
+   */
+  async clearManagedInstall(): Promise<number> {
+    const dirs = getManagedFfmpegDirs();
+    let removedCount = 0;
+
+    for (const dir of dirs) {
+      try {
+        const stat = await fs.promises.stat(dir);
+        if (!stat.isDirectory()) continue;
+        await removeDir(dir);
+        removedCount += 1;
+      } catch (error) {
+        const err = error as NodeJS.ErrnoException;
+        if (err.code === 'ENOENT') continue;
+        throw error;
+      }
+    }
+
+    return removedCount;
   }
 }
 

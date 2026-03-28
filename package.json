@@ -171,7 +171,7 @@
     "webpack-merge": "^5.9.0"
   },
   "build": {
-    "appId": "com.zhenke.ffmpeg-gui",
+    "appId": "ffmpeg-gui",
     "productName": "FFmpegGUI",
     "asar": true,
     "asarUnpack": [

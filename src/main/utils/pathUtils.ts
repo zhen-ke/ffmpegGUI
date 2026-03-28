@@ -18,6 +18,8 @@ const FFMPEG_BIN = IS_WINDOWS ? 'ffmpeg.exe' : 'ffmpeg';
 
 /** 7za 可执行文件名（含平台扩展名） */
 const SEVENZIP_BIN = IS_WINDOWS ? '7za.exe' : '7za';
+const DEFAULT_APP_STORAGE_DIRNAME = 'ffmpeg-gui';
+const LEGACY_STORAGE_DIRNAMES = ['com.zhenke.ffmpeg-gui'];
 
 const COMMON_FFMPEG_DIRS: Readonly<Record<NodeJS.Platform, string[]>> = {
   darwin: ['/opt/homebrew/bin', '/usr/local/bin', '/opt/local/bin'],
@@ -44,16 +46,32 @@ const COMMON_FFMPEG_DIRS: Readonly<Record<NodeJS.Platform, string[]>> = {
 
 // ========== 路径工具 ==========
 
+function normalizeStorageDirname(value: string): string {
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+  return normalized || DEFAULT_APP_STORAGE_DIRNAME;
+}
+
+function getAppStorageDirname(): string {
+  return normalizeStorageDirname(app.getName() || DEFAULT_APP_STORAGE_DIRNAME);
+}
+
 /**
  * 获取 FFmpeg 可执行文件的完整路径。
  *
- * - 生产环境：`<cache>/binaries/<ffmpeg>`（可写，且更适合可重新下载的资源）
+ * - 生产环境：`<cache>/<app-name>/binaries/<ffmpeg>`（可写，且更适合可重新下载的资源）
  * - 开发环境：`<appPath>/binaries/<ffmpeg>`
  *
  * 生产环境不再依赖打包内置 FFmpeg，统一走首次下载流程。
  */
 export function getFfmpegPath(): string {
-  const base = app.isPackaged ? app.getPath('cache') : app.getAppPath();
+  const base = app.isPackaged
+    ? path.join(app.getPath('cache'), getAppStorageDirname())
+    : app.getAppPath();
   return path.join(base, 'binaries', FFMPEG_BIN);
 }
 
@@ -63,6 +81,23 @@ export function getFfmpegPath(): string {
 export function getLegacyFfmpegPath(): string {
   const base = app.isPackaged ? app.getPath('userData') : app.getAppPath();
   return path.join(base, 'binaries', FFMPEG_BIN);
+}
+
+/**
+ * 获取应用自身管理的 FFmpeg 目录（新目录 + 兼容旧目录）。
+ */
+export function getManagedFfmpegDirs(): string[] {
+  const legacyCacheDirs = app.isPackaged
+    ? LEGACY_STORAGE_DIRNAMES.map((dirname) =>
+        path.join(app.getPath('cache'), dirname, 'binaries'),
+      )
+    : [];
+
+  return [...new Set([
+    path.dirname(getFfmpegPath()),
+    ...legacyCacheDirs,
+    path.dirname(getLegacyFfmpegPath()),
+  ])];
 }
 
 /**
