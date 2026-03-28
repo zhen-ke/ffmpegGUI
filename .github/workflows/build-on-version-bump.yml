@@ -63,11 +63,36 @@ jobs:
           echo "previous_version=$previous_version"
           echo "changed=$changed"
 
-  prepare-dist:
-    name: Prepare Dist
+  build-and-package:
+    name: Build (${{ matrix.target_id }})
     needs: detect-version-bump
     if: needs.detect-version-bump.outputs.changed == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target_id: win-x64
+            platform_flag: --win
+            arch_flag: --x64
+            bundle_dir: release/build/win-unpacked
+          - os: ubuntu-latest
+            target_id: linux-x64
+            platform_flag: --linux
+            arch_flag: --x64
+            bundle_dir: release/build/linux-unpacked
+          - os: macos-latest
+            target_id: mac-x64
+            platform_flag: --mac
+            arch_flag: --x64
+            bundle_dir: release/build/mac
+          - os: macos-latest
+            target_id: mac-arm64
+            platform_flag: --mac
+            arch_flag: --arm64
+            bundle_dir: release/build/mac-arm64
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -87,60 +112,15 @@ jobs:
       - name: Build project assets
         run: npm run build
 
-      - name: Upload dist artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: dist-${{ needs.detect-version-bump.outputs.version }}
-          path: dist
-          if-no-files-found: error
-          retention-days: 3
-
-  package-non-mac:
-    name: Package (${{ matrix.target_id }})
-    needs: [detect-version-bump, prepare-dist]
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: windows-latest
-            target_id: win-x64
-            platform_flag: --win
-            arch_flag: --x64
-            bundle_dir: release/build/win-unpacked
-          - os: ubuntu-latest
-            target_id: linux-x64
-            platform_flag: --linux
-            arch_flag: --x64
-            bundle_dir: release/build/linux-unpacked
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-
-      - name: Sync release/app version
-        run: npm run sync:version
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Download dist artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: dist-${{ needs.detect-version-bump.outputs.version }}
-          path: .
-
       - name: Build unpacked app
         shell: bash
         run: |
           set -euo pipefail
-          npx electron-builder --publish never ${{ matrix.platform_flag }} dir ${{ matrix.arch_flag }}
+          if [ "${{ matrix.platform_flag }}" = "--mac" ]; then
+            npx electron-builder --publish never ${{ matrix.platform_flag }} dir ${{ matrix.arch_flag }} --config.mac.identity=null
+          else
+            npx electron-builder --publish never ${{ matrix.platform_flag }} dir ${{ matrix.arch_flag }}
+          fi
 
       - name: Validate unpacked directory
         shell: bash
@@ -164,7 +144,7 @@ jobs:
           New-Item -ItemType Directory -Path "release/artifacts" -Force | Out-Null
           Compress-Archive -Path "$bundleDir/*" -DestinationPath $zipPath -Force
 
-      - name: Archive package (Linux)
+      - name: Archive package (macOS / Linux)
         if: runner.os != 'Windows'
         shell: bash
         run: |
@@ -187,70 +167,4 @@ jobs:
         with:
           name: FFmpegGUI-v${{ needs.detect-version-bump.outputs.version }}-${{ matrix.target_id }}
           path: release/artifacts/FFmpegGUI-v${{ needs.detect-version-bump.outputs.version }}-${{ matrix.target_id }}.zip
-          if-no-files-found: error
-
-  package-mac:
-    name: Package (mac-x64 + mac-arm64)
-    needs: [detect-version-bump, prepare-dist]
-    runs-on: macos-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-
-      - name: Sync release/app version
-        run: npm run sync:version
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Download dist artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: dist-${{ needs.detect-version-bump.outputs.version }}
-          path: .
-
-      - name: Build unpacked app (x64 + arm64)
-        run: npx electron-builder --publish never --mac dir --x64 --arm64 --config.mac.identity=null
-
-      - name: Validate unpacked directories
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [ ! -d "release/build/mac" ] || [ ! -d "release/build/mac-arm64" ]; then
-            echo "Expected mac unpacked folders are missing"
-            ls -la release/build || true
-            exit 1
-          fi
-
-      - name: Archive mac packages
-        shell: bash
-        run: |
-          set -euo pipefail
-          version="${{ needs.detect-version-bump.outputs.version }}"
-          mkdir -p release/artifacts
-
-          (
-            cd release/build
-            zip -rq "$GITHUB_WORKSPACE/release/artifacts/FFmpegGUI-v${version}-mac-x64.zip" mac
-            zip -rq "$GITHUB_WORKSPACE/release/artifacts/FFmpegGUI-v${version}-mac-arm64.zip" mac-arm64
-          )
-
-      - name: Upload mac-x64 artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: FFmpegGUI-v${{ needs.detect-version-bump.outputs.version }}-mac-x64
-          path: release/artifacts/FFmpegGUI-v${{ needs.detect-version-bump.outputs.version }}-mac-x64.zip
-          if-no-files-found: error
-
-      - name: Upload mac-arm64 artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: FFmpegGUI-v${{ needs.detect-version-bump.outputs.version }}-mac-arm64
-          path: release/artifacts/FFmpegGUI-v${{ needs.detect-version-bump.outputs.version }}-mac-arm64.zip
           if-no-files-found: error
