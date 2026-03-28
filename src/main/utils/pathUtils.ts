@@ -22,13 +22,13 @@ const SEVENZIP_BIN = IS_WINDOWS ? '7za.exe' : '7za';
 /**
  * 获取 FFmpeg 可执行文件的完整路径。
  *
- * - 生产环境：`<resourcesPath>/binaries/<ffmpeg>`
+ * - 生产环境：`<userData>/binaries/<ffmpeg>`（可写，支持首次下载）
  * - 开发环境：`<appPath>/binaries/<ffmpeg>`
  *
- * macOS 与 Linux 生产路径相同，无需分支。
+ * 生产环境不再依赖打包内置 FFmpeg，统一走首次下载流程。
  */
 export function getFfmpegPath(): string {
-  const base = app.isPackaged ? process.resourcesPath : app.getAppPath();
+  const base = app.isPackaged ? app.getPath('userData') : app.getAppPath();
   return path.join(base, 'binaries', FFMPEG_BIN);
 }
 

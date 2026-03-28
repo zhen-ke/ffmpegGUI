@@ -6,6 +6,10 @@ on:
       - package.json
   workflow_dispatch:
 
+concurrency:
+  group: build-on-version-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   detect-version-bump:
     name: Detect Version Bump
@@ -17,7 +21,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 1
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -32,25 +36,25 @@ jobs:
 
           current_version="$(node -p "require('./package.json').version")"
           previous_version=""
-          before_sha="${{ github.event.before }}"
-
-          if [ -n "$before_sha" ] && [ "$before_sha" != "0000000000000000000000000000000000000000" ]; then
-            if git cat-file -e "${before_sha}:package.json" 2>/dev/null; then
-              previous_version="$(git show "${before_sha}:package.json" | node -e "const fs=require('fs'); const pkg=JSON.parse(fs.readFileSync(0,'utf8')); process.stdout.write(pkg.version || '')")"
-            fi
-          fi
-
           changed="false"
+
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             changed="true"
-          fi
+          else
+            before_sha="${{ github.event.before }}"
+            if [ -n "$before_sha" ] && [ "$before_sha" != "0000000000000000000000000000000000000000" ]; then
+              if ! git cat-file -e "${before_sha}^{commit}" 2>/dev/null; then
+                git fetch --no-tags --depth=1 origin "$before_sha"
+              fi
 
-          if [ -n "$previous_version" ] && [ "$current_version" != "$previous_version" ]; then
-            changed="true"
-          fi
+              if git cat-file -e "${before_sha}:package.json" 2>/dev/null; then
+                previous_version="$(git show "${before_sha}:package.json" | node -e "const fs=require('fs'); const pkg=JSON.parse(fs.readFileSync(0,'utf8')); process.stdout.write(pkg.version || '')")"
+              fi
+            fi
 
-          if [ -z "$previous_version" ]; then
-            echo "No previous package.json found in parent commit. Skip build."
+            if [ -n "$previous_version" ] && [ "$current_version" != "$previous_version" ]; then
+              changed="true"
+            fi
           fi
 
           echo "version=$current_version" >> "$GITHUB_OUTPUT"
@@ -59,39 +63,56 @@ jobs:
           echo "previous_version=$previous_version"
           echo "changed=$changed"
 
-  build:
-    name: Build (${{ matrix.target_id }})
+  prepare-dist:
+    name: Prepare Dist
     needs: detect-version-bump
     if: needs.detect-version-bump.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Sync release/app version
+        run: npm run sync:version
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build project assets
+        run: npm run build
+
+      - name: Upload dist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ needs.detect-version-bump.outputs.version }}
+          path: dist
+          if-no-files-found: error
+          retention-days: 3
+
+  package-non-mac:
+    name: Package (${{ matrix.target_id }})
+    needs: [detect-version-bump, prepare-dist]
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: windows-latest
-            platform: win
-            arch: x64
-            arch_flag: --x64
             target_id: win-x64
-            output_dir_glob: win-*
+            platform_flag: --win
+            arch_flag: --x64
+            bundle_dir: release/build/win-unpacked
           - os: ubuntu-latest
-            platform: linux
-            arch: x64
-            arch_flag: --x64
             target_id: linux-x64
-            output_dir_glob: linux-*
-          - os: macos-latest
-            platform: mac
-            arch: x64
+            platform_flag: --linux
             arch_flag: --x64
-            target_id: mac-x64
-            output_dir_glob: mac
-          - os: macos-latest
-            platform: mac
-            arch: arm64
-            arch_flag: --arm64
-            target_id: mac-arm64
-            output_dir_glob: mac-arm64
+            bundle_dir: release/build/linux-unpacked
 
     steps:
       - name: Checkout
@@ -103,64 +124,54 @@ jobs:
           node-version: 20
           cache: npm
 
+      - name: Sync release/app version
+        run: npm run sync:version
+
       - name: Install dependencies
         run: npm ci
 
-      - name: Build project assets
-        run: npm run build
+      - name: Download dist artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-${{ needs.detect-version-bump.outputs.version }}
+          path: .
 
-      - name: Build app for current platform/arch
+      - name: Build unpacked app
         shell: bash
         run: |
           set -euo pipefail
-          if [ "${{ matrix.platform }}" = "mac" ]; then
-            npx electron-builder --publish never --${{ matrix.platform }} dir ${{ matrix.arch_flag }} --config.mac.identity=null
-          else
-            npx electron-builder --publish never --${{ matrix.platform }} dir ${{ matrix.arch_flag }}
-          fi
+          npx electron-builder --publish never ${{ matrix.platform_flag }} dir ${{ matrix.arch_flag }}
 
-      - name: Locate packaged directory
-        id: locate
+      - name: Validate unpacked directory
         shell: bash
         run: |
           set -euo pipefail
-          shopt -s nullglob
-
-          candidates=(release/build/${{ matrix.output_dir_glob }})
-          if [ "${#candidates[@]}" -eq 0 ]; then
-            echo "No packaged output found under release/build"
+          if [ ! -d "${{ matrix.bundle_dir }}" ]; then
+            echo "Expected unpacked folder not found: ${{ matrix.bundle_dir }}"
             ls -la release/build || true
             exit 1
           fi
 
-          bundle_dir="${candidates[0]}"
-          echo "bundle_dir=$bundle_dir" >> "$GITHUB_OUTPUT"
-          echo "bundle_dir=$bundle_dir"
-
       - name: Archive package (Windows)
         if: runner.os == 'Windows'
-        id: archive_win
         shell: pwsh
         run: |
           $version = "${{ needs.detect-version-bump.outputs.version }}"
           $targetId = "${{ matrix.target_id }}"
-          $bundleDir = "${{ steps.locate.outputs.bundle_dir }}"
+          $bundleDir = "${{ matrix.bundle_dir }}"
           $zipPath = "release/artifacts/FFmpegGUI-v$version-$targetId.zip"
 
           New-Item -ItemType Directory -Path "release/artifacts" -Force | Out-Null
           Compress-Archive -Path "$bundleDir/*" -DestinationPath $zipPath -Force
 
-          "zip_path=$zipPath" >> $env:GITHUB_OUTPUT
-
-      - name: Archive package (macOS / Linux)
+      - name: Archive package (Linux)
         if: runner.os != 'Windows'
-        id: archive_unix
         shell: bash
         run: |
           set -euo pipefail
           version="${{ needs.detect-version-bump.outputs.version }}"
           target_id="${{ matrix.target_id }}"
-          bundle_dir="${{ steps.locate.outputs.bundle_dir }}"
+          bundle_dir="${{ matrix.bundle_dir }}"
           zip_path="release/artifacts/FFmpegGUI-v${version}-${target_id}.zip"
 
           mkdir -p release/artifacts
@@ -171,11 +182,75 @@ jobs:
             zip -rq "$GITHUB_WORKSPACE/$zip_path" "$base_name"
           )
 
-          echo "zip_path=$zip_path" >> "$GITHUB_OUTPUT"
-
       - name: Upload zip artifact
         uses: actions/upload-artifact@v4
         with:
           name: FFmpegGUI-v${{ needs.detect-version-bump.outputs.version }}-${{ matrix.target_id }}
-          path: release/artifacts/*.zip
+          path: release/artifacts/FFmpegGUI-v${{ needs.detect-version-bump.outputs.version }}-${{ matrix.target_id }}.zip
+          if-no-files-found: error
+
+  package-mac:
+    name: Package (mac-x64 + mac-arm64)
+    needs: [detect-version-bump, prepare-dist]
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Sync release/app version
+        run: npm run sync:version
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download dist artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-${{ needs.detect-version-bump.outputs.version }}
+          path: .
+
+      - name: Build unpacked app (x64 + arm64)
+        run: npx electron-builder --publish never --mac dir --x64 --arm64 --config.mac.identity=null
+
+      - name: Validate unpacked directories
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -d "release/build/mac" ] || [ ! -d "release/build/mac-arm64" ]; then
+            echo "Expected mac unpacked folders are missing"
+            ls -la release/build || true
+            exit 1
+          fi
+
+      - name: Archive mac packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${{ needs.detect-version-bump.outputs.version }}"
+          mkdir -p release/artifacts
+
+          (
+            cd release/build
+            zip -rq "$GITHUB_WORKSPACE/release/artifacts/FFmpegGUI-v${version}-mac-x64.zip" mac
+            zip -rq "$GITHUB_WORKSPACE/release/artifacts/FFmpegGUI-v${version}-mac-arm64.zip" mac-arm64
+          )
+
+      - name: Upload mac-x64 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FFmpegGUI-v${{ needs.detect-version-bump.outputs.version }}-mac-x64
+          path: release/artifacts/FFmpegGUI-v${{ needs.detect-version-bump.outputs.version }}-mac-x64.zip
+          if-no-files-found: error
+
+      - name: Upload mac-arm64 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FFmpegGUI-v${{ needs.detect-version-bump.outputs.version }}-mac-arm64
+          path: release/artifacts/FFmpegGUI-v${{ needs.detect-version-bump.outputs.version }}-mac-arm64.zip
           if-no-files-found: error

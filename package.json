@@ -1,6 +1,6 @@
 {
   "name": "ffmpeg-gui",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "A user-friendly graphical interface for FFmpeg, simplifying video and audio processing tasks",
   "keywords": [
     "ffmpeg",
@@ -15,6 +15,8 @@
   "author": "zhen-ke <xmit0806@outlook.com>",
   "main": "./src/main/main.ts",
   "scripts": {
+    "sync:version": "node ./.erb/scripts/sync-release-version.js",
+    "prebuild": "npm run sync:version",
     "build": "concurrently \"npm run build:main\" \"npm run build:renderer\"",
     "build:dll": "cross-env NODE_ENV=development TS_NODE_TRANSPILE_ONLY=true webpack --config ./.erb/configs/webpack.config.renderer.dev.dll.ts",
     "build:main": "cross-env NODE_ENV=production TS_NODE_TRANSPILE_ONLY=true webpack --config ./.erb/configs/webpack.config.main.prod.ts",
@@ -183,15 +185,6 @@
       "package.json"
     ],
     "mac": {
-      "extraResources": [
-        {
-          "from": "binaries",
-          "to": "binaries",
-          "filter": [
-            "**/*"
-          ]
-        }
-      ],
       "sign": ".erb/scripts/notarize.js",
       "notarize": false,
       "target": {
@@ -250,13 +243,6 @@
       "output": "release/build"
     },
     "extraResources": [
-      {
-        "from": "./binaries",
-        "to": "binaries",
-        "filter": [
-          "**/*"
-        ]
-      },
       {
         "from": "node_modules/7zip-bin/${os}/${arch}",
         "to": "7zip-bin",
