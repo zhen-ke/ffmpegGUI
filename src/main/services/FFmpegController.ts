@@ -4,7 +4,14 @@
  * - 使用 FFmpegProcessManager 做纯进程管理
  */
 
-import { dialog, Notification, shell, type BrowserWindow, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron';
+import {
+  dialog,
+  Notification,
+  shell,
+  type BrowserWindow,
+  type IpcMainEvent,
+  type IpcMainInvokeEvent,
+} from 'electron';
 import fs from 'fs';
 import path from 'path';
 import {
@@ -16,7 +23,10 @@ import {
 import { safeReply } from '../utils/ipcUtils';
 import { resolveFfmpegPath } from '../utils/pathUtils';
 import { t } from '../locales';
-import { FFmpegProcessManager, type FFmpegProcessCallbacks } from './FFmpegProcessManager';
+import {
+  FFmpegProcessManager,
+  type FFmpegProcessCallbacks,
+} from './FFmpegProcessManager';
 
 type IpcResult<T = undefined> =
   | (T extends undefined ? { success: true } : { success: true; data: T })
@@ -24,6 +34,16 @@ type IpcResult<T = undefined> =
 
 type FFmpegProgress = { time: number };
 type FFmpegDuration = { duration: number };
+type FFmpegCompletePayload = { outputFile: string | null };
+
+function resolveOutputFilePath(
+  outputFile: string | undefined,
+  workingDirectory: string | undefined,
+): string | undefined {
+  if (!outputFile) return undefined;
+  if (path.isAbsolute(outputFile)) return outputFile;
+  return path.resolve(workingDirectory ?? process.cwd(), outputFile);
+}
 
 class FFmpegController {
   private manager = new FFmpegProcessManager();
@@ -38,7 +58,8 @@ class FFmpegController {
     const ipcEvent = event as IpcMainEvent;
 
     if (this.manager.isRunning()) {
-      const error = 'An FFmpeg process is already running. Please stop it first.';
+      const error =
+        'An FFmpeg process is already running. Please stop it first.';
       safeReply(ipcEvent, 'ffmpeg-error', error);
       return { success: false, error };
     }
@@ -54,13 +75,15 @@ class FFmpegController {
     try {
       args = parseFFmpegCommand(trimmed);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to parse command.';
+      const message =
+        error instanceof Error ? error.message : 'Failed to parse command.';
       safeReply(ipcEvent, 'ffmpeg-error', message);
       return { success: false, error: message };
     }
 
     if (args.length === 0) {
-      const error = 'Command has no arguments. Please provide a valid FFmpeg command.';
+      const error =
+        'Command has no arguments. Please provide a valid FFmpeg command.';
       safeReply(ipcEvent, 'ffmpeg-error', error);
       return { success: false, error };
     }
@@ -74,8 +97,12 @@ class FFmpegController {
 
     const outputFile = extractOutputFile(args);
     const workingDirectory = deriveWorkingDirectory(args);
+    const resolvedOutputFile = resolveOutputFilePath(
+      outputFile,
+      workingDirectory,
+    );
 
-    if (outputFile && fs.existsSync(outputFile)) {
+    if (resolvedOutputFile && fs.existsSync(resolvedOutputFile)) {
       if (!mainWindow) {
         const error = t('cannotConfirmOverwrite');
         safeReply(ipcEvent, 'ffmpeg-error', error);
@@ -88,7 +115,7 @@ class FFmpegController {
         defaultId: 1,
         cancelId: 1,
         title: t('confirmOverwrite'),
-        message: t('fileAlreadyExists', { filename: outputFile }),
+        message: t('fileAlreadyExists', { filename: resolvedOutputFile }),
       });
 
       if (response === 1) {
@@ -104,14 +131,20 @@ class FFmpegController {
     const callbacks: FFmpegProcessCallbacks = {
       onOutput: (line) => safeReply(ipcEvent, 'ffmpeg-output', line),
       onProgress: (time) =>
-        safeReply(ipcEvent, 'ffmpeg-progress', { time } satisfies FFmpegProgress),
+        safeReply(ipcEvent, 'ffmpeg-progress', {
+          time,
+        } satisfies FFmpegProgress),
       onDuration: (duration) =>
-        safeReply(ipcEvent, 'ffmpeg-duration', { duration } satisfies FFmpegDuration),
+        safeReply(ipcEvent, 'ffmpeg-duration', {
+          duration,
+        } satisfies FFmpegDuration),
       onCancelled: () =>
         safeReply(ipcEvent, 'ffmpeg-cancelled', 'FFmpeg process stopped.'),
       onComplete: (completedOutputFile) => {
-        safeReply(ipcEvent, 'ffmpeg-complete');
-        const file = completedOutputFile ?? outputFile;
+        const file = completedOutputFile ?? resolvedOutputFile;
+        safeReply(ipcEvent, 'ffmpeg-complete', {
+          outputFile: file ?? null,
+        } satisfies FFmpegCompletePayload);
         if (file) this.notifyCompletion(file);
       },
       onError: (message) => safeReply(ipcEvent, 'ffmpeg-error', message),
@@ -130,7 +163,7 @@ class FFmpegController {
       ffmpegPath,
       args,
       callbacks,
-      outputFile,
+      resolvedOutputFile,
       workingDirectory && fs.existsSync(workingDirectory)
         ? workingDirectory
         : undefined,

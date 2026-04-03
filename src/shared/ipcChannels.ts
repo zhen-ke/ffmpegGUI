@@ -30,9 +30,12 @@ export const IPC_CHANNELS = [
 
   // 文件操作
   'check-file-exists',
+  'open-output-file',
   'open-output-folder',
   'select-input-file',
   'select-output-folder',
+  'check-media-probe-status',
+  'probe-media',
 
   // 其他
   'fetch-osx-experts-html',

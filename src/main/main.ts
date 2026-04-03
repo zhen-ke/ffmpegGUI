@@ -63,12 +63,24 @@ function getTitleBarOverlay() {
 async function installDevExtensions(): Promise<void> {
   const installer = require('electron-devtools-installer');
   const forceDownload = !!process.env.UPGRADE_EXTENSIONS;
-  await installer
-    .default(
+
+  try {
+    await installer.default(
       ['REACT_DEVELOPER_TOOLS'].map((name) => installer[name]),
       forceDownload,
-    )
-    .catch(console.log);
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+
+    if (message.includes('Does not start with Cr24')) {
+      console.warn(
+        'Skipping React DevTools auto-install: downloaded extension package is not a CRX file.',
+      );
+      return;
+    }
+
+    console.warn('Failed to install dev extensions:', message);
+  }
 }
 
 // ========== 窗口管理 ==========

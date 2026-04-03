@@ -1,9 +1,11 @@
 import {
+  buildOutputPreview,
   countInputArguments,
   parseInputArguments,
   parseOutputFileName,
   updateInputArgument,
   updateCommandPaths,
+  updateOutputFileName,
 } from './commandUtils';
 
 describe('commandUtils', () => {
@@ -33,6 +35,20 @@ describe('commandUtils', () => {
     it('parses output filename from the last token', () => {
       expect(parseOutputFileName('-i input.mp4 -c copy result.mkv')).toBe(
         'result.mkv',
+      );
+    });
+  });
+
+  describe('buildOutputPreview', () => {
+    it('combines folder and file name into final output path', () => {
+      expect(buildOutputPreview('/tmp/output', 'result.mp4')).toBe(
+        '/tmp/output/result.mp4',
+      );
+    });
+
+    it('falls back to default file name when input is empty', () => {
+      expect(buildOutputPreview('/tmp/output', '')).toBe(
+        '/tmp/output/output.mp4',
       );
     });
   });
@@ -93,6 +109,24 @@ describe('commandUtils', () => {
 
       expect(updateInputArgument(command, 1)).toBe(
         '-i "/tmp/main.mp4" -i input2.srt output.mp4',
+      );
+    });
+  });
+
+  describe('updateOutputFileName', () => {
+    it('replaces the final output token', () => {
+      const command = '-i input.mp4 -c copy output.mp4';
+
+      expect(updateOutputFileName(command, 'final.mkv', '/tmp/output')).toBe(
+        '-i input.mp4 -c copy "/tmp/output/final.mkv"',
+      );
+    });
+
+    it('appends output token when command has no explicit output yet', () => {
+      const command = '-i input.mp4 -map 0:v';
+
+      expect(updateOutputFileName(command, 'frame.jpg')).toBe(
+        '-i input.mp4 -map 0:v "frame.jpg"',
       );
     });
   });

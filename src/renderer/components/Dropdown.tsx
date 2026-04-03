@@ -9,8 +9,22 @@
  * - 下拉列表 z-index 提升，避免被其他元素遮挡
  */
 
-import { ChevronDown, Edit2, FileCode, Sparkles, Trash2 } from 'lucide-react';
-import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
+import {
+  ChevronDown,
+  Edit2,
+  FileCode,
+  Search,
+  Sparkles,
+  Trash2,
+} from 'lucide-react';
+import React, {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { useLanguage } from '../LanguageContext';
 import { Template } from '../types/template';
 
@@ -29,6 +43,76 @@ interface DropdownProps {
   onDelete?: (templateId: string) => void;
 }
 
+type SourceFilter = 'all' | 'builtin' | 'custom';
+type CompatibilityFilter = 'all' | 'current';
+type SupportedPlatform = 'darwin' | 'win32' | 'linux';
+
+function getCompatiblePlatforms(command: string): SupportedPlatform[] | null {
+  if (/\b(?:h264|hevc)_videotoolbox\b/i.test(command)) {
+    return ['darwin'];
+  }
+
+  if (/\b(?:h264|hevc)_qsv\b/i.test(command)) {
+    return ['win32'];
+  }
+
+  if (/\b(?:h264|hevc)_amf\b/i.test(command)) {
+    return ['win32'];
+  }
+
+  if (/\b(?:h264|hevc)_nvenc\b/i.test(command)) {
+    return ['win32', 'linux'];
+  }
+
+  return null;
+}
+
+function getPlatformLabel(
+  platform: SupportedPlatform,
+  t: (key: string) => string,
+): string {
+  if (platform === 'darwin') return t('macOS');
+  if (platform === 'win32') return t('Windows');
+  return t('Linux');
+}
+
+function getCompatibilityBadge(
+  option: DropdownOption,
+  currentPlatform: string,
+  t: (key: string) => string,
+): string | null {
+  const compatiblePlatforms = getCompatiblePlatforms(option.command);
+  if (
+    !compatiblePlatforms ||
+    compatiblePlatforms.includes(currentPlatform as SupportedPlatform)
+  ) {
+    return null;
+  }
+
+  if (
+    compatiblePlatforms.length === 2 &&
+    compatiblePlatforms.includes('win32') &&
+    compatiblePlatforms.includes('linux')
+  ) {
+    return t('Windows / Linux');
+  }
+
+  return compatiblePlatforms
+    .map((platform) => getPlatformLabel(platform, t))
+    .join(' / ');
+}
+
+function matchesCurrentPlatform(
+  option: DropdownOption,
+  currentPlatform: string,
+): boolean {
+  const compatiblePlatforms = getCompatiblePlatforms(option.command);
+  return (
+    !compatiblePlatforms ||
+    compatiblePlatforms.includes(currentPlatform as SupportedPlatform)
+  );
+}
+
 function Dropdown({
   id,
   options,
@@ -41,23 +125,105 @@ function Dropdown({
   const { t } = useLanguage();
   const [isOpen, setIsOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState<number>(-1);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all');
+  const [compatibilityFilter, setCompatibilityFilter] =
+    useState<CompatibilityFilter>('all');
   const dropdownRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const listboxId = useId();
   const generatedTriggerId = useId();
   const triggerId = id ?? generatedTriggerId;
   const listRef = useRef<HTMLUListElement>(null);
+  const currentPlatform = window.electron.platform;
 
-  // ── 点击外部关闭 ──
+  const visibleOptions = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLowerCase();
 
-  const handleClickOutside = useCallback((event: MouseEvent) => {
-    if (
-      dropdownRef.current &&
-      !dropdownRef.current.contains(event.target as Node)
-    ) {
-      setIsOpen(false);
+    return options.filter((option) => {
+      if (sourceFilter === 'custom' && !option.isCustom) return false;
+      if (sourceFilter === 'builtin' && option.isCustom) return false;
+      if (
+        compatibilityFilter === 'current' &&
+        !matchesCurrentPlatform(option, currentPlatform)
+      ) {
+        return false;
+      }
+
+      if (!normalizedQuery) return true;
+
+      return [option.name, option.description, option.command].some((field) =>
+        field.toLowerCase().includes(normalizedQuery),
+      );
+    });
+  }, [
+    compatibilityFilter,
+    currentPlatform,
+    options,
+    searchQuery,
+    sourceFilter,
+  ]);
+
+  const groupedOptions = useMemo(() => {
+    const customOptions = visibleOptions.filter((option) => option.isCustom);
+    const builtinOptions = visibleOptions.filter((option) => !option.isCustom);
+    let nextStartIndex = 0;
+
+    const groups: Array<{
+      key: string;
+      title: string;
+      options: DropdownOption[];
+      startIndex: number;
+    }> = [];
+
+    if (customOptions.length > 0) {
+      groups.push({
+        key: 'custom',
+        title: t('Custom Templates'),
+        options: customOptions,
+        startIndex: nextStartIndex,
+      });
+      nextStartIndex += customOptions.length;
     }
+
+    if (builtinOptions.length > 0) {
+      groups.push({
+        key: 'builtin',
+        title: t('Built-in Templates'),
+        options: builtinOptions,
+        startIndex: nextStartIndex,
+      });
+    }
+
+    return groups;
+  }, [t, visibleOptions]);
+
+  const resetFilters = useCallback(() => {
+    setSearchQuery('');
+    setSourceFilter('all');
+    setCompatibilityFilter('all');
+    setHighlightedIndex(-1);
   }, []);
+
+  const closeDropdown = useCallback(() => {
+    setIsOpen(false);
+    resetFilters();
+    buttonRef.current?.focus();
+  }, [resetFilters]);
+
+  const handleClickOutside = useCallback(
+    (event: MouseEvent) => {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
+        setIsOpen(false);
+        resetFilters();
+      }
+    },
+    [resetFilters],
+  );
 
   useEffect(() => {
     if (!isOpen) return undefined;
@@ -65,90 +231,117 @@ function Dropdown({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [handleClickOutside, isOpen]);
 
-  // ── Escape 关闭 ──
-
   useEffect(() => {
     if (!isOpen) return undefined;
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setIsOpen(false);
-        buttonRef.current?.focus();
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        closeDropdown();
       }
     };
     document.addEventListener('keydown', handleEscape);
     return () => document.removeEventListener('keydown', handleEscape);
-  }, [isOpen]);
-
-  // ── 键盘导航 ──
-
-  const handleKeyDown = useCallback(
-    (event: React.KeyboardEvent) => {
-      if (!isOpen) {
-        if (
-          event.key === 'Enter' ||
-          event.key === ' ' ||
-          event.key === 'ArrowDown'
-        ) {
-          event.preventDefault();
-          setIsOpen(true);
-          if (options.length > 0) {
-            setHighlightedIndex(
-              value ? options.findIndex((o) => o.id === value.id) : 0,
-            );
-          }
-        }
-        return;
-      }
-      switch (event.key) {
-        case 'ArrowDown':
-          event.preventDefault();
-          setHighlightedIndex((prev) =>
-            prev < options.length - 1 ? prev + 1 : 0,
-          );
-          break;
-        case 'ArrowUp':
-          event.preventDefault();
-          setHighlightedIndex((prev) =>
-            prev > 0 ? prev - 1 : options.length - 1,
-          );
-          break;
-        case 'Enter':
-        case ' ':
-          event.preventDefault();
-          if (highlightedIndex >= 0 && options[highlightedIndex]) {
-            onChange(options[highlightedIndex]);
-            setIsOpen(false);
-          }
-          break;
-        case 'Tab':
-          setIsOpen(false);
-          break;
-        default:
-          break;
-      }
-    },
-    [isOpen, options, highlightedIndex, onChange, value],
-  );
-
-  // ── 高亮项滚动到可视区 ──
+  }, [closeDropdown, isOpen]);
 
   useEffect(() => {
-    if (isOpen && highlightedIndex >= 0 && listRef.current) {
-      const el = listRef.current.children[highlightedIndex] as HTMLElement;
-      el?.scrollIntoView({ block: 'nearest' });
-    }
+    if (!isOpen) return undefined;
+
+    const focusTimer = window.setTimeout(() => {
+      searchInputRef.current?.focus();
+      searchInputRef.current?.select();
+    }, 0);
+
+    return () => window.clearTimeout(focusTimer);
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const selectedIndex = value
+      ? visibleOptions.findIndex((option) => option.id === value.id)
+      : -1;
+
+    setHighlightedIndex((previous) => {
+      if (visibleOptions.length === 0) return -1;
+      if (selectedIndex >= 0) return selectedIndex;
+      if (previous < 0 || previous >= visibleOptions.length) return 0;
+      return previous;
+    });
+  }, [isOpen, value, visibleOptions]);
+
+  useEffect(() => {
+    if (!isOpen || highlightedIndex < 0 || !listRef.current) return;
+    const element = listRef.current.querySelector<HTMLElement>(
+      `[data-option-index="${highlightedIndex}"]`,
+    );
+    element?.scrollIntoView({ block: 'nearest' });
   }, [highlightedIndex, isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    if (visibleOptions.length === 0) {
+      setHighlightedIndex(-1);
+      return;
+    }
+
+    if (highlightedIndex >= visibleOptions.length) {
+      setHighlightedIndex(0);
+    }
+  }, [highlightedIndex, isOpen, visibleOptions.length]);
 
   const handleOptionClick = useCallback(
     (option: DropdownOption) => {
       onChange(option);
       setIsOpen(false);
+      resetFilters();
       buttonRef.current?.focus();
     },
-    [onChange],
+    [onChange, resetFilters],
   );
 
-  // ── 触发按钮内的图标（裸色，无背景块） ──
+  const handleClosedKeyDown = useCallback((event: React.KeyboardEvent) => {
+    if (
+      event.key === 'Enter' ||
+      event.key === ' ' ||
+      event.key === 'ArrowDown'
+    ) {
+      event.preventDefault();
+      setIsOpen(true);
+    }
+  }, []);
+
+  const handleOpenKeyDown = useCallback(
+    (event: React.KeyboardEvent) => {
+      switch (event.key) {
+        case 'ArrowDown':
+          event.preventDefault();
+          setHighlightedIndex((previous) =>
+            previous < visibleOptions.length - 1 ? previous + 1 : 0,
+          );
+          break;
+        case 'ArrowUp':
+          event.preventDefault();
+          setHighlightedIndex((previous) =>
+            previous > 0 ? previous - 1 : visibleOptions.length - 1,
+          );
+          break;
+        case 'Enter':
+          if (highlightedIndex >= 0 && visibleOptions[highlightedIndex]) {
+            event.preventDefault();
+            handleOptionClick(visibleOptions[highlightedIndex]);
+          }
+          break;
+        case 'Tab':
+          setIsOpen(false);
+          resetFilters();
+          break;
+        default:
+          break;
+      }
+    },
+    [handleOptionClick, highlightedIndex, resetFilters, visibleOptions],
+  );
+
   let triggerIcon = (
     <FileCode
       size={15}
@@ -173,13 +366,19 @@ function Dropdown({
 
   return (
     <div className="relative h-10" ref={dropdownRef}>
-      {/* ── 触发按钮 ── */}
       <button
         ref={buttonRef}
         id={triggerId}
         type="button"
-        onClick={() => setIsOpen((v) => !v)}
-        onKeyDown={handleKeyDown}
+        onClick={() =>
+          setIsOpen((open) => {
+            if (open) {
+              resetFilters();
+            }
+            return !open;
+          })
+        }
+        onKeyDown={handleClosedKeyDown}
         aria-label={placeholder}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
@@ -197,10 +396,7 @@ function Dropdown({
           }
         `}
       >
-        {/* 图标 */}
         {triggerIcon}
-
-        {/* 文字 — 预留右侧空间避免被箭头遮挡 */}
         <span
           className={`flex-1 min-w-0 truncate text-left pr-1 ${
             value
@@ -211,8 +407,6 @@ function Dropdown({
         >
           {value?.name ?? placeholder}
         </span>
-
-        {/* 箭头 */}
         <ChevronDown
           size={15}
           className={`flex-shrink-0 text-slate-400 dark:text-slate-500 transition-transform duration-200 ${
@@ -221,128 +415,231 @@ function Dropdown({
         />
       </button>
 
-      {/* ── 下拉列表 ── */}
       {isOpen && (
-        <ul
-          id={listboxId}
-          ref={listRef}
-          role="listbox"
-          tabIndex={-1}
-          aria-labelledby={triggerId}
-          aria-activedescendant={
-            highlightedIndex >= 0 ? `option-${highlightedIndex}` : undefined
-          }
-          className="absolute z-50 w-full mt-1.5 bg-white dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-xl shadow-xl dark:shadow-slate-900/50 max-h-80 overflow-auto"
-        >
-          {options.length === 0 ? (
-            <li className="px-4 py-6 text-center text-slate-400 dark:text-slate-500 text-sm">
-              {t('No templates available')}
-            </li>
-          ) : (
-            options.map((option, index) => {
-              const isSelected = value?.id === option.id;
-              const isHighlighted = index === highlightedIndex;
-              let itemStateClass =
-                'hover:bg-slate-50 dark:hover:bg-slate-700/30';
-              if (isSelected) {
-                itemStateClass = 'bg-primary-50 dark:bg-primary-900/20';
-              } else if (isHighlighted) {
-                itemStateClass = 'bg-slate-50 dark:bg-slate-700/40';
-              }
+        <div className="absolute z-50 w-full mt-1.5 rounded-xl border-2 border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-xl dark:shadow-slate-900/50 overflow-hidden">
+          <div className="sticky top-0 z-10 border-b border-slate-100 dark:border-slate-700 bg-white/95 dark:bg-slate-800/95 backdrop-blur-sm px-3 py-3 space-y-2">
+            <div className="relative">
+              <Search
+                size={14}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500"
+              />
+              <input
+                ref={searchInputRef}
+                type="text"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                onKeyDown={handleOpenKeyDown}
+                placeholder={t('Search by name, description, or command')}
+                className="w-full h-9 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-900/40 pl-9 pr-3 text-sm text-slate-700 dark:text-slate-200 outline-none focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
 
-              return (
-                <li
-                  key={option.id}
-                  id={`option-${index}`}
-                  role="none"
-                  className={`
-                    border-b border-slate-50 dark:border-slate-700/50 last:border-b-0
-                    transition-colors duration-100
-                    ${itemStateClass}
-                  `}
-                >
-                  <div className="flex items-center gap-1 px-3 py-2.5">
-                    {/* 选项主体 */}
-                    <button
-                      type="button"
-                      role="option"
-                      aria-selected={isSelected}
-                      onClick={() => handleOptionClick(option)}
-                      className="flex-1 min-w-0 text-left outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded-lg"
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        {/* 列表图标：保留小色块区分自定义/内置 */}
+            <div className="flex flex-wrap gap-1.5">
+              {(
+                [
+                  ['all', t('All Templates')],
+                  ['builtin', t('Built-in Templates')],
+                  ['custom', t('Custom Templates')],
+                ] as Array<[SourceFilter, string]>
+              ).map(([filter, label]) => {
+                const isActive = sourceFilter === filter;
+                return (
+                  <button
+                    key={filter}
+                    type="button"
+                    onClick={() => setSourceFilter(filter)}
+                    className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-colors ${
+                      isActive
+                        ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/40 dark:text-primary-200'
+                        : 'bg-slate-100 text-slate-500 dark:bg-slate-700/60 dark:text-slate-300'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="flex flex-wrap gap-1.5">
+              {(
+                [
+                  ['all', t('All Devices')],
+                  ['current', t('This Device')],
+                ] as Array<[CompatibilityFilter, string]>
+              ).map(([filter, label]) => {
+                const isActive = compatibilityFilter === filter;
+                return (
+                  <button
+                    key={filter}
+                    type="button"
+                    onClick={() => setCompatibilityFilter(filter)}
+                    className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-colors ${
+                      isActive
+                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200'
+                        : 'bg-slate-100 text-slate-500 dark:bg-slate-700/60 dark:text-slate-300'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <ul
+            id={listboxId}
+            ref={listRef}
+            role="listbox"
+            tabIndex={-1}
+            aria-labelledby={triggerId}
+            aria-activedescendant={
+              highlightedIndex >= 0 ? `option-${highlightedIndex}` : undefined
+            }
+            onKeyDown={handleOpenKeyDown}
+            className="max-h-96 overflow-auto"
+          >
+            {visibleOptions.length === 0 ? (
+              <li className="px-4 py-6 text-center text-slate-400 dark:text-slate-500 text-sm">
+                {t('No matching templates')}
+              </li>
+            ) : (
+              groupedOptions.map((group) => {
+                return (
+                  <li key={group.key} role="none">
+                    <div className="px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 bg-slate-50/80 dark:bg-slate-900/30 border-y border-slate-100 dark:border-slate-700/50">
+                      {group.title}
+                    </div>
+                    {group.options.map((option, optionIndex) => {
+                      const flatIndex = group.startIndex + optionIndex;
+                      const isSelected = value?.id === option.id;
+                      const isHighlighted = flatIndex === highlightedIndex;
+                      const compatibilityBadge = getCompatibilityBadge(
+                        option,
+                        currentPlatform,
+                        t,
+                      );
+                      let itemStateClass =
+                        'hover:bg-slate-50 dark:hover:bg-slate-700/30';
+                      if (isSelected) {
+                        itemStateClass = 'bg-primary-50 dark:bg-primary-900/20';
+                      } else if (isHighlighted) {
+                        itemStateClass = 'bg-slate-50 dark:bg-slate-700/40';
+                      }
+
+                      return (
                         <div
+                          key={option.id}
+                          role="none"
+                          data-option-index={flatIndex}
                           className={`
-                            w-5 h-5 flex-shrink-0 flex items-center justify-center rounded-md
-                            ${
-                              option.isCustom
-                                ? 'bg-gradient-to-br from-purple-500 to-pink-500'
-                                : 'bg-gradient-to-br from-primary-500 to-cyan-500'
-                            }
+                            border-b border-slate-50 dark:border-slate-700/50 last:border-b-0
+                            transition-colors duration-100
+                            ${itemStateClass}
                           `}
                         >
-                          {option.isCustom ? (
-                            <Sparkles size={11} className="text-white" />
-                          ) : (
-                            <FileCode size={11} className="text-white" />
-                          )}
+                          <div className="flex items-center gap-1 px-3 py-2.5">
+                            <button
+                              type="button"
+                              id={`option-${flatIndex}`}
+                              role="option"
+                              aria-selected={isSelected}
+                              onMouseEnter={() =>
+                                setHighlightedIndex(flatIndex)
+                              }
+                              onClick={() => handleOptionClick(option)}
+                              className="flex-1 min-w-0 text-left outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded-lg"
+                            >
+                              <div className="flex items-center gap-2 min-w-0">
+                                <div
+                                  className={`
+                                    w-5 h-5 flex-shrink-0 flex items-center justify-center rounded-md
+                                    ${
+                                      option.isCustom
+                                        ? 'bg-gradient-to-br from-purple-500 to-pink-500'
+                                        : 'bg-gradient-to-br from-primary-500 to-cyan-500'
+                                    }
+                                  `}
+                                >
+                                  {option.isCustom ? (
+                                    <Sparkles
+                                      size={11}
+                                      className="text-white"
+                                    />
+                                  ) : (
+                                    <FileCode
+                                      size={11}
+                                      className="text-white"
+                                    />
+                                  )}
+                                </div>
+
+                                <span className="font-semibold text-sm text-slate-800 dark:text-slate-200 truncate">
+                                  {option.name}
+                                </span>
+
+                                {compatibilityBadge && (
+                                  <span className="flex-shrink-0 rounded-full bg-amber-50 dark:bg-amber-900/30 border border-amber-200/70 dark:border-amber-700/50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-200">
+                                    {compatibilityBadge}
+                                  </span>
+                                )}
+
+                                {isSelected && (
+                                  <span className="flex-shrink-0 w-1.5 h-1.5 rounded-full bg-primary-500 ml-auto" />
+                                )}
+                              </div>
+
+                              {option.description && (
+                                <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5 ml-7 truncate">
+                                  {option.description}
+                                </p>
+                              )}
+                            </button>
+
+                            {option.isCustom && (
+                              <div className="flex gap-0.5 flex-shrink-0 ml-1">
+                                <button
+                                  type="button"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    onEdit?.({ id: option.id });
+                                  }}
+                                  aria-label={`Edit template ${option.name}`}
+                                  className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 dark:text-slate-500 hover:text-primary-600 dark:hover:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/30 transition-colors"
+                                >
+                                  <Edit2 size={13} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    onDelete?.(option.id);
+                                  }}
+                                  aria-label={`Delete template ${option.name}`}
+                                  className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors"
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              </div>
+                            )}
+                          </div>
                         </div>
-
-                        <span className="font-semibold text-sm text-slate-800 dark:text-slate-200 truncate">
-                          {option.name}
-                        </span>
-
-                        {isSelected && (
-                          <span className="flex-shrink-0 w-1.5 h-1.5 rounded-full bg-primary-500 ml-auto" />
-                        )}
-                      </div>
-
-                      {option.description && (
-                        <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5 ml-7 truncate">
-                          {option.description}
-                        </p>
-                      )}
-                    </button>
-
-                    {/* 自定义模板的编辑/删除按钮 */}
-                    {option.isCustom && (
-                      <div className="flex gap-0.5 flex-shrink-0 ml-1">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onEdit?.({ id: option.id });
-                          }}
-                          aria-label={`Edit template ${option.name}`}
-                          className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 dark:text-slate-500 hover:text-primary-600 dark:hover:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/30 transition-colors"
-                        >
-                          <Edit2 size={13} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onDelete?.(option.id);
-                          }}
-                          aria-label={`Delete template ${option.name}`}
-                          className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors"
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </li>
-              );
-            })
-          )}
-        </ul>
+                      );
+                    })}
+                  </li>
+                );
+              })
+            )}
+          </ul>
+        </div>
       )}
     </div>
   );
 }
 
-
+Dropdown.defaultProps = {
+  id: undefined,
+  onEdit: undefined,
+  onDelete: undefined,
+};
 
 export default Dropdown;

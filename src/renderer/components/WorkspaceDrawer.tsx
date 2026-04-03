@@ -18,9 +18,9 @@ import {
 import Terminal from './Terminal/Terminal';
 
 const DRAWER_HEIGHT: Record<DrawerSize, number> = {
-  sm: 48,
+  sm: 0,
   md: 260,
-  lg: 420,
+  lg: 470,
 };
 
 interface WorkspaceDrawerProps {

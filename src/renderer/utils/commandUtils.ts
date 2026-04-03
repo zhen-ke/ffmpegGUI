@@ -62,6 +62,11 @@ function buildOutputPath(folder: string, fileName: string): string {
   return normalized ? `${normalized}/${fileName}` : fileName;
 }
 
+function sanitizeOutputFileName(fileName: string): string {
+  const trimmed = fileName.trim().replace(/[\\/]/g, '');
+  return trimmed || DEFAULT_OUTPUT_FILENAME;
+}
+
 // ========== 公共 API ==========
 
 /**
@@ -168,6 +173,44 @@ export function updateInputArgument(
     tokens[targetIndex + 1],
     inputIndex,
   );
+
+  return tokens.join(' ').trim();
+}
+
+export function buildOutputPreview(
+  outputFolder: string,
+  outputFileName: string,
+): string {
+  return outputFolder
+    ? buildOutputPath(outputFolder, sanitizeOutputFileName(outputFileName))
+    : sanitizeOutputFileName(outputFileName);
+}
+
+export function updateOutputFileName(
+  command: string,
+  outputFileName: string,
+  outputFolder?: string,
+): string {
+  const tokens = tokenizeRaw(command);
+  const nextOutput = quotePath(
+    buildOutputPreview(outputFolder ?? '', outputFileName),
+  );
+
+  if (tokens.length === 0) {
+    return nextOutput;
+  }
+
+  const lastIndex = tokens.length - 1;
+  const lastToken = tokens[lastIndex];
+  const previousToken = tokens[lastIndex - 1];
+  const shouldAppend =
+    lastToken.startsWith('-') || (previousToken?.startsWith('-') ?? false);
+
+  if (shouldAppend) {
+    tokens.push(nextOutput);
+  } else {
+    tokens[lastIndex] = nextOutput;
+  }
 
   return tokens.join(' ').trim();
 }

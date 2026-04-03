@@ -21,15 +21,17 @@ interface FFmpegState {
   status: FFmpegStatus;
   progress: number;
   totalDuration: number;
+  lastStartedCommand: string;
+  lastCompletedOutputFile: string;
 }
 
 type FFmpegAction =
-  | { type: 'START' }
+  | { type: 'START'; payload: { command: string } }
   | { type: 'STARTED' }
   | { type: 'STOP' }
   | { type: 'PROGRESS'; payload: { time: number; totalDuration: number } }
   | { type: 'DURATION'; payload: number }
-  | { type: 'COMPLETE' }
+  | { type: 'COMPLETE'; payload: { outputFile: string | null } }
   | { type: 'ERROR' }
   | { type: 'CANCELLED' }
   | { type: 'RESET' };
@@ -38,12 +40,20 @@ const initialState: FFmpegState = {
   status: 'idle',
   progress: 0,
   totalDuration: 0,
+  lastStartedCommand: '',
+  lastCompletedOutputFile: '',
 };
 
 function reducer(state: FFmpegState, action: FFmpegAction): FFmpegState {
   switch (action.type) {
     case 'START':
-      return { status: 'idle', progress: 0, totalDuration: 0 };
+      return {
+        status: 'idle',
+        progress: 0,
+        totalDuration: 0,
+        lastStartedCommand: action.payload.command,
+        lastCompletedOutputFile: '',
+      };
     case 'STARTED':
       return { ...state, status: 'running' };
     case 'STOP':
@@ -58,7 +68,12 @@ function reducer(state: FFmpegState, action: FFmpegAction): FFmpegState {
       return { ...state, progress: pct };
     }
     case 'COMPLETE':
-      return { ...state, status: 'done', progress: 100 };
+      return {
+        ...state,
+        status: 'done',
+        progress: 100,
+        lastCompletedOutputFile: action.payload.outputFile ?? '',
+      };
     case 'ERROR':
       return { ...state, status: 'error' };
     case 'CANCELLED':
@@ -98,7 +113,7 @@ export function useFFmpegState({ onProgressUpdate }: UseFFmpegStateProps = {}) {
     const trimmed = command?.trim();
     if (!trimmed) return;
 
-    dispatch({ type: 'START' });
+    dispatch({ type: 'START', payload: { command: trimmed } });
 
     window.electron.ipcRenderer
       .invoke('start-ffmpeg', trimmed)
@@ -171,8 +186,19 @@ export function useFFmpegState({ onProgressUpdate }: UseFFmpegStateProps = {}) {
         dispatch({ type: 'CANCELLED' });
       }),
 
-      window.electron.ipcRenderer.on('ffmpeg-complete', () => {
-        dispatch({ type: 'COMPLETE' });
+      window.electron.ipcRenderer.on('ffmpeg-complete', (data: unknown) => {
+        dispatch({
+          type: 'COMPLETE',
+          payload: {
+            outputFile:
+              data &&
+              typeof data === 'object' &&
+              'outputFile' in data &&
+              typeof (data as { outputFile?: unknown }).outputFile === 'string'
+                ? (data as { outputFile: string }).outputFile
+                : null,
+          },
+        });
       }),
     ];
 
@@ -186,6 +212,8 @@ export function useFFmpegState({ onProgressUpdate }: UseFFmpegStateProps = {}) {
     status: state.status,
     progress: state.progress,
     totalDuration: state.totalDuration,
+    lastStartedCommand: state.lastStartedCommand,
+    lastCompletedOutputFile: state.lastCompletedOutputFile,
     ...flags,
     handleStart,
     handleStop,

@@ -38,11 +38,15 @@ import { type TerminalLogType } from './components/FFmpegTerminal';
 import { FileSelector } from './components/FileSelector';
 import { WorkspaceDrawer } from './components/WorkspaceDrawer';
 import {
+  buildOutputPreview,
   countInputArguments,
   parseInputArguments,
+  parseOutputFileName,
   updateCommandPaths,
   updateInputArgument,
+  updateOutputFileName,
 } from './utils/commandUtils';
+import type { MediaProbeResult } from '../shared/mediaProbe';
 
 // ─────────────────────────────────────────────
 // 常量
@@ -73,6 +77,54 @@ function getIndexedSelectLabel(language: string, index: number): string {
   return language === 'zh'
     ? `选择输入 ${index + 1}`
     : `Select Input ${index + 1}`;
+}
+
+function formatDuration(seconds: number | null): string {
+  if (seconds === null || !Number.isFinite(seconds)) return '—';
+
+  const totalSeconds = Math.max(0, Math.floor(seconds));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const secs = totalSeconds % 60;
+
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  }
+
+  return `${minutes}:${String(secs).padStart(2, '0')}`;
+}
+
+function formatBytes(bytes: number | null): string {
+  if (bytes === null || !Number.isFinite(bytes) || bytes <= 0) return '—';
+
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let value = bytes;
+  let unitIndex = 0;
+
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+
+  return `${value.toFixed(value >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
+}
+
+function formatBitRate(bitRate: number | null): string {
+  if (bitRate === null || !Number.isFinite(bitRate) || bitRate <= 0) return '—';
+
+  if (bitRate >= 1_000_000) {
+    return `${(bitRate / 1_000_000).toFixed(1)} Mbps`;
+  }
+
+  return `${Math.round(bitRate / 1000)} kbps`;
+}
+
+function getPathDirectory(filePath: string): string {
+  const lastSlash = Math.max(
+    filePath.lastIndexOf('/'),
+    filePath.lastIndexOf('\\'),
+  );
+  return lastSlash > 0 ? filePath.slice(0, lastSlash) : filePath;
 }
 
 // ─────────────────────────────────────────────
@@ -133,6 +185,12 @@ function Home() {
   const [confirmState, setConfirmState] = useState<ConfirmState>({
     isOpen: false,
   });
+  const [mediaInfo, setMediaInfo] = useState<MediaProbeResult | null>(null);
+  const [isMediaInfoLoading, setIsMediaInfoLoading] = useState(false);
+  const [hasMediaInfoError, setHasMediaInfoError] = useState(false);
+  const [isMediaProbeAvailable, setIsMediaProbeAvailable] = useState<
+    boolean | null
+  >(null);
 
   const openConfirm = useCallback(
     (
@@ -221,6 +279,8 @@ function Home() {
     canStop,
     isRunning,
     isStopping,
+    lastCompletedOutputFile,
+    lastStartedCommand,
     status,
     progress,
     handleStart,
@@ -333,6 +393,14 @@ function Home() {
   );
 
   const inputArguments = useMemo(() => parseInputArguments(command), [command]);
+  const outputFileName = useMemo(() => parseOutputFileName(command), [command]);
+  const finalOutputPath = useMemo(
+    () => buildOutputPreview(outputFolder, outputFileName),
+    [outputFolder, outputFileName],
+  );
+  const mediaInfoError = hasMediaInfoError
+    ? t('Failed to read media details.')
+    : '';
 
   const inputSlots = useMemo(
     () =>
@@ -369,6 +437,7 @@ function Home() {
       t,
     ],
   );
+  const primaryInputPath = inputSlots[0]?.selectedValue ?? '';
 
   const handleSelectInputAtIndex = useCallback(
     async (index: number) => {
@@ -387,6 +456,103 @@ function Home() {
     },
     [clearInputFile, setCommand],
   );
+
+  const handleOutputFileNameChange = useCallback(
+    (value: string) => {
+      setCommand((prev) =>
+        updateOutputFileName(prev, value, outputFolderRef.current),
+      );
+    },
+    [setCommand],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    window.electron.ipcRenderer
+      .invoke('check-media-probe-status')
+      .then((result) => {
+        if (!cancelled) {
+          setIsMediaProbeAvailable(result === true);
+        }
+        return undefined;
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setIsMediaProbeAvailable(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (isMediaProbeAvailable !== true) {
+      setMediaInfo(null);
+      setHasMediaInfoError(false);
+      setIsMediaInfoLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (!primaryInputPath) {
+      setMediaInfo(null);
+      setHasMediaInfoError(false);
+      setIsMediaInfoLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setIsMediaInfoLoading(true);
+    setHasMediaInfoError(false);
+    setMediaInfo(null);
+
+    window.electron.ipcRenderer
+      .invoke('probe-media', primaryInputPath)
+      .then((result) => {
+        if (!cancelled) {
+          const probeResult = result as
+            | { success: true; data: MediaProbeResult }
+            | { success: false; error: string };
+
+          if (probeResult?.success) {
+            setMediaInfo(probeResult.data);
+            setHasMediaInfoError(false);
+          } else {
+            if (probeResult?.error === 'FFprobe is not available.') {
+              setMediaInfo(null);
+              setHasMediaInfoError(false);
+              setIsMediaProbeAvailable(false);
+              setIsMediaInfoLoading(false);
+              return undefined;
+            }
+
+            setMediaInfo(null);
+            setHasMediaInfoError(true);
+          }
+
+          setIsMediaInfoLoading(false);
+        }
+        return undefined;
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setMediaInfo(null);
+          setHasMediaInfoError(true);
+          setIsMediaInfoLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isMediaProbeAvailable, primaryInputPath]);
 
   // ── 运行 ──
 
@@ -439,6 +605,127 @@ function Home() {
     [command],
   );
   const hasCommand = command.trim().length > 0;
+  const currentCommand = command.trim();
+  const primaryVideoStream = mediaInfo?.videoStreams[0] ?? null;
+  const primaryAudioStream = mediaInfo?.audioStreams[0] ?? null;
+  const primarySubtitleStream = mediaInfo?.subtitleStreams[0] ?? null;
+  const completedOutputFolder = lastCompletedOutputFile
+    ? getPathDirectory(lastCompletedOutputFile)
+    : '';
+  const showCompletedResult =
+    status === 'done' && currentCommand === lastStartedCommand;
+  let mediaDetailsContent = (
+    <p className="text-sm text-slate-500 dark:text-slate-400">
+      {t('No media details yet')}
+    </p>
+  );
+
+  if (mediaInfoError) {
+    mediaDetailsContent = (
+      <p className="text-sm text-red-600 dark:text-red-400">{mediaInfoError}</p>
+    );
+  } else if (mediaInfo) {
+    mediaDetailsContent = (
+      <div className="grid grid-cols-12 gap-3">
+        <div className="col-span-12 md:col-span-3 rounded-xl bg-slate-50 dark:bg-slate-800/70 px-3 py-3">
+          <p className="text-[11px] uppercase tracking-wider text-slate-400 dark:text-slate-500">
+            {t('Format')}
+          </p>
+          <p className="mt-1 text-sm font-semibold text-slate-700 dark:text-slate-200">
+            {mediaInfo.formatName}
+          </p>
+        </div>
+        <div className="col-span-12 md:col-span-3 rounded-xl bg-slate-50 dark:bg-slate-800/70 px-3 py-3">
+          <p className="text-[11px] uppercase tracking-wider text-slate-400 dark:text-slate-500">
+            {t('Duration')}
+          </p>
+          <p className="mt-1 text-sm font-semibold text-slate-700 dark:text-slate-200">
+            {formatDuration(mediaInfo.durationSeconds)}
+          </p>
+        </div>
+        <div className="col-span-12 md:col-span-3 rounded-xl bg-slate-50 dark:bg-slate-800/70 px-3 py-3">
+          <p className="text-[11px] uppercase tracking-wider text-slate-400 dark:text-slate-500">
+            {t('Size')}
+          </p>
+          <p className="mt-1 text-sm font-semibold text-slate-700 dark:text-slate-200">
+            {formatBytes(mediaInfo.sizeBytes)}
+          </p>
+        </div>
+        <div className="col-span-12 md:col-span-3 rounded-xl bg-slate-50 dark:bg-slate-800/70 px-3 py-3">
+          <p className="text-[11px] uppercase tracking-wider text-slate-400 dark:text-slate-500">
+            {t('Bitrate')}
+          </p>
+          <p className="mt-1 text-sm font-semibold text-slate-700 dark:text-slate-200">
+            {formatBitRate(mediaInfo.bitRate)}
+          </p>
+        </div>
+
+        <div className="col-span-12 md:col-span-4 rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-3">
+          <p className="text-[11px] uppercase tracking-wider text-slate-400 dark:text-slate-500">
+            {t('Video')}
+          </p>
+          {primaryVideoStream ? (
+            <div className="mt-2 space-y-1 text-sm text-slate-700 dark:text-slate-200">
+              <p>{primaryVideoStream.codec}</p>
+              <p>
+                {t('Resolution')}:{' '}
+                {primaryVideoStream.width && primaryVideoStream.height
+                  ? `${primaryVideoStream.width}×${primaryVideoStream.height}`
+                  : '—'}
+              </p>
+              <p>
+                {t('Frame Rate')}:{' '}
+                {primaryVideoStream.frameRate
+                  ? `${primaryVideoStream.frameRate.toFixed(2)} fps`
+                  : '—'}
+              </p>
+            </div>
+          ) : (
+            <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">—</p>
+          )}
+        </div>
+
+        <div className="col-span-12 md:col-span-4 rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-3">
+          <p className="text-[11px] uppercase tracking-wider text-slate-400 dark:text-slate-500">
+            {t('Audio')}
+          </p>
+          {primaryAudioStream ? (
+            <div className="mt-2 space-y-1 text-sm text-slate-700 dark:text-slate-200">
+              <p>{primaryAudioStream.codec}</p>
+              <p>
+                {t('Channels')}: {primaryAudioStream.channels ?? '—'}
+              </p>
+              <p>
+                {t('Sample Rate')}:{' '}
+                {primaryAudioStream.sampleRate
+                  ? `${Math.round(primaryAudioStream.sampleRate)} Hz`
+                  : '—'}
+              </p>
+            </div>
+          ) : (
+            <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">—</p>
+          )}
+        </div>
+
+        <div className="col-span-12 md:col-span-4 rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-3">
+          <p className="text-[11px] uppercase tracking-wider text-slate-400 dark:text-slate-500">
+            {t('Subtitles')}
+          </p>
+          {primarySubtitleStream ? (
+            <div className="mt-2 space-y-1 text-sm text-slate-700 dark:text-slate-200">
+              <p>{primarySubtitleStream.codec}</p>
+              <p>
+                {t('Tracks')}: {mediaInfo.subtitleStreams.length}
+              </p>
+              <p>{primarySubtitleStream.language ?? '—'}</p>
+            </div>
+          ) : (
+            <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">—</p>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   const toggleLanguage = useCallback(() => {
     setLanguage(language === 'en' ? 'zh' : 'en');
@@ -451,6 +738,40 @@ function Home() {
   const openActivityPane = useCallback(() => {
     handleActivePaneChange('activity');
   }, [handleActivePaneChange]);
+
+  const handleOpenCompletedFile = useCallback(async () => {
+    if (!lastCompletedOutputFile) return;
+
+    try {
+      const result = (await window.electron.ipcRenderer.invoke(
+        'open-output-file',
+        lastCompletedOutputFile,
+      )) as { success: boolean; error?: string };
+
+      if (!result?.success) {
+        xtermWriteLogRef.current?.('error', t('Failed to open output file.'));
+      }
+    } catch {
+      xtermWriteLogRef.current?.('error', t('Failed to open output file.'));
+    }
+  }, [lastCompletedOutputFile, t]);
+
+  const handleOpenCompletedFolder = useCallback(async () => {
+    if (!lastCompletedOutputFile) return;
+
+    try {
+      const result = (await window.electron.ipcRenderer.invoke(
+        'open-output-folder',
+        lastCompletedOutputFile,
+      )) as { success: boolean; error?: string };
+
+      if (!result?.success) {
+        xtermWriteLogRef.current?.('error', t('Failed to open output folder.'));
+      }
+    } catch {
+      xtermWriteLogRef.current?.('error', t('Failed to open output folder.'));
+    }
+  }, [lastCompletedOutputFile, t]);
 
   // ── 派生展示状态 ──
 
@@ -605,6 +926,134 @@ function Home() {
                   />
                 </div>
               ))}
+            </div>
+          )}
+
+          {isMediaProbeAvailable === true && (
+            <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-900/40 px-4 py-4 shadow-sm">
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <div className="min-w-0">
+                  <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+                    {t('Media Details')}
+                  </h2>
+                  <p
+                    className="text-xs text-slate-500 dark:text-slate-400 truncate"
+                    title={
+                      primaryInputPath ||
+                      t('Select a first input file to inspect it here.')
+                    }
+                  >
+                    {primaryInputPath ||
+                      t('Select a first input file to inspect it here.')}
+                  </p>
+                </div>
+                {isMediaInfoLoading && (
+                  <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                    <Loader2 size={14} className="animate-spin" />
+                    <span>{t('Reading media details...')}</span>
+                  </div>
+                )}
+              </div>
+
+              {mediaDetailsContent}
+            </div>
+          )}
+
+          <div className="grid grid-cols-12 gap-3 items-end">
+            <div className="col-span-5 min-w-0">
+              <label
+                htmlFor={`${outputControlId}-name`}
+                className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1.5"
+              >
+                {t('Output Name')}
+              </label>
+              <input
+                id={`${outputControlId}-name`}
+                type="text"
+                value={outputFileName}
+                onChange={(event) =>
+                  handleOutputFileNameChange(event.target.value)
+                }
+                spellCheck={false}
+                className="w-full h-10 px-3 rounded-xl border-2 border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              />
+            </div>
+            <div className="col-span-7 min-w-0">
+              <p className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1.5">
+                {t('Final Output Path')}
+              </p>
+              <div className="h-10 px-3 rounded-xl border border-dashed border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-900/40 flex items-center">
+                <span
+                  className="truncate text-sm text-slate-600 dark:text-slate-300 font-mono"
+                  title={finalOutputPath}
+                >
+                  {finalOutputPath}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {showCompletedResult && (
+            <div className="rounded-2xl border border-emerald-200 dark:border-emerald-800/60 bg-emerald-50/80 dark:bg-emerald-900/20 px-4 py-4 shadow-sm">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+                <div className="min-w-0">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
+                    {t('Latest Result')}
+                  </p>
+                  <h2 className="mt-1 text-sm font-semibold text-emerald-900 dark:text-emerald-100">
+                    {t('Task complete. Your output is ready.')}
+                  </h2>
+                  {lastCompletedOutputFile ? (
+                    <>
+                      <p className="mt-3 text-[11px] font-semibold uppercase tracking-wider text-emerald-700/80 dark:text-emerald-300/80">
+                        {t('Completed Output')}
+                      </p>
+                      <p
+                        className="mt-1 truncate text-sm font-mono text-emerald-900 dark:text-emerald-100"
+                        title={lastCompletedOutputFile}
+                      >
+                        {lastCompletedOutputFile}
+                      </p>
+                      <p
+                        className="mt-1 truncate text-xs text-emerald-800/80 dark:text-emerald-200/80"
+                        title={completedOutputFolder}
+                      >
+                        {completedOutputFolder}
+                      </p>
+                    </>
+                  ) : (
+                    <p className="mt-2 text-sm text-emerald-800 dark:text-emerald-200">
+                      {t('Task complete. Your output is ready.')}
+                    </p>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {lastCompletedOutputFile && (
+                    <button
+                      type="button"
+                      onClick={handleOpenCompletedFile}
+                      className="px-3 py-2 rounded-lg border border-emerald-300 dark:border-emerald-700 text-sm font-medium text-emerald-800 dark:text-emerald-100 hover:bg-emerald-100 dark:hover:bg-emerald-800/40 transition-colors duration-200"
+                    >
+                      {t('Open File')}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleOpenCompletedFolder}
+                    className="px-3 py-2 rounded-lg border border-emerald-300 dark:border-emerald-700 text-sm font-medium text-emerald-800 dark:text-emerald-100 hover:bg-emerald-100 dark:hover:bg-emerald-800/40 transition-colors duration-200"
+                  >
+                    {t('Open Folder')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onStart}
+                    disabled={!canStart || !currentCommand}
+                    className="px-3 py-2 rounded-lg bg-emerald-600 text-sm font-semibold text-white hover:bg-emerald-700 disabled:bg-emerald-300 disabled:cursor-not-allowed transition-colors duration-200"
+                  >
+                    {t('Run Again')}
+                  </button>
+                </div>
+              </div>
             </div>
           )}
 
