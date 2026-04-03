@@ -58,10 +58,12 @@ export class FFmpegProcessManager {
     args: string[],
     callbacks: FFmpegProcessCallbacks,
     outputFile?: string,
+    workingDirectory?: string,
   ) {
     if (this.state) return; // 上层应先检查 isRunning()
 
     const proc = spawn(executablePath, args, {
+      cwd: workingDirectory,
       shell: false,
       windowsHide: true,
       stdio: ['pipe', 'pipe', 'pipe'],

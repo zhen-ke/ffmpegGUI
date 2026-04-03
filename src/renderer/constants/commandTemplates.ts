@@ -720,18 +720,6 @@ const baseCommandTemplates: readonly Omit<CommandTemplate, 'id'>[] = [
   },
   {
     name: {
-      en: 'Video Stabilization',
-      zh: '视频防抖',
-    },
-    command:
-      '-i input.mp4 -vf "vidstabdetect=stepsize=6:shakiness=8:accuracy=9:result=transform_vectors.trf" -f null - && ffmpeg -i input.mp4 -vf "vidstabtransform=input=transform_vectors.trf:zoom=1:smoothing=30,unsharp=5:5:0.8:3:3:0.4" -c:v libx264 -crf 18 output_stabilized.mp4',
-    description: {
-      en: 'Stabilize shaky video using two-pass analysis. Run as two separate commands.',
-      zh: '使用两遍分析稳定抖动的视频。需要作为两个独立命令运行。',
-    },
-  },
-  {
-    name: {
       en: 'Picture in Picture',
       zh: '画中画',
     },

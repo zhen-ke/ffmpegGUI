@@ -9,6 +9,7 @@ import fs from 'fs';
 import path from 'path';
 import {
   containsUnsupportedShellOperators,
+  deriveWorkingDirectory,
   extractOutputFile,
   parseFFmpegCommand,
 } from '../utils/commandParser';
@@ -72,6 +73,7 @@ class FFmpegController {
     }
 
     const outputFile = extractOutputFile(args);
+    const workingDirectory = deriveWorkingDirectory(args);
 
     if (outputFile && fs.existsSync(outputFile)) {
       if (!mainWindow) {
@@ -124,7 +126,15 @@ class FFmpegController {
     }
 
     // 进程启动是异步效果；我们不等待其完成
-    this.manager.start(ffmpegPath, args, callbacks, outputFile);
+    this.manager.start(
+      ffmpegPath,
+      args,
+      callbacks,
+      outputFile,
+      workingDirectory && fs.existsSync(workingDirectory)
+        ? workingDirectory
+        : undefined,
+    );
     return { success: true };
   }
 

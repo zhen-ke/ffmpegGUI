@@ -1,5 +1,6 @@
 import {
   containsUnsupportedShellOperators,
+  deriveWorkingDirectory,
   extractOutputFile,
   parseFFmpegCommand,
 } from './commandParser';
@@ -59,6 +60,22 @@ describe('commandParser', () => {
   it('does not treat stdout marker as output file', () => {
     const args = parseFFmpegCommand('-i in.mp4 -f null -');
     expect(extractOutputFile(args)).toBeUndefined();
+  });
+
+  it('prefers absolute output path when deriving working directory', () => {
+    const args = parseFFmpegCommand(
+      '-i "/tmp/input file.mp4" -c:v libx264 "/tmp/out/output file.mp4"',
+    );
+
+    expect(deriveWorkingDirectory(args)).toBe('/tmp/out');
+  });
+
+  it('falls back to first absolute input path when output is relative', () => {
+    const args = parseFFmpegCommand(
+      '-i "/tmp/input file.mp4" -i subtitles.srt -c copy output.mp4',
+    );
+
+    expect(deriveWorkingDirectory(args)).toBe('/tmp');
   });
 
   it('detects unsupported shell control operators', () => {

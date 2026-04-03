@@ -2,9 +2,11 @@
  * PTY 进程管理服务（单例）
  */
 
+import { app } from 'electron';
 import type { IPty } from '@homebridge/node-pty-prebuilt-multiarch';
 import * as pty from '@homebridge/node-pty-prebuilt-multiarch';
 import type { WebContents } from 'electron';
+import fs from 'fs';
 import path from 'path';
 import {
   getFfmpegBinDir,
@@ -21,6 +23,56 @@ const DEFAULT_SHELL: Readonly<Record<string, string>> = {
 };
 
 const FALLBACK_SHELL = '/bin/bash';
+
+function getShellArgs(shell: string): string[] {
+  return path.basename(shell).toLowerCase() === 'cmd.exe' ? [] : ['--login'];
+}
+
+function buildPtyEnv(cwd: string): Record<string, string> {
+  const base = Object.entries(process.env).reduce<Record<string, string>>(
+    (env, [key, value]) => {
+      if (value !== undefined) {
+        env[key] = value;
+      }
+      return env;
+    },
+    {},
+  );
+
+  const extraPaths = [
+    cwd,
+    path.dirname(getLegacyFfmpegPath()),
+    ...getFfmpegSearchDirs(),
+    process.env.HOME ? path.join(process.env.HOME, '.fnm') : '',
+  ]
+    .filter(Boolean)
+    .join(path.delimiter);
+
+  base.PATH = [extraPaths, base.PATH ?? '']
+    .filter(Boolean)
+    .join(path.delimiter);
+
+  return base;
+}
+
+function getInitialCwd(): string {
+  const candidates = [
+    getFfmpegBinDir(),
+    path.dirname(getLegacyFfmpegPath()),
+    app.getPath('home'),
+    process.cwd(),
+  ];
+
+  const existingDir = candidates.find((candidate) => {
+    try {
+      return fs.statSync(candidate).isDirectory();
+    } catch {
+      return false;
+    }
+  });
+
+  return existingDir ?? process.cwd();
+}
 
 // ========== 进程状态 ==========
 
@@ -52,14 +104,14 @@ class PtyService {
     }
 
     const shell = DEFAULT_SHELL[process.platform] ?? FALLBACK_SHELL;
-    const cwd = getFfmpegBinDir();
+    const cwd = getInitialCwd();
 
-    const proc = pty.spawn(shell, ['--login'], {
+    const proc = pty.spawn(shell, getShellArgs(shell), {
       name: 'xterm-256color',
       cols,
       rows,
       cwd,
-      env: this.buildEnv(cwd),
+      env: buildPtyEnv(cwd),
     });
 
     // 先建立状态，再绑定回调——确保回调执行时 state 已就绪
@@ -130,32 +182,6 @@ class PtyService {
   }
 
   // ——— 内部实现 ———
-
-  /**
-   * 构造传给 PTY 的环境变量，过滤掉 `process.env` 中的 `undefined` 值。
-   * node-pty 要求 env 值均为 string，不接受 undefined。
-   */
-  private buildEnv(cwd: string): Record<string, string> {
-    const base: Record<string, string> = {};
-    for (const [k, v] of Object.entries(process.env)) {
-      if (v !== undefined) base[k] = v;
-    }
-
-    // 补全 GUI 启动时缺失的常见工具路径
-    const extraPaths = [
-      cwd,
-      path.dirname(getLegacyFfmpegPath()),
-      ...getFfmpegSearchDirs(),
-      process.env.HOME ? path.join(process.env.HOME, '.fnm') : '',
-    ]
-      .filter(Boolean)
-      .join(path.delimiter);
-
-    base.PATH = [extraPaths, base.PATH ?? '']
-      .filter(Boolean)
-      .join(path.delimiter);
-    return base;
-  }
 
   /**
    * 安全地向 renderer 发送消息，自动检查 WebContents 存活状态。

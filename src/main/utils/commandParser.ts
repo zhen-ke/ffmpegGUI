@@ -3,6 +3,7 @@
  * 解析和验证 FFmpeg 命令字符串
  */
 
+import path from 'path';
 import { stripSurroundingQuotes, tokenize } from '../../shared/commandTokenizer';
 
 // ========== 常量 ==========
@@ -105,4 +106,31 @@ export function extractOutputFile(args: string[]): string | undefined {
   }
 
   return undefined;
+}
+
+/**
+ * 推导 FFmpeg 进程的工作目录。
+ *
+ * 规则：
+ * - 若输出文件为绝对路径，优先使用其所在目录
+ * - 否则使用第一个绝对输入文件所在目录
+ * - 都无法识别时返回 undefined，交给进程继承默认 cwd
+ *
+ * 这样可以让模板中的相对输出文件、字幕文件、水印文件等，
+ * 在用户已选择输入文件或输出目录时，尽量相对到更符合直觉的位置。
+ */
+export function deriveWorkingDirectory(args: string[]): string | undefined {
+  const outputFile = extractOutputFile(args);
+  if (outputFile && path.isAbsolute(outputFile)) {
+    return path.dirname(outputFile);
+  }
+
+  return args.reduce<string | undefined>((directory, token, index) => {
+    if (directory || token !== '-i') {
+      return directory;
+    }
+
+    const input = stripSurroundingQuotes(args[index + 1] ?? '').trim();
+    return input && path.isAbsolute(input) ? path.dirname(input) : directory;
+  }, undefined);
 }
