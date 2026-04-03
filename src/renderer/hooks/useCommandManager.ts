@@ -13,7 +13,7 @@ import { useLatest } from './useLatest';
 // ========== 类型 ==========
 
 interface UseCommandManagerProps {
-  inputFile: string;
+  inputFiles: string[];
   outputFolder: string;
 }
 
@@ -22,14 +22,14 @@ export type ClipboardResult = 'success' | 'empty' | 'error';
 // ========== Hook ==========
 
 export function useCommandManager({
-  inputFile,
+  inputFiles,
   outputFolder,
 }: UseCommandManagerProps) {
   const [command, setCommand] = useState('');
 
   // 通过 useLatest 统一管理"最新值"，不再在每个 setter 里手动同步 ref
-  const commandRef     = useLatest(command);
-  const inputFileRef   = useLatest(inputFile);
+  const commandRef = useLatest(command);
+  const inputFilesRef = useLatest(inputFiles);
   const outputFolderRef = useLatest(outputFolder);
 
   /**
@@ -46,12 +46,12 @@ export function useCommandManager({
   const updateCommandWithPaths = useCallback(
     (
       baseCommand?: string,
-      overrideInputFile?: string,
+      overrideInputFile?: string | string[],
       overrideOutputFolder?: string,
     ) => {
       const updated = updateCommandPaths(
-        baseCommand       ?? commandRef.current,
-        overrideInputFile ?? inputFileRef.current,
+        baseCommand ?? commandRef.current,
+        overrideInputFile ?? inputFilesRef.current,
         overrideOutputFolder ?? outputFolderRef.current,
       );
       setCommand(updated);
@@ -113,6 +113,7 @@ export function useCommandManager({
     command,
     updateCommand,
     updateCommandWithPaths,
+    setCommand,
     handleDragOver,
     handleDrop,
     clearCommand,

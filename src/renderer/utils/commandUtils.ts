@@ -3,8 +3,6 @@
  * 提供命令解析、路径更新等功能
  */
 
-import { tokenize } from '../../shared/commandTokenizer';
-
 // ========== 常量 ==========
 
 const DEFAULT_OUTPUT_FILENAME = 'output.mp4';
@@ -26,10 +24,6 @@ function tokenizeRaw(command: string): string[] {
  * 将命令拆分为 token 并剥除引号。
  * 用于命令分析场景——只关心参数的纯值。
  */
-function tokenizeStripped(command: string): string[] {
-  return tokenize(command).tokens;
-}
-
 function stripWrappingQuotes(value: string): string {
   if (
     (value.startsWith('"') && value.endsWith('"')) ||
@@ -75,14 +69,27 @@ function buildOutputPath(folder: string, fileName: string): string {
  */
 export function countInputArguments(command: string): number {
   const tokens = tokenizeRaw(command);
-  let count = 0;
-  for (let i = 0; i < tokens.length - 1; i++) {
-    if (tokens[i] === '-i') {
-      count++;
-      i++; // 跳过 -i 的值
+  return tokens.reduce((count, token, index) => {
+    if (token !== '-i' || index >= tokens.length - 1) {
+      return count;
     }
-  }
-  return count;
+
+    return count + 1;
+  }, 0);
+}
+
+/**
+ * 提取命令中所有 `-i` 对应的输入值。
+ */
+export function parseInputArguments(command: string): string[] {
+  const tokens = tokenizeRaw(command);
+  return tokens.reduce<string[]>((inputs, token, index) => {
+    if (token === '-i' && index < tokens.length - 1) {
+      inputs.push(stripWrappingQuotes(tokens[index + 1] ?? '').trim());
+    }
+
+    return inputs;
+  }, []);
 }
 
 /**
@@ -109,6 +116,62 @@ export function parseOutputFileName(command: string): string {
   return fileName;
 }
 
+function getInputFlagIndexes(tokens: string[]): number[] {
+  return tokens.reduce<number[]>((indexes, token, index) => {
+    if (token === '-i') indexes.push(index);
+    return indexes;
+  }, []);
+}
+
+function createInputPlaceholder(
+  currentValue: string | undefined,
+  index: number,
+): string {
+  const currentFileName = getFileName(stripWrappingQuotes(currentValue ?? ''));
+  const extensionMatch = currentFileName.match(/(\.[a-zA-Z0-9]+)$/);
+  const baseName = index === 0 ? 'input' : `input${index + 1}`;
+
+  return `${baseName}${extensionMatch?.[1] ?? ''}`;
+}
+
+export function updateInputArgument(
+  command: string,
+  inputIndex: number,
+  nextFilePath?: string,
+): string {
+  if (inputIndex < 0) return command.trim();
+
+  const tokens = tokenizeRaw(command);
+  const inputFlagIndexes = getInputFlagIndexes(tokens);
+  const targetIndex = inputFlagIndexes[inputIndex];
+
+  if (targetIndex === undefined) {
+    if (!nextFilePath || inputIndex !== 0 || inputFlagIndexes.length > 0) {
+      return tokens.join(' ').trim();
+    }
+
+    tokens.unshift('-i', quotePath(nextFilePath));
+    return tokens.join(' ').trim();
+  }
+
+  if (nextFilePath) {
+    if (tokens[targetIndex + 1] !== undefined) {
+      tokens[targetIndex + 1] = quotePath(nextFilePath);
+    } else {
+      tokens.splice(targetIndex + 1, 0, quotePath(nextFilePath));
+    }
+
+    return tokens.join(' ').trim();
+  }
+
+  tokens[targetIndex + 1] = createInputPlaceholder(
+    tokens[targetIndex + 1],
+    inputIndex,
+  );
+
+  return tokens.join(' ').trim();
+}
+
 /**
  * 更新命令中的输入文件路径和输出文件夹路径。
  *
@@ -123,51 +186,42 @@ export function parseOutputFileName(command: string): string {
  */
 export function updateCommandPaths(
   command: string,
-  inputFile?: string,
+  inputFile?: string | string[],
   outputFolder?: string,
 ): string {
   const tokens = tokenizeRaw(command);
 
   // ── 替换输入路径 ──────────────────────────────────────
   if (inputFile) {
-    // 收集所有 -i 的位置
-    const inputFlagIndexes = tokens.reduce<number[]>((acc, t, i) => {
-      if (t === '-i') acc.push(i);
-      return acc;
-    }, []);
+    const normalizedInputFiles = Array.isArray(inputFile)
+      ? inputFile
+      : [inputFile];
 
-    if (inputFlagIndexes.length === 0) {
-      // 没有 -i，在命令开头插入
-      tokens.unshift(quotePath(inputFile), '-i');
-      // unshift 两个元素后顺序是 ['-i', quotePath]，需要修正
-      // 实际：unshift 是从左到右插入，先插 quotePath 再插 -i 结果是 ['-i', quotePath, ...]
-      // 上面写法已正确：unshift(a, b) 结果是 [a, b, ...original]
-    } else {
-      // 优先替换占位符输入；否则替换第一个 -i 的值
-      const placeholderIdx = inputFlagIndexes.find((idx) =>
-        isInputPlaceholder(tokens[idx + 1] ?? ''),
+    normalizedInputFiles.forEach((filePath, index) => {
+      if (!filePath) return;
+
+      const updatedCommand = updateInputArgument(
+        tokens.join(' '),
+        index,
+        filePath,
       );
-      const targetIdx = placeholderIdx ?? inputFlagIndexes[0];
-
-      if (tokens[targetIdx + 1] !== undefined) {
-        tokens[targetIdx + 1] = quotePath(inputFile);
-      } else {
-        tokens.splice(targetIdx + 1, 0, quotePath(inputFile));
-      }
-    }
+      tokens.splice(0, tokens.length, ...tokenizeRaw(updatedCommand));
+    });
   }
 
   // ── 替换输出路径 ──────────────────────────────────────
   if (outputFolder) {
     // parseOutputFileName 直接在 tokens 上操作，避免 join→re-tokenize 往返
     const outputFileName = parseOutputFileName(tokens.join(' '));
-    const quotedOutput   = quotePath(buildOutputPath(outputFolder, outputFileName));
+    const quotedOutput = quotePath(
+      buildOutputPath(outputFolder, outputFileName),
+    );
 
     if (tokens.length === 0) {
       tokens.push(quotedOutput);
     } else {
-      const lastIdx   = tokens.length - 1;
-      const last      = tokens[lastIdx];
+      const lastIdx = tokens.length - 1;
+      const last = tokens[lastIdx];
       const prevToken = tokens[lastIdx - 1];
 
       // 末尾是选项 flag 或选项值时追加；否则替换

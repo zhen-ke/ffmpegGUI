@@ -37,7 +37,12 @@ import { DrawerSize, type WorkspacePane } from './components/DrawerTabBar';
 import { type TerminalLogType } from './components/FFmpegTerminal';
 import { FileSelector } from './components/FileSelector';
 import { WorkspaceDrawer } from './components/WorkspaceDrawer';
-import { countInputArguments, updateCommandPaths } from './utils/commandUtils';
+import {
+  countInputArguments,
+  parseInputArguments,
+  updateCommandPaths,
+  updateInputArgument,
+} from './utils/commandUtils';
 
 // ─────────────────────────────────────────────
 // 常量
@@ -60,6 +65,16 @@ type ConfirmState =
       onConfirm: () => void;
     };
 
+function getIndexedInputLabel(language: string, index: number): string {
+  return language === 'zh' ? `输入 ${index + 1}` : `Input ${index + 1}`;
+}
+
+function getIndexedSelectLabel(language: string, index: number): string {
+  return language === 'zh'
+    ? `选择输入 ${index + 1}`
+    : `Select Input ${index + 1}`;
+}
+
 // ─────────────────────────────────────────────
 // 主组件
 // ─────────────────────────────────────────────
@@ -78,7 +93,7 @@ function Home() {
     }
   });
   const templateControlId = useId();
-  const inputControlId = useId();
+  const inputControlBaseId = useId();
   const outputControlId = useId();
   const commandControlId = useId();
 
@@ -154,7 +169,7 @@ function Home() {
   // ── 业务 Hooks ──
 
   const {
-    inputFile,
+    inputFiles,
     outputFolder,
     handleSelectInputFile,
     handleSelectOutputFolder,
@@ -166,11 +181,12 @@ function Home() {
     command,
     updateCommand,
     updateCommandWithPaths,
+    setCommand,
     handleDragOver,
     handleDrop,
     clearCommand,
     copyCommand,
-  } = useCommandManager({ inputFile, outputFolder });
+  } = useCommandManager({ inputFiles, outputFolder });
 
   const {
     selectedTemplateId,
@@ -213,11 +229,11 @@ function Home() {
 
   // ── Refs for stale-closure safety ──
 
-  const inputFileRef = useRef(inputFile);
+  const inputFilesRef = useRef(inputFiles);
   const outputFolderRef = useRef(outputFolder);
   const commandRef = useRef(command);
   const selectedTemplateIdRef = useRef<string | null>(selectedTemplateId);
-  inputFileRef.current = inputFile;
+  inputFilesRef.current = inputFiles;
   outputFolderRef.current = outputFolder;
   commandRef.current = command;
   selectedTemplateIdRef.current = selectedTemplateId;
@@ -245,18 +261,19 @@ function Home() {
       isInitialRender.current = false;
       return;
     }
-    if (inputFile || outputFolder) updateCommandWithPaths();
-  }, [inputFile, outputFolder, updateCommandWithPaths]);
+    if (outputFolder) updateCommandWithPaths();
+  }, [outputFolder, updateCommandWithPaths]);
 
   // ── 模板变化 → 更新命令 ──
 
   const selectedTemplateCommand = selectedTemplate?.command;
   const applyTemplateCommand = useCallback(
     (tplCmd: string) => {
-      const f = inputFileRef.current;
+      const currentInputs = inputFilesRef.current;
       const o = outputFolderRef.current;
-      if (f || o) updateCommandWithPaths(tplCmd, f, o);
-      else updateCommand(tplCmd);
+      if (currentInputs.length > 0 || o) {
+        updateCommandWithPaths(tplCmd, currentInputs, o);
+      } else updateCommand(tplCmd);
     },
     [updateCommand, updateCommandWithPaths],
   );
@@ -271,10 +288,12 @@ function Home() {
     (template: DropdownOption) => {
       if (template.id === selectedTemplateIdRef.current) return;
 
-      const f = inputFileRef.current;
+      const currentInputs = inputFilesRef.current;
       const o = outputFolderRef.current;
       const nextCmd =
-        f || o ? updateCommandPaths(template.command, f, o) : template.command;
+        currentInputs.length > 0 || o
+          ? updateCommandPaths(template.command, currentInputs, o)
+          : template.command;
       const current = commandRef.current.trim();
 
       if (current && current !== nextCmd.trim()) {
@@ -306,6 +325,67 @@ function Home() {
       );
     },
     [handleDeleteTemplate, openConfirm, closeConfirm, t],
+  );
+
+  const inputSlotCount = useMemo(
+    () => Math.max(1, countInputArguments(command), inputFiles.length),
+    [command, inputFiles.length],
+  );
+
+  const inputArguments = useMemo(() => parseInputArguments(command), [command]);
+
+  const inputSlots = useMemo(
+    () =>
+      Array.from({ length: inputSlotCount }, (_, index) => {
+        const token = inputArguments[index] ?? '';
+        const selectedValue =
+          inputFiles[index] ||
+          (/^(?:[a-zA-Z]:[\\/]|\\\\|\/)/.test(token) ? token : '');
+        const actionLabel =
+          inputSlotCount === 1
+            ? t('Select Input File')
+            : getIndexedSelectLabel(language, index);
+        const fieldLabel =
+          inputSlotCount === 1
+            ? t('Input File')
+            : getIndexedInputLabel(language, index);
+        const label =
+          token && !selectedValue ? `${actionLabel} (${token})` : actionLabel;
+
+        return {
+          id: `${inputControlBaseId}-${index}`,
+          index,
+          label,
+          fieldLabel,
+          selectedValue,
+        };
+      }),
+    [
+      inputArguments,
+      inputFiles,
+      inputSlotCount,
+      inputControlBaseId,
+      language,
+      t,
+    ],
+  );
+
+  const handleSelectInputAtIndex = useCallback(
+    async (index: number) => {
+      const filePath = await handleSelectInputFile(index);
+      if (!filePath) return;
+
+      setCommand((prev) => updateInputArgument(prev, index, filePath));
+    },
+    [handleSelectInputFile, setCommand],
+  );
+
+  const handleClearInputAtIndex = useCallback(
+    (index: number) => {
+      clearInputFile(index);
+      setCommand((prev) => updateInputArgument(prev, index));
+    },
+    [clearInputFile, setCommand],
   );
 
   // ── 运行 ──
@@ -443,7 +523,9 @@ function Home() {
       <div className="flex-1 min-h-0 overflow-y-auto bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm">
         <div className="max-w-7xl mx-auto w-full px-6 py-4 space-y-4">
           <div className="grid grid-cols-12 gap-3 items-end">
-            <div className="col-span-4 min-w-0">
+            <div
+              className={`${inputSlotCount === 1 ? 'col-span-4' : 'col-span-6'} min-w-0`}
+            >
               <label
                 htmlFor={templateControlId}
                 className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1.5"
@@ -460,23 +542,27 @@ function Home() {
                 onDelete={handleDeleteTemplateWithConfirm}
               />
             </div>
-            <div className="col-span-4 min-w-0">
-              <label
-                htmlFor={inputControlId}
-                className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1.5"
-              >
-                {t('Input File')}
-              </label>
-              <FileSelector
-                id={inputControlId}
-                type="input"
-                value={inputFile}
-                onSelect={handleSelectInputFile}
-                onClear={clearInputFile}
-                label={t('Select Input File')}
-              />
-            </div>
-            <div className="col-span-4 min-w-0">
+            {inputSlotCount === 1 && (
+              <div className="col-span-4 min-w-0">
+                <label
+                  htmlFor={inputSlots[0].id}
+                  className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1.5"
+                >
+                  {inputSlots[0].fieldLabel}
+                </label>
+                <FileSelector
+                  id={inputSlots[0].id}
+                  type="input"
+                  value={inputSlots[0].selectedValue}
+                  onSelect={() => handleSelectInputAtIndex(0)}
+                  onClear={() => handleClearInputAtIndex(0)}
+                  label={inputSlots[0].label}
+                />
+              </div>
+            )}
+            <div
+              className={`${inputSlotCount === 1 ? 'col-span-4' : 'col-span-6'} min-w-0`}
+            >
               <label
                 htmlFor={outputControlId}
                 className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1.5"
@@ -493,6 +579,34 @@ function Home() {
               />
             </div>
           </div>
+
+          {inputSlotCount > 1 && (
+            <div className="grid grid-cols-12 gap-3 items-end">
+              {inputSlots.map((slot) => (
+                <div
+                  key={slot.id}
+                  className={`min-w-0 ${
+                    inputSlotCount === 2 ? 'col-span-6' : 'col-span-4'
+                  }`}
+                >
+                  <label
+                    htmlFor={slot.id}
+                    className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1.5"
+                  >
+                    {slot.fieldLabel}
+                  </label>
+                  <FileSelector
+                    id={slot.id}
+                    type="input"
+                    value={slot.selectedValue}
+                    onSelect={() => handleSelectInputAtIndex(slot.index)}
+                    onClear={() => handleClearInputAtIndex(slot.index)}
+                    label={slot.label}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
 
           <CommandBox
             id={commandControlId}

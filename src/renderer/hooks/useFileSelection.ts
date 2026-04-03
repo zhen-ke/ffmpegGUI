@@ -34,35 +34,44 @@ interface UseFileSelectionProps {
 // ========== Hook ==========
 
 export function useFileSelection({ onError }: UseFileSelectionProps = {}) {
-  const [inputFile, setInputFile]       = useState('');
+  const [inputFiles, setInputFiles] = useState<string[]>([]);
   const [outputFolder, setOutputFolder] = useState('');
 
   // useLatest 消除 handler 对 state 和 onError 的依赖，避免频繁重建引用
-  const inputFileRef   = useLatest(inputFile);
+  const inputFilesRef = useLatest(inputFiles);
   const outputFolderRef = useLatest(outputFolder);
-  const onErrorRef     = useLatest(onError);
+  const onErrorRef = useLatest(onError);
 
   /**
    * 打开文件选择对话框，选中后自动联动输出目录。
    * 若输出目录已设置则不覆盖。
    */
-  const handleSelectInputFile = useCallback(async () => {
+  const handleSelectInputFile = useCallback(async (index = 0) => {
     try {
       const result = (await window.electron.ipcRenderer.invoke(
         'select-input-file',
-        inputFileRef.current,
+        inputFilesRef.current[index] ?? inputFilesRef.current[0] ?? '',
       )) as DialogResult;
 
-      if (result.canceled || result.filePaths.length === 0) return;
+      if (result.canceled || result.filePaths.length === 0) return '';
 
       const filePath = result.filePaths[0];
-      setInputFile(filePath);
+      setInputFiles((prev) => {
+        const next = [...prev];
+        next[index] = filePath;
+        return next;
+      });
 
       // 智能联动：输出目录为空时自动设为输入文件所在目录
-      setOutputFolder((prev) => prev || getFileDirectory(filePath));
+      if (index === 0) {
+        setOutputFolder((prev) => prev || getFileDirectory(filePath));
+      }
+
+      return filePath;
     } catch (error) {
       console.error('Failed to select input file:', error);
       onErrorRef.current?.('Failed to select input file. Please try again.');
+      return '';
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -87,11 +96,23 @@ export function useFileSelection({ onError }: UseFileSelectionProps = {}) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const clearInputFile = useCallback(() => setInputFile(''), []);
+  const clearInputFile = useCallback((index = 0) => {
+    setInputFiles((prev) => {
+      const next = [...prev];
+      next[index] = '';
+
+      while (next.length > 0 && !next[next.length - 1]) {
+        next.pop();
+      }
+
+      return next;
+    });
+  }, []);
   const clearOutputFolder = useCallback(() => setOutputFolder(''), []);
 
   return {
-    inputFile,
+    inputFile: inputFiles[0] ?? '',
+    inputFiles,
     outputFolder,
     handleSelectInputFile,
     handleSelectOutputFolder,
@@ -99,3 +120,5 @@ export function useFileSelection({ onError }: UseFileSelectionProps = {}) {
     clearOutputFolder,
   };
 }
+
+export default useFileSelection;
