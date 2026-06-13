@@ -9,7 +9,7 @@
  * 5. header/drawer 拆分为 AppHeader / WorkspaceDrawer 组件
  */
 
-import { Loader2 } from 'lucide-react';
+import { Loader2, Upload } from 'lucide-react';
 import {
   useCallback,
   useEffect,
@@ -17,6 +17,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type DragEvent,
 } from 'react';
 import Dropdown, { type DropdownOption } from './components/Dropdown';
 import FFmpegDownloader from './components/FFmpegDownloader';
@@ -28,6 +29,7 @@ import { useCommandManager } from './hooks/useCommandManager';
 import { useElectronIPC } from './hooks/useElectronIPC';
 import { useFFmpegState } from './hooks/useFFmpegState';
 import { useFileSelection } from './hooks/useFileSelection';
+import { useGlobalHotkeys } from './hooks/useGlobalHotkeys';
 import { useTemplateManager } from './hooks/useTemplateManager';
 
 import { AppHeader } from './components/AppHeader';
@@ -134,6 +136,7 @@ function getPathDirectory(filePath: string): string {
 function Home() {
   const { language, setLanguage, t } = useLanguage();
   const { ffmpegExists } = useElectronIPC();
+  const isMac = window.electron.platform === 'darwin';
   const [activePane, setActivePane] = useState<WorkspacePane>(() => {
     try {
       return (
@@ -180,12 +183,26 @@ function Home() {
     setDrawerSize((prev) => (prev === 'sm' ? 'md' : prev));
   }, []);
 
+  const handleToggleDrawer = useCallback(() => {
+    setDrawerSize((prev) => {
+      if (prev === 'sm') {
+        const restore =
+          userDrawerSizeRef.current === 'sm' ? 'md' : userDrawerSizeRef.current;
+        return restore;
+      }
+      userDrawerSizeRef.current = prev;
+      return 'sm';
+    });
+  }, []);
+
   // ── 统一 ConfirmModal 状态（替代所有 window.confirm）──
 
   const [confirmState, setConfirmState] = useState<ConfirmState>({
     isOpen: false,
   });
   const [mediaInfo, setMediaInfo] = useState<MediaProbeResult | null>(null);
+  const [isWindowDragActive, setIsWindowDragActive] = useState(false);
+  const dragCounter = useRef(0);
   const [isMediaInfoLoading, setIsMediaInfoLoading] = useState(false);
   const [hasMediaInfoError, setHasMediaInfoError] = useState(false);
   const [isMediaProbeAvailable, setIsMediaProbeAvailable] = useState<
@@ -233,6 +250,8 @@ function Home() {
     handleSelectOutputFolder,
     clearInputFile,
     clearOutputFolder,
+    handleInputFileDrop,
+    handleOutputFolderDrop,
   } = useFileSelection({ onError: handleOperationalError });
 
   const {
@@ -293,6 +312,8 @@ function Home() {
   const outputFolderRef = useRef(outputFolder);
   const commandRef = useRef(command);
   const selectedTemplateIdRef = useRef<string | null>(selectedTemplateId);
+  // 记录最近一次模板注入后写入命令框的精确值，用于 dirty 判断
+  const lastAppliedCommandRef = useRef<string | null>(null);
   inputFilesRef.current = inputFiles;
   outputFolderRef.current = outputFolder;
   commandRef.current = command;
@@ -332,8 +353,15 @@ function Home() {
       const currentInputs = inputFilesRef.current;
       const o = outputFolderRef.current;
       if (currentInputs.length > 0 || o) {
+        // updateCommandWithPaths 内部调用 updateCommandPaths 再 setCommand
+        // 我们同步调用同一个函数计算期望值，用于 dirty 判断
+        const expected = updateCommandPaths(tplCmd, currentInputs, o);
+        lastAppliedCommandRef.current = expected;
         updateCommandWithPaths(tplCmd, currentInputs, o);
-      } else updateCommand(tplCmd);
+      } else {
+        lastAppliedCommandRef.current = tplCmd;
+        updateCommand(tplCmd);
+      }
     },
     [updateCommand, updateCommandWithPaths],
   );
@@ -342,33 +370,34 @@ function Home() {
     applyTemplateCommand(selectedTemplateCommand);
   }, [applyTemplateCommand, selectedTemplateCommand, selectedTemplateId]);
 
-  // ── 模板切换：有改动时弹 ConfirmModal ──
+  // 清空模板选中时，重置 lastAppliedCommandRef
+  useEffect(() => {
+    if (!selectedTemplateId) {
+      lastAppliedCommandRef.current = null;
+    }
+  }, [selectedTemplateId]);
+
+  // dirty：有模板被选中，且当前命令与最后一次模板注入的值不一致
+  const isCommandDirty = useMemo(() => {
+    if (!selectedTemplateId) return false;
+    if (lastAppliedCommandRef.current === null) return false;
+    return command.trim() !== lastAppliedCommandRef.current.trim();
+  }, [command, selectedTemplateId]);
+
+  // 重置：把命令恢复到模板的最后注入值
+  const handleResetToTemplate = useCallback(() => {
+    if (!selectedTemplateCommand) return;
+    applyTemplateCommand(selectedTemplateCommand);
+  }, [applyTemplateCommand, selectedTemplateCommand]);
+
+  // ── 模板切换：直接替换命令 ──
 
   const handleTemplateSelectWithConfirm = useCallback(
     (template: DropdownOption) => {
       if (template.id === selectedTemplateIdRef.current) return;
-
-      const currentInputs = inputFilesRef.current;
-      const o = outputFolderRef.current;
-      const nextCmd =
-        currentInputs.length > 0 || o
-          ? updateCommandPaths(template.command, currentInputs, o)
-          : template.command;
-      const current = commandRef.current.trim();
-
-      if (current && current !== nextCmd.trim()) {
-        openConfirm(
-          t('Selecting a template will replace the current command. Continue?'),
-          () => {
-            handleTemplateSelect(template);
-            closeConfirm();
-          },
-        );
-        return;
-      }
       handleTemplateSelect(template);
     },
-    [handleTemplateSelect, openConfirm, closeConfirm, t],
+    [handleTemplateSelect],
   );
 
   // ── 模板删除：弹 ConfirmModal（danger 模式）──
@@ -455,6 +484,55 @@ function Home() {
       setCommand((prev) => updateInputArgument(prev, index));
     },
     [clearInputFile, setCommand],
+  );
+
+  const handleDropInputAtIndex = useCallback(
+    (filePath: string, index: number) => {
+      handleInputFileDrop(filePath, index);
+      setCommand((prev) => updateInputArgument(prev, index, filePath));
+    },
+    [handleInputFileDrop, setCommand],
+  );
+
+  const handleWindowDragEnter = useCallback((e: DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current += 1;
+    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+      setIsWindowDragActive(true);
+    }
+  }, []);
+
+  const handleWindowDragLeave = useCallback((e: DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current -= 1;
+    if (dragCounter.current === 0) {
+      setIsWindowDragActive(false);
+    }
+  }, []);
+
+  const handleWindowDragOver = useCallback((e: DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
+
+  const handleWindowDrop = useCallback(
+    (e: DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsWindowDragActive(false);
+      dragCounter.current = 0;
+
+      const { files } = e.dataTransfer;
+      if (files && files.length > 0) {
+        const file = files[0] as File & { path: string };
+        if (file.path) {
+          handleDropInputAtIndex(file.path, 0);
+        }
+      }
+    },
+    [handleDropInputAtIndex],
   );
 
   const handleOutputFileNameChange = useCallback(
@@ -600,6 +678,14 @@ function Home() {
     }
   }, [t]);
 
+  // ── 全局快捷键 ──
+
+  useGlobalHotkeys({
+    onStart,
+    onCopyCommand: handleCopyCommand,
+    onClearLogs: () => xtermClearRef.current?.(),
+  });
+
   const hasMultipleInputs = useMemo(
     () => countInputArguments(command) > 1,
     [command],
@@ -613,7 +699,9 @@ function Home() {
     ? getPathDirectory(lastCompletedOutputFile)
     : '';
   const showCompletedResult =
-    status === 'done' && currentCommand === lastStartedCommand;
+    status === 'done' &&
+    currentCommand === lastStartedCommand &&
+    !!lastCompletedOutputFile;
   let mediaDetailsContent = (
     <p className="text-sm text-slate-500 dark:text-slate-400">
       {t('No media details yet')}
@@ -628,7 +716,7 @@ function Home() {
     mediaDetailsContent = (
       <div className="grid grid-cols-12 gap-3">
         <div className="col-span-12 md:col-span-3 rounded-xl bg-slate-50 dark:bg-slate-800/70 px-3 py-3">
-          <p className="text-[11px] uppercase tracking-wider text-slate-400 dark:text-slate-500">
+          <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
             {t('Format')}
           </p>
           <p className="mt-1 text-sm font-semibold text-slate-700 dark:text-slate-200">
@@ -636,7 +724,7 @@ function Home() {
           </p>
         </div>
         <div className="col-span-12 md:col-span-3 rounded-xl bg-slate-50 dark:bg-slate-800/70 px-3 py-3">
-          <p className="text-[11px] uppercase tracking-wider text-slate-400 dark:text-slate-500">
+          <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
             {t('Duration')}
           </p>
           <p className="mt-1 text-sm font-semibold text-slate-700 dark:text-slate-200">
@@ -644,7 +732,7 @@ function Home() {
           </p>
         </div>
         <div className="col-span-12 md:col-span-3 rounded-xl bg-slate-50 dark:bg-slate-800/70 px-3 py-3">
-          <p className="text-[11px] uppercase tracking-wider text-slate-400 dark:text-slate-500">
+          <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
             {t('Size')}
           </p>
           <p className="mt-1 text-sm font-semibold text-slate-700 dark:text-slate-200">
@@ -652,7 +740,7 @@ function Home() {
           </p>
         </div>
         <div className="col-span-12 md:col-span-3 rounded-xl bg-slate-50 dark:bg-slate-800/70 px-3 py-3">
-          <p className="text-[11px] uppercase tracking-wider text-slate-400 dark:text-slate-500">
+          <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
             {t('Bitrate')}
           </p>
           <p className="mt-1 text-sm font-semibold text-slate-700 dark:text-slate-200">
@@ -661,7 +749,7 @@ function Home() {
         </div>
 
         <div className="col-span-12 md:col-span-4 rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-3">
-          <p className="text-[11px] uppercase tracking-wider text-slate-400 dark:text-slate-500">
+          <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
             {t('Video')}
           </p>
           {primaryVideoStream ? (
@@ -686,7 +774,7 @@ function Home() {
         </div>
 
         <div className="col-span-12 md:col-span-4 rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-3">
-          <p className="text-[11px] uppercase tracking-wider text-slate-400 dark:text-slate-500">
+          <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
             {t('Audio')}
           </p>
           {primaryAudioStream ? (
@@ -708,7 +796,7 @@ function Home() {
         </div>
 
         <div className="col-span-12 md:col-span-4 rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-3">
-          <p className="text-[11px] uppercase tracking-wider text-slate-400 dark:text-slate-500">
+          <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
             {t('Subtitles')}
           </p>
           {primarySubtitleStream ? (
@@ -793,9 +881,20 @@ function Home() {
       'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-200 dark:border-emerald-800/60';
   }
 
+  // commandSource: 传给 CommandBox 的来源元数据
+  const commandSource = useMemo(() => {
+    if (!selectedTemplate) return null;
+    return {
+      label: selectedTemplate.name,
+      isDirty: isCommandDirty,
+    };
+  }, [selectedTemplate, isCommandDirty]);
+
   let commandSourceLabel = t('No template selected');
   if (selectedTemplate) {
-    commandSourceLabel = t('Working from template');
+    commandSourceLabel = isCommandDirty
+      ? t('Modified (from template)')
+      : t('Working from template');
   } else if (hasCommand) {
     commandSourceLabel = t('Custom command');
   }
@@ -825,7 +924,13 @@ function Home() {
   // ─────────────────────────────────────────────
 
   return (
-    <div className="h-full flex flex-col bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 overflow-hidden transition-colors duration-300 motion-reduce:transition-none">
+    <div
+      onDragEnter={handleWindowDragEnter}
+      onDragLeave={handleWindowDragLeave}
+      onDragOver={handleWindowDragOver}
+      onDrop={handleWindowDrop}
+      className="h-full flex flex-col mac-vibrant-bg overflow-hidden relative transition-colors duration-300 motion-reduce:transition-none"
+    >
       {/* ══ 导航条 ══ */}
       <AppHeader
         language={language}
@@ -841,7 +946,11 @@ function Home() {
       />
 
       {/* ══ 主内容区 ══ */}
-      <div className="flex-1 min-h-0 overflow-y-auto bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm">
+      <div
+        className={`flex-1 min-h-0 overflow-y-auto backdrop-blur-sm ${
+          isMac ? 'bg-transparent' : 'bg-white/80 dark:bg-slate-800/80'
+        }`}
+      >
         <div className="max-w-7xl mx-auto w-full px-6 py-4 space-y-4">
           <div className="grid grid-cols-12 gap-3 items-end">
             <div
@@ -849,7 +958,7 @@ function Home() {
             >
               <label
                 htmlFor={templateControlId}
-                className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1.5"
+                className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5"
               >
                 {t('Template')}
               </label>
@@ -867,7 +976,7 @@ function Home() {
               <div className="col-span-4 min-w-0">
                 <label
                   htmlFor={inputSlots[0].id}
-                  className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1.5"
+                  className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5"
                 >
                   {inputSlots[0].fieldLabel}
                 </label>
@@ -877,6 +986,7 @@ function Home() {
                   value={inputSlots[0].selectedValue}
                   onSelect={() => handleSelectInputAtIndex(0)}
                   onClear={() => handleClearInputAtIndex(0)}
+                  onDrop={(path) => handleDropInputAtIndex(path, 0)}
                   label={inputSlots[0].label}
                 />
               </div>
@@ -886,7 +996,7 @@ function Home() {
             >
               <label
                 htmlFor={outputControlId}
-                className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1.5"
+                className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5"
               >
                 {t('Output Folder')}
               </label>
@@ -896,6 +1006,7 @@ function Home() {
                 value={outputFolder}
                 onSelect={handleSelectOutputFolder}
                 onClear={clearOutputFolder}
+                onDrop={handleOutputFolderDrop}
                 label={t('Select Output Folder')}
               />
             </div>
@@ -912,7 +1023,7 @@ function Home() {
                 >
                   <label
                     htmlFor={slot.id}
-                    className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1.5"
+                    className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5"
                   >
                     {slot.fieldLabel}
                   </label>
@@ -922,6 +1033,7 @@ function Home() {
                     value={slot.selectedValue}
                     onSelect={() => handleSelectInputAtIndex(slot.index)}
                     onClear={() => handleClearInputAtIndex(slot.index)}
+                    onDrop={(path) => handleDropInputAtIndex(path, slot.index)}
                     label={slot.label}
                   />
                 </div>
@@ -963,7 +1075,7 @@ function Home() {
             <div className="col-span-5 min-w-0">
               <label
                 htmlFor={`${outputControlId}-name`}
-                className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1.5"
+                className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5"
               >
                 {t('Output Name')}
               </label>
@@ -979,7 +1091,7 @@ function Home() {
               />
             </div>
             <div className="col-span-7 min-w-0">
-              <p className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1.5">
+              <p className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5">
                 {t('Final Output Path')}
               </p>
               <div className="h-10 px-3 rounded-xl border border-dashed border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-900/40 flex items-center">
@@ -997,7 +1109,7 @@ function Home() {
             <div className="rounded-2xl border border-emerald-200 dark:border-emerald-800/60 bg-emerald-50/80 dark:bg-emerald-900/20 px-4 py-4 shadow-sm">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
                 <div className="min-w-0">
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
+                  <p className="text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
                     {t('Latest Result')}
                   </p>
                   <h2 className="mt-1 text-sm font-semibold text-emerald-900 dark:text-emerald-100">
@@ -1005,7 +1117,7 @@ function Home() {
                   </h2>
                   {lastCompletedOutputFile ? (
                     <>
-                      <p className="mt-3 text-[11px] font-semibold uppercase tracking-wider text-emerald-700/80 dark:text-emerald-300/80">
+                      <p className="mt-3 text-[11px] font-medium text-emerald-700/80 dark:text-emerald-300/80">
                         {t('Completed Output')}
                       </p>
                       <p
@@ -1071,6 +1183,8 @@ function Home() {
             isStopping={isStopping}
             placeholder={t('Enter FFmpeg command or drag & drop files here')}
             hasMultipleInputs={hasMultipleInputs}
+            commandSource={commandSource}
+            onReset={handleResetToTemplate}
           />
         </div>
       </div>
@@ -1081,6 +1195,7 @@ function Home() {
         onActivePaneChange={handleActivePaneChange}
         drawerSize={drawerSize}
         onDrawerSizeChange={handleDrawerSizeChange}
+        onToggleDrawer={handleToggleDrawer}
         canStop={canStop}
         isRunning={isRunning}
         isStopping={isStopping}
@@ -1110,6 +1225,20 @@ function Home() {
         onSave={handleSaveTemplate}
         initialTemplate={editingTemplate}
       />
+
+      {isWindowDragActive && (
+        <div className="absolute inset-0 bg-primary-500/10 dark:bg-primary-500/5 backdrop-blur-md border-4 border-dashed border-primary-500 z-[9999] flex flex-col items-center justify-center pointer-events-none transition-all duration-300">
+          <div className="bg-white dark:bg-slate-800 px-8 py-6 rounded-2xl shadow-2xl flex flex-col items-center gap-3 border border-slate-200 dark:border-slate-700">
+            <Upload size={32} className="text-primary-500 animate-bounce" />
+            <h3 className="text-base font-bold text-slate-800 dark:text-slate-100">
+              {t('Drop to inspect or convert')}
+            </h3>
+            <p className="text-xs text-slate-400 dark:text-slate-500">
+              {t('File will be assigned as Input 1')}
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

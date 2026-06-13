@@ -16,6 +16,7 @@ export interface DrawerTabBarProps {
   onCopyLogs: () => void;
   drawerSize: DrawerSize;
   onDrawerSizeChange: (s: DrawerSize) => void;
+  onToggleDrawer?: () => void;
   isAutoScrollEnabled?: boolean;
 }
 
@@ -37,6 +38,7 @@ export function DrawerTabBar({
   onCopyLogs,
   drawerSize,
   onDrawerSizeChange,
+  onToggleDrawer,
   isAutoScrollEnabled = true,
 }: DrawerTabBarProps) {
   const { t } = useLanguage();
@@ -57,9 +59,14 @@ export function DrawerTabBar({
   return (
     <div className="flex-shrink-0 flex items-center gap-2 px-4 h-11 bg-white dark:bg-slate-800 border-t border-slate-200/80 dark:border-slate-700/80 shadow-[0_-1px_8px_rgba(0,0,0,0.04)] dark:shadow-[0_-1px_8px_rgba(0,0,0,0.2)]">
       <div className="flex items-center gap-2 flex-shrink-0 min-w-0">
-        <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
+        <button
+          type="button"
+          onClick={onToggleDrawer}
+          title={t('Toggle drawer')}
+          className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors duration-150 cursor-pointer"
+        >
           {t('Workspace')}
-        </span>
+        </button>
         <div className="flex items-center gap-0.5 bg-slate-100 dark:bg-slate-700/50 rounded-md p-0.5">
           {(['activity', 'terminal'] as WorkspacePane[]).map((pane) => (
             <button

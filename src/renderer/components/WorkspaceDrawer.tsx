@@ -28,6 +28,7 @@ interface WorkspaceDrawerProps {
   onActivePaneChange: (pane: WorkspacePane) => void;
   drawerSize: DrawerSize;
   onDrawerSizeChange: (s: DrawerSize) => void;
+  onToggleDrawer?: () => void;
   canStop: boolean;
   isRunning: boolean;
   isStopping: boolean;
@@ -47,6 +48,7 @@ export function WorkspaceDrawer({
   onActivePaneChange,
   drawerSize,
   onDrawerSizeChange,
+  onToggleDrawer,
   canStop,
   isRunning,
   isStopping,
@@ -72,6 +74,7 @@ export function WorkspaceDrawer({
         onCopyLogs={onCopyLogs}
         drawerSize={drawerSize}
         onDrawerSizeChange={onDrawerSizeChange}
+        onToggleDrawer={onToggleDrawer}
       />
 
       <div

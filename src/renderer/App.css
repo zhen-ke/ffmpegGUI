@@ -35,6 +35,47 @@
   padding-top: var(--titlebar-height);
 }
 
+/* macOS 平台下移除顶层 padding-top，使 Header 顶格 */
+.is-mac .app {
+  padding-top: 0;
+}
+
+/* macOS vibrancy 模式下 html, body 设为透明 */
+.is-mac,
+.is-mac body {
+  background: transparent !important;
+}
+
+/* macOS vibrancy 背景混合类 */
+.mac-vibrant-bg {
+  @apply bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900;
+}
+
+.is-mac .mac-vibrant-bg {
+  background: rgba(255, 255, 255, 0.4) !important;
+}
+
+.dark.is-mac .mac-vibrant-bg {
+  background: rgba(15, 23, 42, 0.45) !important;
+}
+
+/* macOS HIG 紧凑圆角规范 */
+.is-mac .card,
+.is-mac .rounded-2xl {
+  border-radius: 12px !important;
+}
+
+.is-mac input,
+.is-mac select,
+.is-mac button,
+.is-mac .btn,
+.is-mac [role='button'],
+.is-mac [role='option'],
+.is-mac [role='tab'],
+.is-mac .rounded-xl {
+  border-radius: 8px !important;
+}
+
 .drag-handle {
   position: fixed;
   top: 0;

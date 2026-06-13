@@ -117,11 +117,15 @@ async function createWindow(): Promise<void> {
     minHeight: 728,
     icon: getAssetPath('icon.png'),
     frame: true,
-    titleBarStyle: 'hidden',
+    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'hidden',
     ...(process.platform === 'win32' && {
       titleBarOverlay: getTitleBarOverlay(),
     }),
-    trafficLightPosition: { x: 15, y: 10 },
+    ...(process.platform === 'darwin' && {
+      vibrancy: 'under-window',
+      visualEffectState: 'active',
+      trafficLightPosition: { x: 20, y: 17 },
+    }),
     webPreferences: {
       preload: getPreloadPath(),
     },

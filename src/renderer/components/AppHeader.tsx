@@ -4,11 +4,7 @@
  * 从 Home.tsx 拆分出来，负责品牌标识、状态指示、语言切换和模板操作入口。
  */
 
-import {
-  PlusCircle,
-  Terminal as TerminalIcon,
-  Zap,
-} from 'lucide-react';
+import { PlusCircle, Terminal as TerminalIcon, Zap } from 'lucide-react';
 import type { WorkspacePane } from './DrawerTabBar';
 
 interface AppHeaderProps {
@@ -36,8 +32,16 @@ export function AppHeader({
   commandSourceLabel,
   t,
 }: AppHeaderProps) {
+  const isMac = window.electron.platform === 'darwin';
+
   return (
-    <header className="flex-shrink-0 px-4 pt-2 pb-2.5 sm:px-6 bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm border-b border-slate-200/60 dark:border-slate-700/60 shadow-sm z-20">
+    <header
+      className={`flex-shrink-0 pb-2.5 border-b border-slate-200/60 dark:border-slate-700/60 shadow-sm z-20 transition-all duration-300 ${
+        isMac
+          ? 'pt-6 pl-24 pr-6 bg-white/60 dark:bg-slate-900/40 backdrop-blur-md'
+          : 'pt-2 px-4 sm:px-6 bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm'
+      }`}
+    >
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-3 justify-start min-w-0">
           <div className="p-2 bg-gradient-to-br from-primary-500 to-primary-600 rounded-xl shadow-md shadow-primary-500/20 flex-shrink-0">

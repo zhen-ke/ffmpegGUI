@@ -44,7 +44,6 @@ interface DropdownProps {
 }
 
 type SourceFilter = 'all' | 'builtin' | 'custom';
-type CompatibilityFilter = 'all' | 'current';
 type SupportedPlatform = 'darwin' | 'win32' | 'linux';
 
 function getCompatiblePlatforms(command: string): SupportedPlatform[] | null {
@@ -127,8 +126,6 @@ function Dropdown({
   const [highlightedIndex, setHighlightedIndex] = useState<number>(-1);
   const [searchQuery, setSearchQuery] = useState('');
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all');
-  const [compatibilityFilter, setCompatibilityFilter] =
-    useState<CompatibilityFilter>('all');
   const dropdownRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -142,14 +139,13 @@ function Dropdown({
     const normalizedQuery = searchQuery.trim().toLowerCase();
 
     return options.filter((option) => {
-      if (sourceFilter === 'custom' && !option.isCustom) return false;
-      if (sourceFilter === 'builtin' && option.isCustom) return false;
-      if (
-        compatibilityFilter === 'current' &&
-        !matchesCurrentPlatform(option, currentPlatform)
-      ) {
+      // 自动过滤不兼容当前平台的模板
+      if (!matchesCurrentPlatform(option, currentPlatform)) {
         return false;
       }
+
+      if (sourceFilter === 'custom' && !option.isCustom) return false;
+      if (sourceFilter === 'builtin' && option.isCustom) return false;
 
       if (!normalizedQuery) return true;
 
@@ -157,13 +153,7 @@ function Dropdown({
         field.toLowerCase().includes(normalizedQuery),
       );
     });
-  }, [
-    compatibilityFilter,
-    currentPlatform,
-    options,
-    searchQuery,
-    sourceFilter,
-  ]);
+  }, [currentPlatform, options, searchQuery, sourceFilter]);
 
   const groupedOptions = useMemo(() => {
     const customOptions = visibleOptions.filter((option) => option.isCustom);
@@ -202,7 +192,6 @@ function Dropdown({
   const resetFilters = useCallback(() => {
     setSearchQuery('');
     setSourceFilter('all');
-    setCompatibilityFilter('all');
     setHighlightedIndex(-1);
   }, []);
 
@@ -416,8 +405,8 @@ function Dropdown({
       </button>
 
       {isOpen && (
-        <div className="absolute z-50 w-full mt-1.5 rounded-xl border-2 border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-xl dark:shadow-slate-900/50 overflow-hidden">
-          <div className="sticky top-0 z-10 border-b border-slate-100 dark:border-slate-700 bg-white/95 dark:bg-slate-800/95 backdrop-blur-sm px-3 py-3 space-y-2">
+        <div className="absolute z-50 w-[420px] left-0 mt-1.5 rounded-xl border border-slate-200/50 dark:border-slate-800/50 bg-white/85 dark:bg-slate-900/85 backdrop-blur-md shadow-2xl dark:shadow-black/40 overflow-hidden">
+          <div className="sticky top-0 z-10 border-b border-slate-200/50 dark:border-slate-800/50 bg-transparent px-3.5 py-3 space-y-2.5">
             <div className="relative">
               <Search
                 size={14}
@@ -430,16 +419,16 @@ function Dropdown({
                 onChange={(event) => setSearchQuery(event.target.value)}
                 onKeyDown={handleOpenKeyDown}
                 placeholder={t('Search by name, description, or command')}
-                className="w-full h-9 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-900/40 pl-9 pr-3 text-sm text-slate-700 dark:text-slate-200 outline-none focus:ring-2 focus:ring-primary-500"
+                className="w-full h-9 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950/20 pl-9 pr-3 text-sm text-slate-700 dark:text-slate-200 outline-none focus:ring-2 focus:ring-primary-500/50"
               />
             </div>
 
-            <div className="flex flex-wrap gap-1.5">
+            <div className="flex bg-slate-100 dark:bg-slate-950/60 p-0.5 rounded-lg w-full text-[11px]">
               {(
                 [
-                  ['all', t('All Templates')],
-                  ['builtin', t('Built-in Templates')],
-                  ['custom', t('Custom Templates')],
+                  ['all', t('All')],
+                  ['builtin', t('Built-in')],
+                  ['custom', t('Custom')],
                 ] as Array<[SourceFilter, string]>
               ).map(([filter, label]) => {
                 const isActive = sourceFilter === filter;
@@ -448,35 +437,10 @@ function Dropdown({
                     key={filter}
                     type="button"
                     onClick={() => setSourceFilter(filter)}
-                    className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-colors ${
+                    className={`flex-1 py-1 text-center font-medium rounded-md transition-all duration-150 outline-none ${
                       isActive
-                        ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/40 dark:text-primary-200'
-                        : 'bg-slate-100 text-slate-500 dark:bg-slate-700/60 dark:text-slate-300'
-                    }`}
-                  >
-                    {label}
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="flex flex-wrap gap-1.5">
-              {(
-                [
-                  ['all', t('All Devices')],
-                  ['current', t('This Device')],
-                ] as Array<[CompatibilityFilter, string]>
-              ).map(([filter, label]) => {
-                const isActive = compatibilityFilter === filter;
-                return (
-                  <button
-                    key={filter}
-                    type="button"
-                    onClick={() => setCompatibilityFilter(filter)}
-                    className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-colors ${
-                      isActive
-                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200'
-                        : 'bg-slate-100 text-slate-500 dark:bg-slate-700/60 dark:text-slate-300'
+                        ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 shadow-sm font-semibold'
+                        : 'text-slate-600 dark:text-slate-300 hover:text-slate-800 dark:hover:text-slate-100'
                     }`}
                   >
                     {label}
@@ -532,12 +496,12 @@ function Dropdown({
                           role="none"
                           data-option-index={flatIndex}
                           className={`
-                            border-b border-slate-50 dark:border-slate-700/50 last:border-b-0
+                            border-b border-slate-100 dark:border-slate-800/40 last:border-b-0
                             transition-colors duration-100
                             ${itemStateClass}
                           `}
                         >
-                          <div className="flex items-center gap-1 px-3 py-2.5">
+                          <div className="flex items-center gap-1.5 px-3 py-2">
                             <button
                               type="button"
                               id={`option-${flatIndex}`}
@@ -549,50 +513,43 @@ function Dropdown({
                               onClick={() => handleOptionClick(option)}
                               className="flex-1 min-w-0 text-left outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded-lg"
                             >
-                              <div className="flex items-center gap-2 min-w-0">
-                                <div
-                                  className={`
-                                    w-5 h-5 flex-shrink-0 flex items-center justify-center rounded-md
-                                    ${
-                                      option.isCustom
-                                        ? 'bg-gradient-to-br from-purple-500 to-pink-500'
-                                        : 'bg-gradient-to-br from-primary-500 to-cyan-500'
-                                    }
-                                  `}
-                                >
-                                  {option.isCustom ? (
-                                    <Sparkles
-                                      size={11}
-                                      className="text-white"
-                                    />
-                                  ) : (
-                                    <FileCode
-                                      size={11}
-                                      className="text-white"
-                                    />
+                              <div className="flex items-start gap-2.5 min-w-0">
+                                {option.isCustom ? (
+                                  <Sparkles
+                                    size={14}
+                                    className="text-purple-500 dark:text-purple-400 mt-0.5 flex-shrink-0"
+                                  />
+                                ) : (
+                                  <FileCode
+                                    size={14}
+                                    className="text-slate-400 dark:text-slate-500 mt-0.5 flex-shrink-0"
+                                  />
+                                )}
+
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span className="font-semibold text-sm text-slate-800 dark:text-slate-200 truncate">
+                                      {option.name}
+                                    </span>
+
+                                    {compatibilityBadge && (
+                                      <span className="flex-shrink-0 rounded-full bg-amber-50 dark:bg-amber-900/30 border border-amber-200/70 dark:border-amber-700/50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-200 leading-none">
+                                        {compatibilityBadge}
+                                      </span>
+                                    )}
+
+                                    {isSelected && (
+                                      <span className="flex-shrink-0 w-1.5 h-1.5 rounded-full bg-primary-500 ml-auto" />
+                                    )}
+                                  </div>
+
+                                  {option.description && (
+                                    <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5 truncate">
+                                      {option.description}
+                                    </p>
                                   )}
                                 </div>
-
-                                <span className="font-semibold text-sm text-slate-800 dark:text-slate-200 truncate">
-                                  {option.name}
-                                </span>
-
-                                {compatibilityBadge && (
-                                  <span className="flex-shrink-0 rounded-full bg-amber-50 dark:bg-amber-900/30 border border-amber-200/70 dark:border-amber-700/50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-200">
-                                    {compatibilityBadge}
-                                  </span>
-                                )}
-
-                                {isSelected && (
-                                  <span className="flex-shrink-0 w-1.5 h-1.5 rounded-full bg-primary-500 ml-auto" />
-                                )}
                               </div>
-
-                              {option.description && (
-                                <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5 ml-7 truncate">
-                                  {option.description}
-                                </p>
-                              )}
                             </button>
 
                             {option.isCustom && (

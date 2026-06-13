@@ -1,6 +1,13 @@
-import { Loader2, Play, Terminal as TerminalIcon } from 'lucide-react';
+import { RotateCcw, Loader2, Play, Terminal as TerminalIcon } from 'lucide-react';
 import { useId, type DragEvent } from 'react';
 import { useLanguage } from '../LanguageContext';
+
+export interface CommandSource {
+  /** 模板名称 */
+  label: string;
+  /** 命令是否已被手动修改（与模板原始内容不一致） */
+  isDirty: boolean;
+}
 
 export interface CommandBoxProps {
   command: string;
@@ -10,12 +17,16 @@ export interface CommandBoxProps {
   onCopy: () => void;
   onClear: () => void;
   onStart: () => void;
+  /** 点击后将命令重置为模板原始内容 */
+  onReset?: () => void;
   canStart: boolean;
   isRunning: boolean;
   isStopping: boolean;
   id?: string;
   placeholder?: string;
   hasMultipleInputs: boolean;
+  /** 命令来源信息（模板名 + 是否 dirty） */
+  commandSource?: CommandSource | null;
 }
 
 export function CommandBox({
@@ -26,12 +37,14 @@ export function CommandBox({
   onCopy,
   onClear,
   onStart,
+  onReset,
   canStart,
   isRunning,
   isStopping,
   id,
   placeholder,
   hasMultipleInputs,
+  commandSource,
 }: CommandBoxProps) {
   const { t } = useLanguage();
   const generatedId = useId();
@@ -47,16 +60,58 @@ export function CommandBox({
     <div className="relative group">
       <div className="absolute -inset-0.5 bg-gradient-to-r from-primary-400 via-cyan-500 to-emerald-500 rounded-xl opacity-0 blur-sm pointer-events-none transition-opacity duration-500 group-hover:opacity-10 dark:group-hover:opacity-[0.08] motion-reduce:transition-none" />
 
-      <div className="relative bg-white dark:bg-slate-800 rounded-xl border-2 border-slate-100 dark:border-slate-700 group-hover:border-slate-200 dark:group-hover:border-slate-600 shadow-sm transition-[border-color,box-shadow,background-color] duration-300 motion-reduce:transition-none">
+      <div className="relative bg-white dark:bg-slate-800 rounded-xl border-2 border-slate-100 dark:border-slate-700 group-hover:border-slate-200 dark:group-hover:border-slate-600 shadow-sm transition-[border-color,box-shadow,background-color] duration-300 motion-reduce:transition-none focus-within:border-primary-500 focus-within:ring-2 focus-within:ring-primary-500/20 overflow-hidden">
         {/* 顶部工具栏 */}
         <div className="flex items-center justify-between px-4 py-2 border-b border-slate-100 dark:border-slate-700/80 bg-slate-50/60 dark:bg-slate-900/40 rounded-t-xl">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 min-w-0">
             <div className="flex items-center justify-center w-6 h-6 bg-gradient-to-br from-primary-500 to-primary-600 rounded-md shadow-sm flex-shrink-0">
               <TerminalIcon size={13} className="text-white" />
             </div>
-            <span className="text-xs font-semibold text-slate-600 dark:text-slate-300 tracking-wide">
+            <span className="text-xs font-semibold text-slate-600 dark:text-slate-300 tracking-wide flex-shrink-0">
               {t('FFmpeg Command')}
             </span>
+            {/* 模板来源 badge */}
+            {commandSource && (
+              <span
+                title={commandSource.isDirty ? commandSource.label : undefined}
+                className={`
+                  inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full border flex-shrink-0
+                  transition-colors duration-200
+                  ${
+                    commandSource.isDirty
+                      ? 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 border-amber-200/70 dark:border-amber-700/40'
+                      : 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 border-emerald-200/70 dark:border-emerald-700/40'
+                  }
+                `}
+              >
+                <span
+                  className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                    commandSource.isDirty ? 'bg-amber-500' : 'bg-emerald-500'
+                  }`}
+                />
+                <span className="truncate max-w-[120px]">
+                  {commandSource.isDirty
+                    ? t('Modified (from template)')
+                    : commandSource.label}
+                </span>
+              </span>
+            )}
+            {/* 重置按钮：只在 dirty 时出现 */}
+            {commandSource?.isDirty && onReset && (
+              <button
+                type="button"
+                onClick={onReset}
+                title={t('Reset to template')}
+                className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded-full
+                  text-amber-700 dark:text-amber-300
+                  hover:bg-amber-100 dark:hover:bg-amber-900/40
+                  border border-amber-200/70 dark:border-amber-700/40
+                  transition-colors duration-200 flex-shrink-0"
+              >
+                <RotateCcw size={9} />
+                {t('Reset to template')}
+              </button>
+            )}
             {hasMultipleInputs && (
               <span className="text-[10px] font-medium text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 px-1.5 py-0.5 rounded-full border border-amber-200/60 dark:border-amber-700/40 flex-shrink-0">
                 {t('Multiple inputs')}
@@ -78,6 +133,31 @@ export function CommandBox({
             >
               {t('Clear')}
             </button>
+            <div className="w-px h-4 bg-slate-200 dark:bg-slate-600 mx-1" />
+            <button
+              type="button"
+              onClick={onStart}
+              disabled={!canStart}
+              aria-disabled={!canStart}
+              className={`
+                flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold
+                transition-[transform,box-shadow,background-color,color] duration-200 focus:outline-none
+                focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2
+                dark:focus-visible:ring-offset-slate-800
+                ${
+                  canStart
+                    ? 'bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 text-white shadow-md shadow-primary-500/25 hover:shadow-lg hover:shadow-primary-500/30 hover:-translate-y-0.5 active:translate-y-0'
+                    : 'bg-slate-100 dark:bg-slate-700/50 text-slate-400 dark:text-slate-500 cursor-not-allowed'
+                }
+              `}
+            >
+              {isRunning || isStopping ? (
+                <Loader2 size={12} className="animate-spin" />
+              ) : (
+                <Play size={12} className={canStart ? 'fill-current' : ''} />
+              )}
+              <span>{t('Start')}</span>
+            </button>
           </div>
         </div>
 
@@ -97,11 +177,11 @@ export function CommandBox({
           }
           spellCheck={false}
           rows={3}
-          className="w-full px-4 pt-3 pb-2 bg-transparent border-none resize-none font-mono text-sm text-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-primary-500 focus:ring-inset leading-relaxed placeholder:text-slate-400 dark:placeholder:text-slate-500 outline-none"
+          className="w-full px-4 pt-3 pb-2 bg-transparent border-none resize-none font-mono text-sm text-slate-800 dark:text-slate-200 focus:ring-0 leading-relaxed placeholder:text-slate-400 dark:placeholder:text-slate-500 outline-none"
         />
 
-        {/* 底部：字符数 + 内嵌运行按钮 */}
-        <div className="flex items-center justify-between px-4 pb-3 pt-1">
+        {/* 底部：字符数 */}
+        <div className="flex items-center px-4 pb-3 pt-1">
           <span
             id={helperTextId}
             className="text-[11px] text-slate-400 dark:text-slate-500 font-mono select-none"
@@ -110,35 +190,13 @@ export function CommandBox({
               ? `${command.length} ${t('characters')}`
               : statusText}
           </span>
-
-          <button
-            type="button"
-            onClick={onStart}
-            disabled={!canStart}
-            aria-disabled={!canStart}
-            className={`
-              flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-semibold
-              transition-[transform,box-shadow,background-color,color] duration-200 focus:outline-none
-              focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2
-              dark:focus-visible:ring-offset-slate-800
-              ${
-                canStart
-                  ? 'bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 text-white shadow-md shadow-primary-500/25 hover:shadow-lg hover:shadow-primary-500/30 hover:-translate-y-0.5 active:translate-y-0'
-                  : 'bg-slate-100 dark:bg-slate-700/50 text-slate-400 dark:text-slate-500 cursor-not-allowed'
-              }
-            `}
-          >
-            {isRunning || isStopping ? (
-              <Loader2 size={14} className="animate-spin" />
-            ) : (
-              <Play size={14} className={canStart ? 'fill-current' : ''} />
-            )}
-            <span>{t('Start')}</span>
-          </button>
         </div>
       </div>
     </div>
   );
 }
 
-
+CommandBox.defaultProps = {
+  id: undefined,
+  placeholder: undefined,
+};

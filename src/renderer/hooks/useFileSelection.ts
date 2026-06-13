@@ -110,6 +110,28 @@ export function useFileSelection({ onError }: UseFileSelectionProps = {}) {
   }, []);
   const clearOutputFolder = useCallback(() => setOutputFolder(''), []);
 
+  const handleInputFileDrop = useCallback(
+    (filePath: string, index = 0) => {
+      setInputFiles((prev) => {
+        const next = [...prev];
+        next[index] = filePath;
+        return next;
+      });
+
+      if (index === 0) {
+        setOutputFolder((prev) => prev || getFileDirectory(filePath));
+      }
+    },
+    [],
+  );
+
+  const handleOutputFolderDrop = useCallback(
+    (folderPath: string) => {
+      setOutputFolder(folderPath);
+    },
+    [],
+  );
+
   return {
     inputFile: inputFiles[0] ?? '',
     inputFiles,
@@ -118,6 +140,8 @@ export function useFileSelection({ onError }: UseFileSelectionProps = {}) {
     handleSelectOutputFolder,
     clearInputFile,
     clearOutputFolder,
+    handleInputFileDrop,
+    handleOutputFolderDrop,
   };
 }
 

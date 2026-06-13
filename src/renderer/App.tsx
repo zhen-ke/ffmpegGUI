@@ -1,11 +1,15 @@
+import { useEffect } from 'react';
 import { LanguageProvider } from './LanguageContext';
 import Home from './Home';
-import { useEffect } from 'react';
 
 import './App.css';
 
 function App() {
   useEffect(() => {
+    if (window.electron.platform === 'darwin') {
+      document.documentElement.classList.add('is-mac');
+    }
+
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
 
     const handleChange = (e: MediaQueryListEvent | MediaQueryList) => {
