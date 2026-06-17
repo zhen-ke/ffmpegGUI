@@ -16,6 +16,7 @@ import {
   Search,
   Sparkles,
   Trash2,
+  X,
 } from 'lucide-react';
 import React, {
   useCallback,
@@ -41,6 +42,8 @@ interface DropdownProps {
   placeholder: string;
   onEdit?: (template: { id: string }) => void;
   onDelete?: (templateId: string) => void;
+  /** 点击 × 时触发，用于清除当前选中的模板 */
+  onClear?: () => void;
 }
 
 type SourceFilter = 'all' | 'builtin' | 'custom';
@@ -120,6 +123,7 @@ function Dropdown({
   placeholder,
   onEdit,
   onDelete,
+  onClear,
 }: DropdownProps) {
   const { t } = useLanguage();
   const [isOpen, setIsOpen] = useState(false);
@@ -355,6 +359,7 @@ function Dropdown({
 
   return (
     <div className="relative h-10" ref={dropdownRef}>
+      {/* 主触发按钮 */}
       <button
         ref={buttonRef}
         id={triggerId}
@@ -387,7 +392,9 @@ function Dropdown({
       >
         {triggerIcon}
         <span
-          className={`flex-1 min-w-0 truncate text-left pr-1 ${
+          className={`flex-1 min-w-0 truncate text-left ${
+            value ? 'pr-6' : 'pr-1'
+          } ${
             value
               ? 'text-slate-800 dark:text-slate-200'
               : 'text-slate-400 dark:text-slate-500'
@@ -403,6 +410,28 @@ function Dropdown({
           }`}
         />
       </button>
+
+      {/* 清除按钮：仅在有选中值且提供了 onClear 时出现 */}
+      {value && onClear && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onClear();
+          }}
+          aria-label="Clear template selection"
+          className="
+            absolute right-8 top-1/2 -translate-y-1/2
+            w-5 h-5 flex items-center justify-center rounded-md
+            text-slate-400 dark:text-slate-500
+            hover:text-slate-600 dark:hover:text-slate-300
+            hover:bg-slate-100 dark:hover:bg-slate-700
+            transition-colors duration-150
+          "
+        >
+          <X size={13} strokeWidth={2.5} />
+        </button>
+      )}
 
       {isOpen && (
         <div className="absolute z-50 w-[420px] left-0 mt-1.5 rounded-xl border border-slate-200/50 dark:border-slate-800/50 bg-white/85 dark:bg-slate-900/85 backdrop-blur-md shadow-2xl dark:shadow-black/40 overflow-hidden">
@@ -597,6 +626,7 @@ Dropdown.defaultProps = {
   id: undefined,
   onEdit: undefined,
   onDelete: undefined,
+  onClear: undefined,
 };
 
 export default Dropdown;

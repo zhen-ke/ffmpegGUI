@@ -2,9 +2,14 @@
  * AppHeader — 顶部导航栏
  *
  * 从 Home.tsx 拆分出来，负责品牌标识、状态指示、语言切换和模板操作入口。
+ *
+ * v2 改动：
+ * - 移除 t prop（直接用 useLanguage hook，消除 props drilling）
+ * - 加入三步骤工作流引导（Step indicator），新用户友好
  */
 
 import { PlusCircle, Terminal as TerminalIcon, Zap } from 'lucide-react';
+import { useLanguage } from '../LanguageContext';
 import type { WorkspacePane } from './DrawerTabBar';
 
 interface AppHeaderProps {
@@ -17,7 +22,12 @@ interface AppHeaderProps {
   workflowLabel: string;
   workflowTone: string;
   commandSourceLabel: string;
-  t: (key: string) => string;
+  /** 是否已选择模板或输入了命令 */
+  hasCommand: boolean;
+  /** 是否已选择输入文件 */
+  hasInputFile: boolean;
+  /** 是否处于运行或停止状态（运行中时不显示步骤引导） */
+  isRunning: boolean;
 }
 
 export function AppHeader({
@@ -30,9 +40,41 @@ export function AppHeader({
   workflowLabel,
   workflowTone,
   commandSourceLabel,
-  t,
+  hasCommand,
+  hasInputFile,
+  isRunning,
 }: AppHeaderProps) {
+  const { t } = useLanguage();
   const isMac = window.electron.platform === 'darwin';
+
+  // ── 步骤引导逻辑 ─────────────────────────────────────────
+  // step 1: 选择模板或输入命令
+  // step 2: 选择输入文件
+  // step 3: 点击开始（Ready 状态）
+  const step1Done = hasCommand;
+  const step2Done = step1Done && hasInputFile;
+  const step3Active = step2Done; // ready to run
+
+  const steps = [
+    {
+      key: 'template',
+      label: language === 'zh' ? '选择模板' : 'Choose template',
+      done: step1Done,
+      active: !step1Done,
+    },
+    {
+      key: 'input',
+      label: language === 'zh' ? '选择输入文件' : 'Pick input file',
+      done: step2Done,
+      active: step1Done && !step2Done,
+    },
+    {
+      key: 'start',
+      label: language === 'zh' ? '点击开始' : 'Click start',
+      done: false,
+      active: step3Active,
+    },
+  ];
 
   return (
     <header
@@ -43,6 +85,7 @@ export function AppHeader({
       }`}
     >
       <div className="flex items-center justify-between gap-4">
+        {/* 品牌区 */}
         <div className="flex items-center gap-3 justify-start min-w-0">
           <div className="p-2 bg-gradient-to-br from-primary-500 to-primary-600 rounded-xl shadow-md shadow-primary-500/20 flex-shrink-0">
             <Zap className="w-5 h-5 text-white" />
@@ -57,6 +100,7 @@ export function AppHeader({
           </div>
         </div>
 
+        {/* 右侧操作按钮 */}
         <div className="flex items-center gap-2 justify-end flex-wrap">
           <button
             type="button"
@@ -91,19 +135,58 @@ export function AppHeader({
         </div>
       </div>
 
-      <div className="mt-3 flex flex-col gap-2">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <span
-              className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${workflowTone}`}
-            >
-              {workflowLabel}
-            </span>
-            <span className="text-xs text-slate-500 dark:text-slate-400">
-              {commandSourceLabel}
-            </span>
+      {/* 状态行 */}
+      <div className="mt-3 flex items-center gap-3 flex-wrap">
+        {/* 工作流状态 pill */}
+        <span
+          className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold flex-shrink-0 ${workflowTone}`}
+        >
+          {workflowLabel}
+        </span>
+
+        {/* 三步骤引导（仅在非运行时且未完成所有步骤时显示） */}
+        {!isRunning && !step2Done && (
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {steps.map((step, index) => (
+              <div key={step.key} className="flex items-center gap-1.5">
+                {index > 0 && (
+                  <span className="text-slate-300 dark:text-slate-600 text-[10px] select-none">
+                    →
+                  </span>
+                )}
+                <span
+                  className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full transition-colors duration-200 ${
+                    step.done
+                      ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200/60 dark:border-emerald-700/30'
+                      : step.active
+                        ? 'text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20 border border-primary-200/60 dark:border-primary-700/30'
+                        : 'text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-700/30'
+                  }`}
+                >
+                  {step.done ? (
+                    <span className="text-[9px]">✓</span>
+                  ) : (
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                        step.active
+                          ? 'bg-primary-500 animate-pulse'
+                          : 'bg-slate-300 dark:bg-slate-600'
+                      }`}
+                    />
+                  )}
+                  {step.label}
+                </span>
+              </div>
+            ))}
           </div>
-        </div>
+        )}
+
+        {/* 当已就绪或在运行时，显示命令来源标签 */}
+        {(step2Done || isRunning) && (
+          <span className="text-xs text-slate-500 dark:text-slate-400">
+            {commandSourceLabel}
+          </span>
+        )}
       </div>
     </header>
   );

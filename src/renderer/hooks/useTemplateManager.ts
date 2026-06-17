@@ -175,8 +175,10 @@ export function useTemplateManager({
     handleDeleteTemplate,
     handleEditTemplate,
     // setState 引用稳定，直接内联无需 useCallback
+    clearTemplateSelection: () => setSelectedTemplateId(null),
     openNewTemplateDialog: () => setDialogState({ isOpen: true }),
     closeTemplateDialog:   () => setDialogState({ isOpen: false }),
     refreshTemplates,
   };
+
 }

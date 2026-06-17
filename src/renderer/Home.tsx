@@ -1,15 +1,18 @@
 /**
- * Home - FFmpeg GUI 主界面（最优解重构版）
+ * Home - FFmpeg GUI 主界面
  *
- * 改动要点：
+ * 改动历史：
  * 1. useFFmpegState 升级为状态机，isRunning/isStopping 由 deriveFFmpegFlags 派生
  * 2. 所有 window.confirm 替换为 <ConfirmModal>，Electron 内视觉一致
  * 3. 彻底移除 useLogs，系统提示统一写入 xterm（xtermWriteLogRef）
  * 4. FFmpegTerminal 始终挂载（visibility 控制），drawerSize=sm 不销毁 xterm
  * 5. header/drawer 拆分为 AppHeader / WorkspaceDrawer 组件
+ * 6. 提取 useMediaProbe hook、MediaInfoCard、CompletedResultCard 组件
+ * 7. isCommandDirty 改用 useState 确保正确响应模板注入
+ * 8. Dropdown 支持清除选中模板，AppHeader 加入三步骤引导
  */
 
-import { Loader2, Upload } from 'lucide-react';
+import { Upload } from 'lucide-react';
 import {
   useCallback,
   useEffect,
@@ -30,14 +33,17 @@ import { useElectronIPC } from './hooks/useElectronIPC';
 import { useFFmpegState } from './hooks/useFFmpegState';
 import { useFileSelection } from './hooks/useFileSelection';
 import { useGlobalHotkeys } from './hooks/useGlobalHotkeys';
+import { useMediaProbe } from './hooks/useMediaProbe';
 import { useTemplateManager } from './hooks/useTemplateManager';
 
 import { AppHeader } from './components/AppHeader';
 import { CommandBox } from './components/CommandBox';
+import { CompletedResultCard } from './components/CompletedResultCard';
 import { ConfirmModal } from './components/ConfirmModal';
 import { DrawerSize, type WorkspacePane } from './components/DrawerTabBar';
 import { type TerminalLogType } from './components/FFmpegTerminal';
 import { FileSelector } from './components/FileSelector';
+import { MediaInfoCard } from './components/MediaInfoCard';
 import { WorkspaceDrawer } from './components/WorkspaceDrawer';
 import {
   buildOutputPreview,
@@ -48,7 +54,6 @@ import {
   updateInputArgument,
   updateOutputFileName,
 } from './utils/commandUtils';
-import type { MediaProbeResult } from '../shared/mediaProbe';
 
 // ─────────────────────────────────────────────
 // 常量
@@ -81,45 +86,6 @@ function getIndexedSelectLabel(language: string, index: number): string {
     : `Select Input ${index + 1}`;
 }
 
-function formatDuration(seconds: number | null): string {
-  if (seconds === null || !Number.isFinite(seconds)) return '—';
-
-  const totalSeconds = Math.max(0, Math.floor(seconds));
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const secs = totalSeconds % 60;
-
-  if (hours > 0) {
-    return `${hours}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-  }
-
-  return `${minutes}:${String(secs).padStart(2, '0')}`;
-}
-
-function formatBytes(bytes: number | null): string {
-  if (bytes === null || !Number.isFinite(bytes) || bytes <= 0) return '—';
-
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  let value = bytes;
-  let unitIndex = 0;
-
-  while (value >= 1024 && unitIndex < units.length - 1) {
-    value /= 1024;
-    unitIndex += 1;
-  }
-
-  return `${value.toFixed(value >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
-}
-
-function formatBitRate(bitRate: number | null): string {
-  if (bitRate === null || !Number.isFinite(bitRate) || bitRate <= 0) return '—';
-
-  if (bitRate >= 1_000_000) {
-    return `${(bitRate / 1_000_000).toFixed(1)} Mbps`;
-  }
-
-  return `${Math.round(bitRate / 1000)} kbps`;
-}
 
 function getPathDirectory(filePath: string): string {
   const lastSlash = Math.max(
@@ -200,14 +166,8 @@ function Home() {
   const [confirmState, setConfirmState] = useState<ConfirmState>({
     isOpen: false,
   });
-  const [mediaInfo, setMediaInfo] = useState<MediaProbeResult | null>(null);
   const [isWindowDragActive, setIsWindowDragActive] = useState(false);
   const dragCounter = useRef(0);
-  const [isMediaInfoLoading, setIsMediaInfoLoading] = useState(false);
-  const [hasMediaInfoError, setHasMediaInfoError] = useState(false);
-  const [isMediaProbeAvailable, setIsMediaProbeAvailable] = useState<
-    boolean | null
-  >(null);
 
   const openConfirm = useCallback(
     (
@@ -275,6 +235,7 @@ function Home() {
     handleSaveTemplate,
     handleDeleteTemplate,
     handleEditTemplate,
+    clearTemplateSelection,
     openNewTemplateDialog,
     closeTemplateDialog,
   } = useTemplateManager({ onError: handleOperationalError });
@@ -312,8 +273,8 @@ function Home() {
   const outputFolderRef = useRef(outputFolder);
   const commandRef = useRef(command);
   const selectedTemplateIdRef = useRef<string | null>(selectedTemplateId);
-  // 记录最近一次模板注入后写入命令框的精确值，用于 dirty 判断
-  const lastAppliedCommandRef = useRef<string | null>(null);
+  // lastAppliedCommand: 用 state 而非 ref，确保模板注入后 isCommandDirty 正确触发重算
+  const [lastAppliedCommand, setLastAppliedCommand] = useState<string | null>(null);
   inputFilesRef.current = inputFiles;
   outputFolderRef.current = outputFolder;
   commandRef.current = command;
@@ -354,41 +315,47 @@ function Home() {
       const o = outputFolderRef.current;
       if (currentInputs.length > 0 || o) {
         // updateCommandWithPaths 内部调用 updateCommandPaths 再 setCommand
-        // 我们同步调用同一个函数计算期望值，用于 dirty 判断
+        // 同步计算期望值写入 state，确保 isCommandDirty 正确响应
         const expected = updateCommandPaths(tplCmd, currentInputs, o);
-        lastAppliedCommandRef.current = expected;
+        setLastAppliedCommand(expected);
         updateCommandWithPaths(tplCmd, currentInputs, o);
       } else {
-        lastAppliedCommandRef.current = tplCmd;
+        setLastAppliedCommand(tplCmd);
         updateCommand(tplCmd);
       }
     },
-    [updateCommand, updateCommandWithPaths],
+    [updateCommand, updateCommandWithPaths, setLastAppliedCommand],
   );
   useEffect(() => {
     if (!selectedTemplateId || !selectedTemplateCommand) return;
     applyTemplateCommand(selectedTemplateCommand);
   }, [applyTemplateCommand, selectedTemplateCommand, selectedTemplateId]);
 
-  // 清空模板选中时，重置 lastAppliedCommandRef
+  // 清空模板选中时，重置 lastAppliedCommand
   useEffect(() => {
     if (!selectedTemplateId) {
-      lastAppliedCommandRef.current = null;
+      setLastAppliedCommand(null);
     }
   }, [selectedTemplateId]);
 
   // dirty：有模板被选中，且当前命令与最后一次模板注入的值不一致
   const isCommandDirty = useMemo(() => {
     if (!selectedTemplateId) return false;
-    if (lastAppliedCommandRef.current === null) return false;
-    return command.trim() !== lastAppliedCommandRef.current.trim();
-  }, [command, selectedTemplateId]);
+    if (lastAppliedCommand === null) return false;
+    return command.trim() !== lastAppliedCommand.trim();
+  }, [command, selectedTemplateId, lastAppliedCommand]);
 
   // 重置：把命令恢复到模板的最后注入值
   const handleResetToTemplate = useCallback(() => {
     if (!selectedTemplateCommand) return;
     applyTemplateCommand(selectedTemplateCommand);
   }, [applyTemplateCommand, selectedTemplateCommand]);
+
+  // 清除模板选中：同时清空命令和 lastAppliedCommand
+  const handleTemplateClear = useCallback(() => {
+    clearTemplateSelection();
+    clearCommand();
+  }, [clearTemplateSelection, clearCommand]);
 
   // ── 模板切换：直接替换命令 ──
 
@@ -427,9 +394,7 @@ function Home() {
     () => buildOutputPreview(outputFolder, outputFileName),
     [outputFolder, outputFileName],
   );
-  const mediaInfoError = hasMediaInfoError
-    ? t('Failed to read media details.')
-    : '';
+
 
   const inputSlots = useMemo(
     () =>
@@ -544,93 +509,11 @@ function Home() {
     [setCommand],
   );
 
-  useEffect(() => {
-    let cancelled = false;
+  // ── 媒体探针（已提取到 useMediaProbe hook）──
 
-    window.electron.ipcRenderer
-      .invoke('check-media-probe-status')
-      .then((result) => {
-        if (!cancelled) {
-          setIsMediaProbeAvailable(result === true);
-        }
-        return undefined;
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setIsMediaProbeAvailable(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    if (isMediaProbeAvailable !== true) {
-      setMediaInfo(null);
-      setHasMediaInfoError(false);
-      setIsMediaInfoLoading(false);
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    if (!primaryInputPath) {
-      setMediaInfo(null);
-      setHasMediaInfoError(false);
-      setIsMediaInfoLoading(false);
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    setIsMediaInfoLoading(true);
-    setHasMediaInfoError(false);
-    setMediaInfo(null);
-
-    window.electron.ipcRenderer
-      .invoke('probe-media', primaryInputPath)
-      .then((result) => {
-        if (!cancelled) {
-          const probeResult = result as
-            | { success: true; data: MediaProbeResult }
-            | { success: false; error: string };
-
-          if (probeResult?.success) {
-            setMediaInfo(probeResult.data);
-            setHasMediaInfoError(false);
-          } else {
-            if (probeResult?.error === 'FFprobe is not available.') {
-              setMediaInfo(null);
-              setHasMediaInfoError(false);
-              setIsMediaProbeAvailable(false);
-              setIsMediaInfoLoading(false);
-              return undefined;
-            }
-
-            setMediaInfo(null);
-            setHasMediaInfoError(true);
-          }
-
-          setIsMediaInfoLoading(false);
-        }
-        return undefined;
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setMediaInfo(null);
-          setHasMediaInfoError(true);
-          setIsMediaInfoLoading(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [isMediaProbeAvailable, primaryInputPath]);
+  const { mediaInfo, isMediaInfoLoading, hasMediaInfoError, isMediaProbeAvailable } = useMediaProbe({
+    primaryInputPath,
+  });
 
   // ── 运行 ──
 
@@ -692,128 +575,11 @@ function Home() {
   );
   const hasCommand = command.trim().length > 0;
   const currentCommand = command.trim();
-  const primaryVideoStream = mediaInfo?.videoStreams[0] ?? null;
-  const primaryAudioStream = mediaInfo?.audioStreams[0] ?? null;
-  const primarySubtitleStream = mediaInfo?.subtitleStreams[0] ?? null;
   const completedOutputFolder = lastCompletedOutputFile
     ? getPathDirectory(lastCompletedOutputFile)
     : '';
   const showCompletedResult =
-    status === 'done' &&
-    currentCommand === lastStartedCommand &&
-    !!lastCompletedOutputFile;
-  let mediaDetailsContent = (
-    <p className="text-sm text-slate-500 dark:text-slate-400">
-      {t('No media details yet')}
-    </p>
-  );
-
-  if (mediaInfoError) {
-    mediaDetailsContent = (
-      <p className="text-sm text-red-600 dark:text-red-400">{mediaInfoError}</p>
-    );
-  } else if (mediaInfo) {
-    mediaDetailsContent = (
-      <div className="grid grid-cols-12 gap-3">
-        <div className="col-span-12 md:col-span-3 rounded-xl bg-slate-50 dark:bg-slate-800/70 px-3 py-3">
-          <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
-            {t('Format')}
-          </p>
-          <p className="mt-1 text-sm font-semibold text-slate-700 dark:text-slate-200">
-            {mediaInfo.formatName}
-          </p>
-        </div>
-        <div className="col-span-12 md:col-span-3 rounded-xl bg-slate-50 dark:bg-slate-800/70 px-3 py-3">
-          <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
-            {t('Duration')}
-          </p>
-          <p className="mt-1 text-sm font-semibold text-slate-700 dark:text-slate-200">
-            {formatDuration(mediaInfo.durationSeconds)}
-          </p>
-        </div>
-        <div className="col-span-12 md:col-span-3 rounded-xl bg-slate-50 dark:bg-slate-800/70 px-3 py-3">
-          <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
-            {t('Size')}
-          </p>
-          <p className="mt-1 text-sm font-semibold text-slate-700 dark:text-slate-200">
-            {formatBytes(mediaInfo.sizeBytes)}
-          </p>
-        </div>
-        <div className="col-span-12 md:col-span-3 rounded-xl bg-slate-50 dark:bg-slate-800/70 px-3 py-3">
-          <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
-            {t('Bitrate')}
-          </p>
-          <p className="mt-1 text-sm font-semibold text-slate-700 dark:text-slate-200">
-            {formatBitRate(mediaInfo.bitRate)}
-          </p>
-        </div>
-
-        <div className="col-span-12 md:col-span-4 rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-3">
-          <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
-            {t('Video')}
-          </p>
-          {primaryVideoStream ? (
-            <div className="mt-2 space-y-1 text-sm text-slate-700 dark:text-slate-200">
-              <p>{primaryVideoStream.codec}</p>
-              <p>
-                {t('Resolution')}:{' '}
-                {primaryVideoStream.width && primaryVideoStream.height
-                  ? `${primaryVideoStream.width}×${primaryVideoStream.height}`
-                  : '—'}
-              </p>
-              <p>
-                {t('Frame Rate')}:{' '}
-                {primaryVideoStream.frameRate
-                  ? `${primaryVideoStream.frameRate.toFixed(2)} fps`
-                  : '—'}
-              </p>
-            </div>
-          ) : (
-            <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">—</p>
-          )}
-        </div>
-
-        <div className="col-span-12 md:col-span-4 rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-3">
-          <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
-            {t('Audio')}
-          </p>
-          {primaryAudioStream ? (
-            <div className="mt-2 space-y-1 text-sm text-slate-700 dark:text-slate-200">
-              <p>{primaryAudioStream.codec}</p>
-              <p>
-                {t('Channels')}: {primaryAudioStream.channels ?? '—'}
-              </p>
-              <p>
-                {t('Sample Rate')}:{' '}
-                {primaryAudioStream.sampleRate
-                  ? `${Math.round(primaryAudioStream.sampleRate)} Hz`
-                  : '—'}
-              </p>
-            </div>
-          ) : (
-            <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">—</p>
-          )}
-        </div>
-
-        <div className="col-span-12 md:col-span-4 rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-3">
-          <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
-            {t('Subtitles')}
-          </p>
-          {primarySubtitleStream ? (
-            <div className="mt-2 space-y-1 text-sm text-slate-700 dark:text-slate-200">
-              <p>{primarySubtitleStream.codec}</p>
-              <p>
-                {t('Tracks')}: {mediaInfo.subtitleStreams.length}
-              </p>
-              <p>{primarySubtitleStream.language ?? '—'}</p>
-            </div>
-          ) : (
-            <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">—</p>
-          )}
-        </div>
-      </div>
-    );
-  }
+    status === 'done' && !!lastCompletedOutputFile;
 
   const toggleLanguage = useCallback(() => {
     setLanguage(language === 'en' ? 'zh' : 'en');
@@ -907,7 +673,7 @@ function Home() {
         <div className="flex flex-col items-center gap-4">
           <div className="relative">
             <div className="w-16 h-16 border-4 border-primary-100 dark:border-primary-900/50 rounded-full" />
-            <Loader2 className="absolute inset-0 w-16 h-16 animate-spin text-primary-500" />
+            <div className="absolute inset-0 w-16 h-16 animate-spin rounded-full border-4 border-transparent border-t-primary-500" />
           </div>
           <p className="text-slate-500 dark:text-slate-400 font-medium">
             {t('Loading…')}
@@ -942,7 +708,9 @@ function Home() {
         workflowLabel={workflowLabel}
         workflowTone={workflowTone}
         commandSourceLabel={commandSourceLabel}
-        t={t}
+        hasCommand={hasCommand}
+        hasInputFile={!!inputFiles[0]}
+        isRunning={isRunning}
       />
 
       {/* ══ 主内容区 ══ */}
@@ -970,6 +738,7 @@ function Home() {
                 placeholder={t('Select a template')}
                 onEdit={handleEditTemplate}
                 onDelete={handleDeleteTemplateWithConfirm}
+                onClear={handleTemplateClear}
               />
             </div>
             {inputSlotCount === 1 && (
@@ -1041,34 +810,13 @@ function Home() {
             </div>
           )}
 
-          {isMediaProbeAvailable === true && (
-            <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-900/40 px-4 py-4 shadow-sm">
-              <div className="flex items-center justify-between gap-3 mb-3">
-                <div className="min-w-0">
-                  <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
-                    {t('Media Details')}
-                  </h2>
-                  <p
-                    className="text-xs text-slate-500 dark:text-slate-400 truncate"
-                    title={
-                      primaryInputPath ||
-                      t('Select a first input file to inspect it here.')
-                    }
-                  >
-                    {primaryInputPath ||
-                      t('Select a first input file to inspect it here.')}
-                  </p>
-                </div>
-                {isMediaInfoLoading && (
-                  <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-                    <Loader2 size={14} className="animate-spin" />
-                    <span>{t('Reading media details...')}</span>
-                  </div>
-                )}
-              </div>
-
-              {mediaDetailsContent}
-            </div>
+          {isMediaProbeAvailable === true && primaryInputPath && (
+            <MediaInfoCard
+              mediaInfo={mediaInfo}
+              isLoading={isMediaInfoLoading}
+              hasError={hasMediaInfoError}
+              primaryInputPath={primaryInputPath}
+            />
           )}
 
           <div className="grid grid-cols-12 gap-3 items-end">
@@ -1106,67 +854,15 @@ function Home() {
           </div>
 
           {showCompletedResult && (
-            <div className="rounded-2xl border border-emerald-200 dark:border-emerald-800/60 bg-emerald-50/80 dark:bg-emerald-900/20 px-4 py-4 shadow-sm">
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-                <div className="min-w-0">
-                  <p className="text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
-                    {t('Latest Result')}
-                  </p>
-                  <h2 className="mt-1 text-sm font-semibold text-emerald-900 dark:text-emerald-100">
-                    {t('Task complete. Your output is ready.')}
-                  </h2>
-                  {lastCompletedOutputFile ? (
-                    <>
-                      <p className="mt-3 text-[11px] font-medium text-emerald-700/80 dark:text-emerald-300/80">
-                        {t('Completed Output')}
-                      </p>
-                      <p
-                        className="mt-1 truncate text-sm font-mono text-emerald-900 dark:text-emerald-100"
-                        title={lastCompletedOutputFile}
-                      >
-                        {lastCompletedOutputFile}
-                      </p>
-                      <p
-                        className="mt-1 truncate text-xs text-emerald-800/80 dark:text-emerald-200/80"
-                        title={completedOutputFolder}
-                      >
-                        {completedOutputFolder}
-                      </p>
-                    </>
-                  ) : (
-                    <p className="mt-2 text-sm text-emerald-800 dark:text-emerald-200">
-                      {t('Task complete. Your output is ready.')}
-                    </p>
-                  )}
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {lastCompletedOutputFile && (
-                    <button
-                      type="button"
-                      onClick={handleOpenCompletedFile}
-                      className="px-3 py-2 rounded-lg border border-emerald-300 dark:border-emerald-700 text-sm font-medium text-emerald-800 dark:text-emerald-100 hover:bg-emerald-100 dark:hover:bg-emerald-800/40 transition-colors duration-200"
-                    >
-                      {t('Open File')}
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={handleOpenCompletedFolder}
-                    className="px-3 py-2 rounded-lg border border-emerald-300 dark:border-emerald-700 text-sm font-medium text-emerald-800 dark:text-emerald-100 hover:bg-emerald-100 dark:hover:bg-emerald-800/40 transition-colors duration-200"
-                  >
-                    {t('Open Folder')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={onStart}
-                    disabled={!canStart || !currentCommand}
-                    className="px-3 py-2 rounded-lg bg-emerald-600 text-sm font-semibold text-white hover:bg-emerald-700 disabled:bg-emerald-300 disabled:cursor-not-allowed transition-colors duration-200"
-                  >
-                    {t('Run Again')}
-                  </button>
-                </div>
-              </div>
-            </div>
+            <CompletedResultCard
+              lastCompletedOutputFile={lastCompletedOutputFile}
+              completedOutputFolder={completedOutputFolder}
+              canStart={canStart}
+              currentCommand={currentCommand}
+              onOpenFile={handleOpenCompletedFile}
+              onOpenFolder={handleOpenCompletedFolder}
+              onRunAgain={onStart}
+            />
           )}
 
           <CommandBox
