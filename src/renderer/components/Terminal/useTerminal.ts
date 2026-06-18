@@ -29,28 +29,35 @@ export function useTerminal(
   containerRef: RefObject<HTMLDivElement>,
 ): UseTerminalReturn {
   const handleResize = useCallback((cols: number, rows: number) => {
-    window.terminalAPI.resize(cols, rows);
+    window.electron.ipcRenderer.sendMessage('pty-resize', cols, rows);
   }, []);
 
   const handleInit = useCallback((term: Terminal) => {
+    const { ipcRenderer } = window.electron;
+
     // ── PTY 连接 ──
-    window.terminalAPI.start(term.cols, term.rows).catch((err: unknown) => {
-      const message = err instanceof Error ? err.message : String(err);
+    ipcRenderer
+      .invoke('pty-start', term.cols, term.rows)
+      .catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : String(err);
+        term.writeln(
+          `\r\n\x1b[31m[Error] Failed to start PTY: ${message}\x1b[0m`,
+        );
+      });
+
+    // on 返回取消订阅函数；payload 为 unknown，按通道契约转为具体类型
+    const unlistenOutput = ipcRenderer.on('pty-output', (data: unknown) => {
+      term.write(data as string);
+    });
+
+    const unlistenExit = ipcRenderer.on('pty-exit', (code: unknown) => {
       term.writeln(
-        `\r\n\x1b[31m[Error] Failed to start PTY: ${message}\x1b[0m`,
+        `\r\n\x1b[33m[Process exited with code ${code as number}]\x1b[0m`,
       );
     });
 
-    const unlistenOutput = window.terminalAPI.onOutput((data) => {
-      term.write(data);
-    });
-
-    const unlistenExit = window.terminalAPI.onExit((code) => {
-      term.writeln(`\r\n\x1b[33m[Process exited with code ${code}]\x1b[0m`);
-    });
-
     const onDataDisposable = term.onData((data) =>
-      window.terminalAPI.sendInput(data),
+      ipcRenderer.sendMessage('pty-input', data),
     );
 
     // 返回清理函数
@@ -58,7 +65,7 @@ export function useTerminal(
       onDataDisposable.dispose();
       unlistenOutput();
       unlistenExit();
-      window.terminalAPI.kill();
+      ipcRenderer.invoke('pty-kill');
     };
   }, []);
 

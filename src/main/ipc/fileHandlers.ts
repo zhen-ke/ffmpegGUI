@@ -12,6 +12,8 @@ import {
 } from 'electron';
 import fs from 'fs';
 import path from 'path';
+import type { IpcResult } from '../../shared/ipc';
+import type { MediaProbeResult } from '../../shared/mediaProbe';
 import { mediaProbeService } from '../services/MediaProbeService';
 import { normalizePath } from '../utils/pathUtils';
 
@@ -98,10 +100,7 @@ function normalizeResult(result: OpenDialogReturnValue): {
   };
 }
 
-type IpcResult = { success: true } | { success: false; error: string };
-type ProbeMediaResult =
-  | { success: true; data: Awaited<ReturnType<typeof mediaProbeService.probe>> }
-  | { success: false; error: string };
+type ProbeMediaResult = IpcResult<MediaProbeResult>;
 
 function toResolvedTargetPath(value: unknown): string | null {
   if (typeof value !== 'string' || value.trim() === '') {

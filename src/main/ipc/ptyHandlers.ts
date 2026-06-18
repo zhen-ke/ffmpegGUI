@@ -3,12 +3,8 @@
  */
 
 import { ipcMain, type BrowserWindow } from 'electron';
+import type { IpcResult } from '../../shared/ipc';
 import { ptyService } from '../services/PtyService';
-
-/** 统一的响应结构 */
-type IpcResult<T = undefined> =
-  | (T extends undefined ? { success: true } : { success: true; data: T })
-  | { success: false; error: string };
 
 /**
  * 注册 PTY 相关的 IPC 处理器。

@@ -5,9 +5,12 @@
  * 消除非法状态组合，UI 判断逻辑更清晰。
  *
  * 状态流转：
- *   idle ──start──▶ running ──stop──▶ stopping ──cancelled/error──▶ idle
- *                      │                                              ▲
- *                      └──────────────── complete/error ─────────────┘
+ *   idle ──start──▶ starting ──started──▶ running ──stop──▶ stopping ──cancelled/error──▶ idle
+ *                       │                       │                                              ▲
+ *                       └── error ──────────────┴──────────────── complete/error ─────────┘
+ *
+ * `starting` 是异步 invoke 与 STARTED 之间的中间态，期间 canStart=false，
+ * 避免连点 Start 触发竞态（dispatch START 后 status 不再是 idle）。
  */
 
 import { useCallback, useEffect, useReducer } from 'react';
@@ -15,7 +18,13 @@ import { useLatest } from './useLatest';
 
 // ========== 状态机类型 ==========
 
-export type FFmpegStatus = 'idle' | 'running' | 'stopping' | 'done' | 'error';
+export type FFmpegStatus =
+  | 'idle'
+  | 'starting'
+  | 'running'
+  | 'stopping'
+  | 'done'
+  | 'error';
 
 interface FFmpegState {
   status: FFmpegStatus;
@@ -48,7 +57,7 @@ function reducer(state: FFmpegState, action: FFmpegAction): FFmpegState {
   switch (action.type) {
     case 'START':
       return {
-        status: 'idle',
+        status: 'starting',
         progress: 0,
         totalDuration: 0,
         lastStartedCommand: action.payload.command,
@@ -92,6 +101,7 @@ export function deriveFFmpegFlags(status: FFmpegStatus) {
     isRunning: status === 'running' || status === 'stopping',
     isStopping: status === 'stopping',
     isIdle: status === 'idle' || status === 'done' || status === 'error',
+    // starting / running / stopping 期间都禁止再次启动，杜绝连点竞态
     canStart: status === 'idle' || status === 'done' || status === 'error',
     canStop: status === 'running',
   };

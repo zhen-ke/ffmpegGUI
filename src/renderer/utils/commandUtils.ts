@@ -3,6 +3,11 @@
  * 提供命令解析、路径更新等功能
  */
 
+import {
+  stripSurroundingQuotes,
+  tokenize,
+} from '../../shared/commandTokenizer';
+
 // ========== 常量 ==========
 
 const DEFAULT_OUTPUT_FILENAME = 'output.mp4';
@@ -11,27 +16,11 @@ const DEFAULT_OUTPUT_FILENAME = 'output.mp4';
 
 /**
  * 将命令拆分为 token，**保留原始引号**。
- * 用于命令重建场景——需要维持用户输入的原始格式。
- *
- * 注：项目的 `tokenize()` 工具会剥除引号，不适用于此场景，
- * 因此保留独立实现。
+ * 用于命令重建场景——需要维持用户输入的原始格式做 round-trip。
+ * 复用共享的字符级 tokenize，与主进程分词语义保持一致。
  */
-function tokenizeRaw(command: string): string[] {
-  return command.match(/"[^"]*"|'[^']*'|\S+/g) ?? [];
-}
-
-/**
- * 将命令拆分为 token 并剥除引号。
- * 用于命令分析场景——只关心参数的纯值。
- */
-function stripWrappingQuotes(value: string): string {
-  if (
-    (value.startsWith('"') && value.endsWith('"')) ||
-    (value.startsWith("'") && value.endsWith("'"))
-  ) {
-    return value.slice(1, -1);
-  }
-  return value;
+function tokenizePreservingQuotes(command: string): string[] {
+  return tokenize(command, { preserveQuotes: true }).tokens;
 }
 
 /**
@@ -49,7 +38,7 @@ function getFileName(filePath: string): string {
 /** 判断 token 是否为输入占位符（如 `input.mp4`、`input2.mkv`、`input`） */
 function isInputPlaceholder(token: string): boolean {
   return /^input\d*(\.[a-zA-Z0-9]+)?$/i.test(
-    getFileName(stripWrappingQuotes(token)),
+    getFileName(stripSurroundingQuotes(token)),
   );
 }
 
@@ -73,7 +62,7 @@ function sanitizeOutputFileName(fileName: string): string {
  * 统计命令中 `-i` 输入参数的数量。
  */
 export function countInputArguments(command: string): number {
-  const tokens = tokenizeRaw(command);
+  const tokens = tokenizePreservingQuotes(command);
   return tokens.reduce((count, token, index) => {
     if (token !== '-i' || index >= tokens.length - 1) {
       return count;
@@ -87,10 +76,10 @@ export function countInputArguments(command: string): number {
  * 提取命令中所有 `-i` 对应的输入值。
  */
 export function parseInputArguments(command: string): string[] {
-  const tokens = tokenizeRaw(command);
+  const tokens = tokenizePreservingQuotes(command);
   return tokens.reduce<string[]>((inputs, token, index) => {
     if (token === '-i' && index < tokens.length - 1) {
-      inputs.push(stripWrappingQuotes(tokens[index + 1] ?? '').trim());
+      inputs.push(stripSurroundingQuotes(tokens[index + 1] ?? '').trim());
     }
 
     return inputs;
@@ -102,7 +91,7 @@ export function parseInputArguments(command: string): string[] {
  * 无法识别时返回默认值 `'output.mp4'`。
  */
 export function parseOutputFileName(command: string): string {
-  const tokens = tokenizeRaw(command);
+  const tokens = tokenizePreservingQuotes(command);
   if (tokens.length === 0) return DEFAULT_OUTPUT_FILENAME;
 
   const last = tokens.at(-1)!;
@@ -111,7 +100,7 @@ export function parseOutputFileName(command: string): string {
   // 末尾是 `-i <path>` 说明尚未指定输出文件
   if (prev === '-i') return DEFAULT_OUTPUT_FILENAME;
 
-  const clean = stripWrappingQuotes(last);
+  const clean = stripSurroundingQuotes(last);
   if (!clean || clean.startsWith('-')) return DEFAULT_OUTPUT_FILENAME;
 
   const fileName = getFileName(clean);
@@ -132,7 +121,9 @@ function createInputPlaceholder(
   currentValue: string | undefined,
   index: number,
 ): string {
-  const currentFileName = getFileName(stripWrappingQuotes(currentValue ?? ''));
+  const currentFileName = getFileName(
+    stripSurroundingQuotes(currentValue ?? ''),
+  );
   const extensionMatch = currentFileName.match(/(\.[a-zA-Z0-9]+)$/);
   const baseName = index === 0 ? 'input' : `input${index + 1}`;
 
@@ -146,7 +137,7 @@ export function updateInputArgument(
 ): string {
   if (inputIndex < 0) return command.trim();
 
-  const tokens = tokenizeRaw(command);
+  const tokens = tokenizePreservingQuotes(command);
   const inputFlagIndexes = getInputFlagIndexes(tokens);
   const targetIndex = inputFlagIndexes[inputIndex];
 
@@ -191,7 +182,7 @@ export function updateOutputFileName(
   outputFileName: string,
   outputFolder?: string,
 ): string {
-  const tokens = tokenizeRaw(command);
+  const tokens = tokenizePreservingQuotes(command);
   const nextOutput = quotePath(
     buildOutputPreview(outputFolder ?? '', outputFileName),
   );
@@ -232,7 +223,7 @@ export function updateCommandPaths(
   inputFile?: string | string[],
   outputFolder?: string,
 ): string {
-  const tokens = tokenizeRaw(command);
+  const tokens = tokenizePreservingQuotes(command);
 
   // ── 替换输入路径 ──────────────────────────────────────
   if (inputFile) {
@@ -248,7 +239,11 @@ export function updateCommandPaths(
         index,
         filePath,
       );
-      tokens.splice(0, tokens.length, ...tokenizeRaw(updatedCommand));
+      tokens.splice(
+        0,
+        tokens.length,
+        ...tokenizePreservingQuotes(updatedCommand),
+      );
     });
   }
 

@@ -29,13 +29,20 @@ export const IPC_CHANNELS = [
   'ffmpeg-install-error',
 
   // 文件操作
-  'check-file-exists',
   'open-output-file',
   'open-output-folder',
   'select-input-file',
   'select-output-folder',
   'check-media-probe-status',
   'probe-media',
+
+  // PTY 终端
+  'pty-start',
+  'pty-input',
+  'pty-resize',
+  'pty-kill',
+  'pty-output',
+  'pty-exit',
 
   // 其他
   'fetch-osx-experts-html',
