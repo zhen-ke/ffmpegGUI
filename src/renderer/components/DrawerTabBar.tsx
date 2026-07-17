@@ -10,7 +10,6 @@ export interface DrawerTabBarProps {
   isRunning: boolean;
   isStopping: boolean;
   canStop: boolean;
-  progress: number;
   onStop: () => void;
   onClearLogs: () => void;
   onCopyLogs: () => void;
@@ -32,7 +31,6 @@ export function DrawerTabBar({
   isRunning,
   isStopping,
   canStop,
-  progress,
   onStop,
   onClearLogs,
   onCopyLogs,
@@ -42,8 +40,6 @@ export function DrawerTabBar({
   isAutoScrollEnabled = true,
 }: DrawerTabBarProps) {
   const { t } = useLanguage();
-  const clampedProgress = Math.max(0, Math.min(100, progress));
-  const hasProgress = clampedProgress > 0;
   const autoScrollEnabled = isAutoScrollEnabled;
   const isActivityPane = activePane === 'activity';
   const drawerTitles: Record<DrawerSize, string> = {
@@ -90,23 +86,6 @@ export function DrawerTabBar({
           ))}
         </div>
       </div>
-
-      {/* 运行中：进度条 + 百分比 */}
-      {isRunning && (
-        <div className="flex items-center gap-2 flex-1 min-w-0 mx-2">
-          <div className="flex-1 min-w-0 h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all duration-500 ease-out bg-gradient-to-r from-primary-500 via-primary-400 to-cyan-500 ${
-                hasProgress ? '' : 'animate-pulse'
-              }`}
-              style={{ width: hasProgress ? `${clampedProgress}%` : '25%' }}
-            />
-          </div>
-          <span className="text-[11px] font-semibold text-primary-600 dark:text-primary-400 tabular-nums flex-shrink-0 min-w-[36px] text-right">
-            {hasProgress ? `${clampedProgress.toFixed(1)}%` : t('Running...')}
-          </span>
-        </div>
-      )}
 
       {/* 滚动暂停提示（非运行时） */}
       {!isRunning && !autoScrollEnabled && (
@@ -225,5 +204,3 @@ export function DrawerTabBar({
     </div>
   );
 }
-
-

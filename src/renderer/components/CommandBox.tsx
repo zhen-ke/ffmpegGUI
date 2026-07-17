@@ -1,4 +1,9 @@
-import { RotateCcw, Loader2, Play, Terminal as TerminalIcon } from 'lucide-react';
+import {
+  RotateCcw,
+  Loader2,
+  Play,
+  Terminal as TerminalIcon,
+} from 'lucide-react';
 import { useId, type DragEvent } from 'react';
 import { useLanguage } from '../LanguageContext';
 
@@ -176,7 +181,7 @@ export function CommandBox({
             placeholder ?? t('Enter FFmpeg command or drag & drop files here')
           }
           spellCheck={false}
-          rows={3}
+          rows={8}
           className="w-full px-4 pt-3 pb-2 bg-transparent border-none resize-none font-mono text-sm text-slate-800 dark:text-slate-200 focus:ring-0 leading-relaxed placeholder:text-slate-400 dark:placeholder:text-slate-500 outline-none"
         />
 

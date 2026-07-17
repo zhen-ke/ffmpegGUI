@@ -434,8 +434,8 @@ function Dropdown({
       )}
 
       {isOpen && (
-        <div className="absolute z-50 w-[420px] left-0 mt-1.5 rounded-xl border border-slate-200/50 dark:border-slate-800/50 bg-white/85 dark:bg-slate-900/85 backdrop-blur-md shadow-2xl dark:shadow-black/40 overflow-hidden">
-          <div className="sticky top-0 z-10 border-b border-slate-200/50 dark:border-slate-800/50 bg-transparent px-3.5 py-3 space-y-2.5">
+        <div className="absolute z-50 w-full left-0 mt-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xl dark:shadow-black/40 overflow-hidden animate-scale-in origin-top">
+          <div className="sticky top-0 z-10 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3.5 py-3 space-y-2.5">
             <div className="relative">
               <Search
                 size={14}

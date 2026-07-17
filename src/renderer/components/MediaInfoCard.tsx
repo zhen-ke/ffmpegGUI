@@ -4,7 +4,8 @@
  * 从 Home.tsx 提取，展示 ffprobe 探针结果（格式、时长、大小、码率、流信息）。
  */
 
-import { Loader2 } from 'lucide-react';
+import { ChevronDown, Loader2 } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import type { MediaProbeResult } from '../../shared/mediaProbe';
 import { useLanguage } from '../LanguageContext';
 
@@ -46,8 +47,7 @@ const statCardCls =
   'col-span-12 md:col-span-3 rounded-xl bg-slate-50 dark:bg-slate-800/70 px-3 py-3';
 const streamCardCls =
   'col-span-12 md:col-span-4 rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-3';
-const labelCls =
-  'text-[11px] font-medium text-slate-500 dark:text-slate-400';
+const labelCls = 'text-[11px] font-medium text-slate-500 dark:text-slate-400';
 const valueCls =
   'mt-1 text-sm font-semibold text-slate-700 dark:text-slate-200';
 
@@ -70,9 +70,34 @@ export function MediaInfoCard({
 }: MediaInfoCardProps) {
   const { t } = useLanguage();
 
+  // ── 折叠态：默认收起，首次探测到媒体信息时自动展开一次 ──
+  const [isOpen, setIsOpen] = useState(false);
+  const hasArrivedRef = useRef(false);
+  useEffect(() => {
+    if (mediaInfo && !hasArrivedRef.current) {
+      hasArrivedRef.current = true;
+      setIsOpen(true);
+    }
+    if (!mediaInfo) hasArrivedRef.current = false;
+  }, [mediaInfo]);
+  const toggleOpen = () => setIsOpen((v) => !v);
+
   const primaryVideoStream = mediaInfo?.videoStreams[0] ?? null;
   const primaryAudioStream = mediaInfo?.audioStreams[0] ?? null;
   const primarySubtitleStream = mediaInfo?.subtitleStreams[0] ?? null;
+
+  // 折叠时的一行摘要
+  const collapsedSummary = mediaInfo
+    ? [
+        mediaInfo.formatName,
+        formatDuration(mediaInfo.durationSeconds),
+        primaryVideoStream?.width && primaryVideoStream?.height
+          ? `${primaryVideoStream.width}×${primaryVideoStream.height}`
+          : null,
+      ]
+        .filter(Boolean)
+        .join(' · ')
+    : '';
 
   // 内容区
   let content = (
@@ -97,7 +122,9 @@ export function MediaInfoCard({
         </div>
         <div className={statCardCls}>
           <p className={labelCls}>{t('Duration')}</p>
-          <p className={valueCls}>{formatDuration(mediaInfo.durationSeconds)}</p>
+          <p className={valueCls}>
+            {formatDuration(mediaInfo.durationSeconds)}
+          </p>
         </div>
         <div className={statCardCls}>
           <p className={labelCls}>{t('Size')}</p>
@@ -173,27 +200,58 @@ export function MediaInfoCard({
   }
 
   return (
-    <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-900/40 px-4 py-4 shadow-sm">
-      <div className="flex items-center justify-between gap-3 mb-3">
-        <div className="min-w-0">
-          <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
-            {t('Media Details')}
-          </h2>
-          <p
-            className="text-xs text-slate-500 dark:text-slate-400 truncate"
-            title={primaryInputPath || t('Select a first input file to inspect it here.')}
-          >
-            {primaryInputPath || t('Select a first input file to inspect it here.')}
-          </p>
-        </div>
-        {isLoading && (
-          <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-            <Loader2 size={14} className="animate-spin" />
-            <span>{t('Reading media details...')}</span>
+    <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-900/40 shadow-sm overflow-hidden">
+      <button
+        type="button"
+        onClick={toggleOpen}
+        aria-expanded={isOpen}
+        aria-controls="media-info-content"
+        className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors duration-150"
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          <ChevronDown
+            size={14}
+            className={`flex-shrink-0 text-slate-400 dark:text-slate-500 transition-transform duration-200 motion-reduce:transition-none ${
+              isOpen ? '' : '-rotate-90'
+            }`}
+          />
+          <div className="min-w-0">
+            <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+              {t('Media Details')}
+            </h2>
+            <p
+              className="text-xs text-slate-500 dark:text-slate-400 truncate"
+              title={
+                primaryInputPath ||
+                t('Select a first input file to inspect it here.')
+              }
+            >
+              {primaryInputPath ||
+                t('Select a first input file to inspect it here.')}
+            </p>
           </div>
-        )}
-      </div>
-      {content}
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {!isOpen && collapsedSummary && (
+            <span className="text-[11px] text-slate-500 dark:text-slate-400 truncate max-w-[200px]">
+              {collapsedSummary}
+            </span>
+          )}
+          {isLoading && (
+            <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+              <Loader2 size={14} className="animate-spin" />
+              <span className="hidden sm:inline">
+                {t('Reading media details...')}
+              </span>
+            </div>
+          )}
+        </div>
+      </button>
+      {isOpen && (
+        <div id="media-info-content" className="px-4 pb-4">
+          {content}
+        </div>
+      )}
     </div>
   );
 }

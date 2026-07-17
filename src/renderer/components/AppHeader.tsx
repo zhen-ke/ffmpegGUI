@@ -8,7 +8,8 @@
  * - 加入三步骤工作流引导（Step indicator），新用户友好
  */
 
-import { PlusCircle, Terminal as TerminalIcon, Zap } from 'lucide-react';
+import { PlusCircle, Terminal as TerminalIcon, X, Zap } from 'lucide-react';
+import { useEffect, useRef } from 'react';
 import { useLanguage } from '../LanguageContext';
 import type { WorkspacePane } from './DrawerTabBar';
 
@@ -28,6 +29,12 @@ interface AppHeaderProps {
   hasInputFile: boolean;
   /** 是否处于运行或停止状态（运行中时不显示步骤引导） */
   isRunning: boolean;
+  /** FFmpeg 进度 0-100 */
+  progress: number;
+  /** 是否显示三步骤引导（已关闭或完成后为 false） */
+  showOnboardingGuide: boolean;
+  /** 关闭三步骤引导 */
+  onDismissGuide: () => void;
 }
 
 export function AppHeader({
@@ -43,9 +50,60 @@ export function AppHeader({
   hasCommand,
   hasInputFile,
   isRunning,
+  progress,
+  showOnboardingGuide,
+  onDismissGuide,
 }: AppHeaderProps) {
   const { t } = useLanguage();
   const isMac = window.electron.platform === 'darwin';
+
+  // ── 进度 + ETA（EMA 平滑，避免跳变 / Infinity） ──
+  const rateRef = useRef(0); // % per ms
+  const lastProgressRef = useRef(0);
+  const lastTimeRef = useRef(0);
+  useEffect(() => {
+    if (!isRunning) {
+      rateRef.current = 0;
+      lastProgressRef.current = 0;
+      lastTimeRef.current = 0;
+      return;
+    }
+    const now = performance.now();
+    const prevP = lastProgressRef.current;
+    const prevT = lastTimeRef.current;
+    if (prevT > 0 && progress > prevP) {
+      const dt = now - prevT;
+      const dp = progress - prevP;
+      if (dt > 0) {
+        const inst = dp / dt;
+        rateRef.current =
+          rateRef.current === 0 ? inst : rateRef.current * 0.7 + inst * 0.3;
+      }
+    }
+    lastProgressRef.current = progress;
+    lastTimeRef.current = now;
+  }, [progress, isRunning]);
+
+  const clampedProgress = Math.max(0, Math.min(100, progress));
+  const showEta =
+    isRunning &&
+    clampedProgress > 3 &&
+    rateRef.current > 0 &&
+    Number.isFinite(rateRef.current);
+  let etaLabel: string | null = null;
+  if (showEta) {
+    const remainingMs = (100 - clampedProgress) / rateRef.current;
+    const totalSec = Math.min(
+      99 * 60,
+      Math.max(1, Math.round(remainingMs / 1000)),
+    );
+    const mm = Math.floor(totalSec / 60);
+    const ss = totalSec % 60;
+    etaLabel =
+      language === 'zh'
+        ? `${t('Estimated remaining')} ${mm}分${ss}秒`
+        : `${t('Estimated remaining')} ${mm}m ${ss}s`;
+  }
 
   // ── 步骤引导逻辑 ─────────────────────────────────────────
   // step 1: 选择模板或输入命令
@@ -78,7 +136,7 @@ export function AppHeader({
 
   return (
     <header
-      className={`flex-shrink-0 pb-2.5 border-b border-slate-200/60 dark:border-slate-700/60 shadow-sm z-20 transition-all duration-300 ${
+      className={`flex-shrink-0 pb-1.5 border-b border-slate-200/60 dark:border-slate-700/60 shadow-sm z-20 transition-all duration-300 ${
         isMac
           ? 'pt-6 pl-24 pr-6 bg-white/60 dark:bg-slate-900/40 backdrop-blur-md'
           : 'pt-2 px-4 sm:px-6 bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm'
@@ -136,7 +194,7 @@ export function AppHeader({
       </div>
 
       {/* 状态行 */}
-      <div className="mt-3 flex items-center gap-3 flex-wrap">
+      <div className="mt-2 flex items-center gap-3 flex-wrap">
         {/* 工作流状态 pill */}
         <span
           className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold flex-shrink-0 ${workflowTone}`}
@@ -144,8 +202,28 @@ export function AppHeader({
           {workflowLabel}
         </span>
 
-        {/* 三步骤引导（仅在非运行时且未完成所有步骤时显示） */}
-        {!isRunning && !step2Done && (
+        {/* 运行中：进度条 + ETA */}
+        {isRunning && (
+          <div className="flex items-center gap-2 flex-1 min-w-[140px]">
+            <div className="flex-1 h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-primary-500 to-cyan-500 transition-[width] duration-500 ease-out motion-reduce:transition-none"
+                style={{ width: `${clampedProgress}%` }}
+              />
+            </div>
+            <span className="text-[11px] font-semibold text-primary-600 dark:text-primary-400 tabular-nums flex-shrink-0">
+              {clampedProgress.toFixed(0)}%
+            </span>
+            {etaLabel && (
+              <span className="text-[11px] text-slate-500 dark:text-slate-400 tabular-nums flex-shrink-0 hidden sm:inline">
+                {etaLabel}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* 三步骤引导（可 × 关闭 / 完成后自动隐藏） */}
+        {showOnboardingGuide && !isRunning && !step2Done && (
           <div className="flex items-center gap-1.5 flex-wrap">
             {steps.map((step, index) => (
               <div key={step.key} className="flex items-center gap-1.5">
@@ -178,6 +256,15 @@ export function AppHeader({
                 </span>
               </div>
             ))}
+            <button
+              type="button"
+              onClick={onDismissGuide}
+              aria-label={t("Don't show again")}
+              title={t("Don't show again")}
+              className="ml-1 w-5 h-5 flex items-center justify-center rounded-full text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors duration-150"
+            >
+              <X size={12} strokeWidth={2.5} />
+            </button>
           </div>
         )}
 

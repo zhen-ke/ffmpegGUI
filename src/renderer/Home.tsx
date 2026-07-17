@@ -12,7 +12,7 @@
  * 8. Dropdown 支持清除选中模板，AppHeader 加入三步骤引导
  */
 
-import { Upload } from 'lucide-react';
+import { Loader2, Play, Square, Upload } from 'lucide-react';
 import {
   useCallback,
   useEffect,
@@ -40,10 +40,11 @@ import { AppHeader } from './components/AppHeader';
 import { CommandBox } from './components/CommandBox';
 import { CompletedResultCard } from './components/CompletedResultCard';
 import { ConfirmModal } from './components/ConfirmModal';
-import { DrawerSize, type WorkspacePane } from './components/DrawerTabBar';
+import { type WorkspacePane } from './components/DrawerTabBar';
 import { type TerminalLogType } from './components/FFmpegTerminal';
 import { FileSelector } from './components/FileSelector';
 import { MediaInfoCard } from './components/MediaInfoCard';
+import { PipelineStrip } from './components/PipelineStrip';
 import { WorkspaceDrawer } from './components/WorkspaceDrawer';
 import {
   buildOutputPreview,
@@ -59,8 +60,10 @@ import {
 // 常量
 // ─────────────────────────────────────────────
 
-const LS_DRAWER_KEY = 'ffmpeg-drawer-size-v1';
 const LS_WORKSPACE_PANE_KEY = 'ffmpeg-workspace-pane-v1';
+const LS_ONBOARDING_COMPLETED = 'onboarding-completed-v1';
+const LS_ONBOARDING_DISMISSED = 'onboarding-dismissed-v1';
+const COMPACT_MEDIA_QUERY = '(max-width: 919px)';
 
 // ─────────────────────────────────────────────
 // ConfirmModal 状态类型
@@ -85,7 +88,6 @@ function getIndexedSelectLabel(language: string, index: number): string {
     ? `选择输入 ${index + 1}`
     : `Select Input ${index + 1}`;
 }
-
 
 function getPathDirectory(filePath: string): string {
   const lastSlash = Math.max(
@@ -118,47 +120,29 @@ function Home() {
   const outputControlId = useId();
   const commandControlId = useId();
 
-  // ── 抽屉状态 ──
+  // ── 抽屉高度已迁移至 WorkspaceDrawer（px 单一真相源） ──
+  // ── 响应式：窄屏（<919px）自动堆叠为单列 ──
 
-  const [drawerSize, setDrawerSize] = useState<DrawerSize>(() => {
-    try {
-      return (localStorage.getItem(LS_DRAWER_KEY) as DrawerSize) ?? 'md';
-    } catch {
-      return 'md';
-    }
-  });
-  const userDrawerSizeRef = useRef<DrawerSize>(drawerSize);
-
-  const handleDrawerSizeChange = useCallback((sz: DrawerSize) => {
-    setDrawerSize(sz);
-    userDrawerSizeRef.current = sz;
-    try {
-      localStorage.setItem(LS_DRAWER_KEY, sz);
-    } catch {
-      /* ignore */
-    }
+  const [isCompact, setIsCompact] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia(COMPACT_MEDIA_QUERY);
+    const handler = () => setIsCompact(mq.matches);
+    handler();
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
   }, []);
+
+  const expandDrawerRef = useRef<(() => void) | null>(null);
 
   const handleActivePaneChange = useCallback((pane: WorkspacePane) => {
     setActivePane(pane);
+    // 切 pane / Start 时若抽屉折叠则撑开（复刻原内联副作用，瞬时命令也能弹日志）
+    expandDrawerRef.current?.();
     try {
       localStorage.setItem(LS_WORKSPACE_PANE_KEY, pane);
     } catch {
       /* ignore */
     }
-    setDrawerSize((prev) => (prev === 'sm' ? 'md' : prev));
-  }, []);
-
-  const handleToggleDrawer = useCallback(() => {
-    setDrawerSize((prev) => {
-      if (prev === 'sm') {
-        const restore =
-          userDrawerSizeRef.current === 'sm' ? 'md' : userDrawerSizeRef.current;
-        return restore;
-      }
-      userDrawerSizeRef.current = prev;
-      return 'sm';
-    });
   }, []);
 
   // ── 统一 ConfirmModal 状态（替代所有 window.confirm）──
@@ -260,12 +244,51 @@ function Home() {
     isRunning,
     isStopping,
     lastCompletedOutputFile,
-    lastStartedCommand,
     status,
     progress,
     handleStart,
     handleStop,
   } = useFFmpegState();
+
+  // ── 完成结果横幅：可关闭 ──
+  const [showCompletedResult, setShowCompletedResult] = useState(false);
+  useEffect(() => {
+    if (status === 'done' && lastCompletedOutputFile) {
+      setShowCompletedResult(true);
+    } else if (status !== 'done') {
+      setShowCompletedResult(false);
+    }
+  }, [status, lastCompletedOutputFile]);
+
+  // ── 三步骤引导：可 × 关闭 / 首次完成后自动隐藏 ──
+  const [guideDismissed, setGuideDismissed] = useState(() => {
+    try {
+      return (
+        localStorage.getItem(LS_ONBOARDING_DISMISSED) === '1' ||
+        localStorage.getItem(LS_ONBOARDING_COMPLETED) === '1'
+      );
+    } catch {
+      return false;
+    }
+  });
+  const dismissGuide = useCallback(() => {
+    setGuideDismissed(true);
+    try {
+      localStorage.setItem(LS_ONBOARDING_DISMISSED, '1');
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  useEffect(() => {
+    if (status === 'done') {
+      try {
+        localStorage.setItem(LS_ONBOARDING_COMPLETED, '1');
+      } catch {
+        /* ignore */
+      }
+      setGuideDismissed(true);
+    }
+  }, [status]);
 
   // ── Refs for stale-closure safety ──
 
@@ -274,26 +297,15 @@ function Home() {
   const commandRef = useRef(command);
   const selectedTemplateIdRef = useRef<string | null>(selectedTemplateId);
   // lastAppliedCommand: 用 state 而非 ref，确保模板注入后 isCommandDirty 正确触发重算
-  const [lastAppliedCommand, setLastAppliedCommand] = useState<string | null>(null);
+  const [lastAppliedCommand, setLastAppliedCommand] = useState<string | null>(
+    null,
+  );
   inputFilesRef.current = inputFiles;
   outputFolderRef.current = outputFolder;
   commandRef.current = command;
   selectedTemplateIdRef.current = selectedTemplateId;
 
-  // ── 运行时自动切换抽屉尺寸 ──
-
-  const prevIsRunningRef = useRef(false);
-  useEffect(() => {
-    const wasRunning = prevIsRunningRef.current;
-    prevIsRunningRef.current = isRunning;
-
-    if (!wasRunning && isRunning) {
-      userDrawerSizeRef.current = drawerSize;
-      setDrawerSize('lg');
-    } else if (wasRunning && !isRunning) {
-      setDrawerSize(userDrawerSizeRef.current);
-    }
-  }, [isRunning, drawerSize]);
+  // ── 运行时自动展开/恢复抽屉已迁移至 WorkspaceDrawer ──
 
   // ── 文件变化 → 更新命令路径 ──
 
@@ -394,7 +406,6 @@ function Home() {
     () => buildOutputPreview(outputFolder, outputFileName),
     [outputFolder, outputFileName],
   );
-
 
   const inputSlots = useMemo(
     () =>
@@ -511,7 +522,12 @@ function Home() {
 
   // ── 媒体探针（已提取到 useMediaProbe hook）──
 
-  const { mediaInfo, isMediaInfoLoading, hasMediaInfoError, isMediaProbeAvailable } = useMediaProbe({
+  const {
+    mediaInfo,
+    isMediaInfoLoading,
+    hasMediaInfoError,
+    isMediaProbeAvailable,
+  } = useMediaProbe({
     primaryInputPath,
   });
 
@@ -578,8 +594,7 @@ function Home() {
   const completedOutputFolder = lastCompletedOutputFile
     ? getPathDirectory(lastCompletedOutputFile)
     : '';
-  const showCompletedResult =
-    status === 'done' && !!lastCompletedOutputFile;
+  // （showCompletedResult 已转为 state）
 
   const toggleLanguage = useCallback(() => {
     setLanguage(language === 'en' ? 'zh' : 'en');
@@ -711,116 +726,90 @@ function Home() {
         hasCommand={hasCommand}
         hasInputFile={!!inputFiles[0]}
         isRunning={isRunning}
+        progress={progress}
+        showOnboardingGuide={!guideDismissed}
+        onDismissGuide={dismissGuide}
       />
 
-      {/* ══ 主内容区 ══ */}
+      {/* ══ 主内容区（两栏 IDE 式：<919px 自动堆叠）══ */}
       <div
-        className={`flex-1 min-h-0 overflow-y-auto backdrop-blur-sm ${
-          isMac ? 'bg-transparent' : 'bg-white/80 dark:bg-slate-800/80'
-        }`}
+        className={`flex-1 min-h-0 flex backdrop-blur-sm ${
+          isCompact ? 'flex-col overflow-y-auto' : 'flex-row'
+        } ${isMac ? 'bg-transparent' : 'bg-white/80 dark:bg-slate-800/80'}`}
       >
-        <div className="max-w-7xl mx-auto w-full px-6 py-4 space-y-4">
-          <div className="grid grid-cols-12 gap-3 items-end">
-            <div
-              className={`${inputSlotCount === 1 ? 'col-span-4' : 'col-span-6'} min-w-0`}
+        {/* ── 左栏：Setup（模板 / 输入 / 输出 / 开始）── */}
+        <aside
+          className={`${
+            isCompact
+              ? 'w-full'
+              : 'w-[300px] flex-shrink-0 overflow-y-auto border-r border-slate-200/60 dark:border-slate-700/60'
+          } px-4 py-4 space-y-3 ${
+            isMac ? 'bg-white/50 dark:bg-slate-900/40' : ''
+          }`}
+        >
+          {/* ① 模板 */}
+          <div className="min-w-0">
+            <label
+              htmlFor={templateControlId}
+              className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5"
             >
-              <label
-                htmlFor={templateControlId}
-                className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5"
-              >
-                {t('Template')}
-              </label>
-              <Dropdown
-                id={templateControlId}
-                options={templateOptions}
-                onChange={handleTemplateSelectWithConfirm}
-                value={selectedTemplate}
-                placeholder={t('Select a template')}
-                onEdit={handleEditTemplate}
-                onDelete={handleDeleteTemplateWithConfirm}
-                onClear={handleTemplateClear}
-              />
-            </div>
-            {inputSlotCount === 1 && (
-              <div className="col-span-4 min-w-0">
-                <label
-                  htmlFor={inputSlots[0].id}
-                  className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5"
-                >
-                  {inputSlots[0].fieldLabel}
-                </label>
-                <FileSelector
-                  id={inputSlots[0].id}
-                  type="input"
-                  value={inputSlots[0].selectedValue}
-                  onSelect={() => handleSelectInputAtIndex(0)}
-                  onClear={() => handleClearInputAtIndex(0)}
-                  onDrop={(path) => handleDropInputAtIndex(path, 0)}
-                  label={inputSlots[0].label}
-                />
-              </div>
-            )}
-            <div
-              className={`${inputSlotCount === 1 ? 'col-span-4' : 'col-span-6'} min-w-0`}
-            >
-              <label
-                htmlFor={outputControlId}
-                className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5"
-              >
-                {t('Output Folder')}
-              </label>
-              <FileSelector
-                id={outputControlId}
-                type="output"
-                value={outputFolder}
-                onSelect={handleSelectOutputFolder}
-                onClear={clearOutputFolder}
-                onDrop={handleOutputFolderDrop}
-                label={t('Select Output Folder')}
-              />
-            </div>
+              {t('Template')}
+            </label>
+            <Dropdown
+              id={templateControlId}
+              options={templateOptions}
+              onChange={handleTemplateSelectWithConfirm}
+              value={selectedTemplate}
+              placeholder={t('Select a template')}
+              onEdit={handleEditTemplate}
+              onDelete={handleDeleteTemplateWithConfirm}
+              onClear={handleTemplateClear}
+            />
           </div>
 
-          {inputSlotCount > 1 && (
-            <div className="grid grid-cols-12 gap-3 items-end">
-              {inputSlots.map((slot) => (
-                <div
-                  key={slot.id}
-                  className={`min-w-0 ${
-                    inputSlotCount === 2 ? 'col-span-6' : 'col-span-4'
-                  }`}
-                >
-                  <label
-                    htmlFor={slot.id}
-                    className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5"
-                  >
-                    {slot.fieldLabel}
-                  </label>
-                  <FileSelector
-                    id={slot.id}
-                    type="input"
-                    value={slot.selectedValue}
-                    onSelect={() => handleSelectInputAtIndex(slot.index)}
-                    onClear={() => handleClearInputAtIndex(slot.index)}
-                    onDrop={(path) => handleDropInputAtIndex(path, slot.index)}
-                    label={slot.label}
-                  />
-                </div>
-              ))}
+          {/* ② 输入文件（可多，纵向堆叠） */}
+          {inputSlots.map((slot) => (
+            <div key={slot.id} className="min-w-0">
+              <label
+                htmlFor={slot.id}
+                className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5"
+              >
+                {slot.fieldLabel}
+              </label>
+              <FileSelector
+                id={slot.id}
+                type="input"
+                value={slot.selectedValue}
+                onSelect={() => handleSelectInputAtIndex(slot.index)}
+                onClear={() => handleClearInputAtIndex(slot.index)}
+                onDrop={(path) => handleDropInputAtIndex(path, slot.index)}
+                label={slot.label}
+              />
             </div>
-          )}
+          ))}
 
-          {isMediaProbeAvailable === true && primaryInputPath && (
-            <MediaInfoCard
-              mediaInfo={mediaInfo}
-              isLoading={isMediaInfoLoading}
-              hasError={hasMediaInfoError}
-              primaryInputPath={primaryInputPath}
+          {/* ③ 输出文件夹 */}
+          <div className="min-w-0">
+            <label
+              htmlFor={outputControlId}
+              className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5"
+            >
+              {t('Output Folder')}
+            </label>
+            <FileSelector
+              id={outputControlId}
+              type="output"
+              value={outputFolder}
+              onSelect={handleSelectOutputFolder}
+              onClear={clearOutputFolder}
+              onDrop={handleOutputFolderDrop}
+              label={t('Select Output Folder')}
             />
-          )}
+          </div>
 
-          <div className="grid grid-cols-12 gap-3 items-end">
-            <div className="col-span-5 min-w-0">
+          {/* ④ 输出名 + 最终路径 */}
+          <div className="min-w-0 space-y-3">
+            <div>
               <label
                 htmlFor={`${outputControlId}-name`}
                 className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5"
@@ -838,7 +827,7 @@ function Home() {
                 className="w-full h-10 px-3 rounded-xl border-2 border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
               />
             </div>
-            <div className="col-span-7 min-w-0">
+            <div>
               <p className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5">
                 {t('Final Output Path')}
               </p>
@@ -853,18 +842,50 @@ function Home() {
             </div>
           </div>
 
-          {showCompletedResult && (
-            <CompletedResultCard
-              lastCompletedOutputFile={lastCompletedOutputFile}
-              completedOutputFolder={completedOutputFolder}
-              canStart={canStart}
-              currentCommand={currentCommand}
-              onOpenFile={handleOpenCompletedFile}
-              onOpenFolder={handleOpenCompletedFolder}
-              onRunAgain={onStart}
-            />
-          )}
+          {/* ⑤ 主操作按钮：Start / Stop */}
+          <div className="pt-1">
+            {(() => {
+              let tone =
+                'bg-slate-100 dark:bg-slate-700/50 text-slate-400 dark:text-slate-500 cursor-not-allowed';
+              let icon = <Play size={14} className="fill-current" />;
+              let label = t('Start');
+              let disabled = !canStart || !hasCommand;
+              if (isRunning) {
+                tone =
+                  'bg-white dark:bg-slate-700 border border-red-200 dark:border-red-800/50 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 active:scale-[0.98]';
+                icon = isStopping ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : (
+                  <Square size={14} className="fill-current" />
+                );
+                label = isStopping ? t('Stopping...') : t('Stop');
+                disabled = !canStop;
+              } else if (canStart && hasCommand) {
+                tone =
+                  'bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 text-white shadow-md shadow-primary-500/25 hover:shadow-lg hover:shadow-primary-500/30 hover:-translate-y-0.5 active:translate-y-0';
+              }
+              return (
+                <button
+                  type="button"
+                  onClick={isRunning ? onStop : onStart}
+                  disabled={disabled}
+                  aria-label={isRunning ? t('Stop') : t('Start')}
+                  className={`w-full flex items-center justify-center gap-2 h-11 rounded-xl text-sm font-semibold transition-[transform,box-shadow,background-color,color] duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-800 ${tone}`}
+                >
+                  {icon}
+                  <span>{label}</span>
+                </button>
+              );
+            })()}
+          </div>
+        </aside>
 
+        {/* ── 右栏：命令主区（hero）── */}
+        <main
+          className={`flex-1 min-w-0 px-4 py-4 space-y-4 ${
+            isCompact ? '' : 'overflow-y-auto'
+          }`}
+        >
           <CommandBox
             id={commandControlId}
             canStart={canStart && command.trim().length > 0}
@@ -882,25 +903,51 @@ function Home() {
             commandSource={commandSource}
             onReset={handleResetToTemplate}
           />
-        </div>
+
+          <PipelineStrip
+            inputFiles={inputFiles}
+            command={command}
+            finalOutputPath={finalOutputPath}
+            templateName={selectedTemplate?.name}
+          />
+
+          {isMediaProbeAvailable === true && primaryInputPath && (
+            <MediaInfoCard
+              mediaInfo={mediaInfo}
+              isLoading={isMediaInfoLoading}
+              hasError={hasMediaInfoError}
+              primaryInputPath={primaryInputPath}
+            />
+          )}
+
+          {showCompletedResult && (
+            <CompletedResultCard
+              lastCompletedOutputFile={lastCompletedOutputFile}
+              completedOutputFolder={completedOutputFolder}
+              canStart={canStart}
+              currentCommand={currentCommand}
+              onOpenFile={handleOpenCompletedFile}
+              onOpenFolder={handleOpenCompletedFolder}
+              onRunAgain={onStart}
+              onDismiss={() => setShowCompletedResult(false)}
+            />
+          )}
+        </main>
       </div>
 
       {/* ══ 抽屉 ══ */}
       <WorkspaceDrawer
         activePane={activePane}
         onActivePaneChange={handleActivePaneChange}
-        drawerSize={drawerSize}
-        onDrawerSizeChange={handleDrawerSizeChange}
-        onToggleDrawer={handleToggleDrawer}
         canStop={canStop}
         isRunning={isRunning}
         isStopping={isStopping}
-        progress={progress}
         onStop={onStop}
         onCopyLogs={handleCopyLogs}
         xtermClearRef={xtermClearRef}
         xtermCopyRef={xtermCopyRef}
         xtermWriteLogRef={xtermWriteLogRef}
+        onExpandRef={expandDrawerRef}
         t={t}
       />
 

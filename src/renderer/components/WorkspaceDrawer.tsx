@@ -1,38 +1,36 @@
 /**
  * WorkspaceDrawer — 底部抽屉区域
  *
- * 从 Home.tsx 拆分出来，负责 DrawerTabBar + 内容面板（FFmpegTerminal / Terminal / 折叠占位）。
+ * v2：抽屉高度所有权收归于此（px 单一真相源），drawerSize 退化为派生高亮态。
+ * - 拖拽 resize 手柄（只缩放内容区，标签栏常驻）
+ * - 运行时自动展开到 lg、结束后恢复
+ * - 切 pane 时若折叠则展开
+ * - toggle / sm·md·lg 三档按钮映射到目标 px
  */
 
 import { Play, Terminal as TerminalIcon } from 'lucide-react';
+import type React from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MutableRefObject } from 'react';
-import {
-  DrawerSize,
-  DrawerTabBar,
-  type WorkspacePane,
-} from './DrawerTabBar';
-import {
-  FFmpegTerminal,
-  type TerminalLogType,
-} from './FFmpegTerminal';
+import { DrawerSize, DrawerTabBar, type WorkspacePane } from './DrawerTabBar';
+import { FFmpegTerminal, type TerminalLogType } from './FFmpegTerminal';
 import Terminal from './Terminal/Terminal';
 
-const DRAWER_HEIGHT: Record<DrawerSize, number> = {
-  sm: 0,
-  md: 260,
-  lg: 470,
-};
+const PX_TARGETS: Record<DrawerSize, number> = { sm: 0, md: 260, lg: 470 };
+const LS_PX_KEY = 'ffmpeg-drawer-px-v1';
+
+function deriveDrawerSize(px: number): DrawerSize {
+  if (px <= 0) return 'sm';
+  if (px >= PX_TARGETS.lg) return 'lg';
+  return 'md';
+}
 
 interface WorkspaceDrawerProps {
   activePane: WorkspacePane;
   onActivePaneChange: (pane: WorkspacePane) => void;
-  drawerSize: DrawerSize;
-  onDrawerSizeChange: (s: DrawerSize) => void;
-  onToggleDrawer?: () => void;
   canStop: boolean;
   isRunning: boolean;
   isStopping: boolean;
-  progress: number;
   onStop: () => void;
   onCopyLogs: () => void;
   xtermClearRef: MutableRefObject<(() => void) | null>;
@@ -40,26 +38,129 @@ interface WorkspaceDrawerProps {
   xtermWriteLogRef: MutableRefObject<
     ((type: TerminalLogType, message: string) => void) | null
   >;
+  /** 父级调用可展开抽屉（若折叠）——Start / 切 pane 时自动弹出日志 */
+  onExpandRef: MutableRefObject<(() => void) | null>;
   t: (key: string) => string;
 }
 
 export function WorkspaceDrawer({
   activePane,
   onActivePaneChange,
-  drawerSize,
-  onDrawerSizeChange,
-  onToggleDrawer,
   canStop,
   isRunning,
   isStopping,
-  progress,
   onStop,
   onCopyLogs,
   xtermClearRef,
   xtermCopyRef,
   xtermWriteLogRef,
+  onExpandRef,
   t,
 }: WorkspaceDrawerProps) {
+  // ── 抽屉高度（px 单一真相源）──
+  const [drawerHeightPx, setDrawerHeightPx] = useState<number>(() => {
+    try {
+      const saved = Number(localStorage.getItem(LS_PX_KEY));
+      return Number.isFinite(saved) && saved >= 0 ? saved : PX_TARGETS.md;
+    } catch {
+      return PX_TARGETS.md;
+    }
+  });
+  const lastNonZeroRef = useRef<number>(drawerHeightPx || PX_TARGETS.md);
+  const preRunHeightRef = useRef<number>(drawerHeightPx);
+  const heightRef = useRef<number>(drawerHeightPx);
+  heightRef.current = drawerHeightPx;
+
+  // 派生高亮态（仅用于三档按钮的选中视觉）
+  const drawerSize = deriveDrawerSize(drawerHeightPx);
+
+  const persist = useCallback((px: number) => {
+    try {
+      localStorage.setItem(LS_PX_KEY, String(px));
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const setSizeTarget = useCallback(
+    (sz: DrawerSize) => {
+      const px = PX_TARGETS[sz];
+      setDrawerHeightPx(px);
+      if (px > 0) lastNonZeroRef.current = px;
+      persist(px);
+    },
+    [persist],
+  );
+
+  const toggleDrawer = useCallback(() => {
+    setDrawerHeightPx((prev) => {
+      if (prev > 0) {
+        lastNonZeroRef.current = prev;
+        persist(0);
+        return 0;
+      }
+      const restore = lastNonZeroRef.current || PX_TARGETS.md;
+      persist(restore);
+      return restore;
+    });
+  }, [persist]);
+
+  // 暴露 imperative expand：父级在 Start / 切 pane 时调用，若折叠则展开。
+  // 同步调用、不依赖 effect，避免瞬时命令（如 -version）isRunning 未稳定时抽屉不弹。
+  useEffect(() => {
+    onExpandRef.current = () => {
+      setDrawerHeightPx((prev) =>
+        prev > 0 ? prev : lastNonZeroRef.current || PX_TARGETS.md,
+      );
+    };
+    return () => {
+      onExpandRef.current = null;
+    };
+  }, [onExpandRef]);
+
+  // 运行时自动展开到 lg，结束后恢复
+  const prevIsRunningRef = useRef(false);
+  useEffect(() => {
+    const wasRunning = prevIsRunningRef.current;
+    prevIsRunningRef.current = isRunning;
+    if (!wasRunning && isRunning) {
+      preRunHeightRef.current = heightRef.current;
+      setDrawerHeightPx(PX_TARGETS.lg);
+    } else if (wasRunning && !isRunning) {
+      setDrawerHeightPx(preRunHeightRef.current);
+    }
+  }, [isRunning]);
+
+  // ── 拖拽 resize ──
+  const onHandlePointerDown = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      const startY = e.clientY;
+      const startH = heightRef.current;
+      const maxH = window.innerHeight * 0.7;
+      const onMove = (ev: PointerEvent) => {
+        // 向上拖 → 增高
+        const next = Math.max(
+          0,
+          Math.min(maxH, startH + (startY - ev.clientY)),
+        );
+        setDrawerHeightPx(Math.round(next));
+      };
+      const onUp = () => {
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', onUp);
+        setDrawerHeightPx((h) => {
+          persist(h);
+          if (h > 0) lastNonZeroRef.current = h;
+          return h;
+        });
+      };
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp);
+    },
+    [persist],
+  );
+
   return (
     <div className="flex-shrink-0 flex flex-col">
       <DrawerTabBar
@@ -68,18 +169,30 @@ export function WorkspaceDrawer({
         canStop={canStop}
         isRunning={isRunning}
         isStopping={isStopping}
-        progress={progress}
         onStop={onStop}
         onClearLogs={() => xtermClearRef.current?.()}
         onCopyLogs={onCopyLogs}
         drawerSize={drawerSize}
-        onDrawerSizeChange={onDrawerSizeChange}
-        onToggleDrawer={onToggleDrawer}
+        onDrawerSizeChange={setSizeTarget}
+        onToggleDrawer={toggleDrawer}
+      />
+
+      {/* 拖拽 resize 手柄（只缩放内容区，标签栏常驻） */}
+      <div
+        role="separator"
+        aria-orientation="horizontal"
+        aria-label={t('Toggle drawer')}
+        aria-valuenow={Math.round(drawerHeightPx)}
+        aria-valuemin={0}
+        aria-valuemax={Math.round(window.innerHeight * 0.7)}
+        onPointerDown={onHandlePointerDown}
+        onDoubleClick={() => setSizeTarget(drawerSize === 'sm' ? 'md' : 'sm')}
+        className="h-1.5 -mt-0.5 cursor-row-resize bg-transparent hover:bg-primary-500/40 active:bg-primary-500/60 transition-colors duration-150 flex-shrink-0"
       />
 
       <div
         style={{
-          height: DRAWER_HEIGHT[drawerSize],
+          height: drawerHeightPx,
           transition: 'height 0.28s cubic-bezier(0.4, 0, 0.2, 1)',
           overflow: 'hidden',
         }}
