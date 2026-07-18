@@ -16,7 +16,7 @@ checkNodeEnv('production');
 deleteSourceMaps();
 
 const configuration: webpack.Configuration = {
-  devtool: 'source-map',
+  devtool: false,
 
   mode: 'production',
 
@@ -39,6 +39,22 @@ const configuration: webpack.Configuration = {
     minimizer: [
       new TerserPlugin({
         parallel: true,
+        terserOptions: {
+          compress: {
+            drop_console: true,
+            drop_debugger: true,
+            pure_funcs: ['console.info', 'console.debug', 'console.warn'],
+            passes: 2,
+          },
+          mangle: {
+            safari10: true,
+          },
+          output: {
+            comments: false,
+            ascii_only: true,
+          },
+        },
+        extractComments: false,
       }),
     ],
   },

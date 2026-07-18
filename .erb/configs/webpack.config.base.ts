@@ -12,6 +12,17 @@ const configuration: webpack.Configuration = {
 
   stats: 'errors-only',
 
+  // CI 环境（如 GitHub Actions）每次都是全新虚拟机，filesystem cache 会被丢弃。
+  // 仅在本地开发时启用，避免 CI 上产生无效 I/O。
+  cache: process.env.CI
+    ? false
+    : {
+        type: 'filesystem',
+        buildDependencies: {
+          config: [__filename],
+        },
+      },
+
   module: {
     rules: [
       {

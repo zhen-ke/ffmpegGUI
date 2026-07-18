@@ -31,7 +31,17 @@ const configuration: webpack.Configuration = {
   module: require('./webpack.config.renderer.dev').default.module,
 
   entry: {
-    renderer: Object.keys(dependencies || {}),
+    renderer: [
+      'react',
+      'react-dom',
+      'react-router-dom',
+      'lucide-react',
+      '@xterm/addon-fit',
+      '@xterm/addon-web-links',
+      'xterm',
+      'axios',
+      'uuid',
+    ],
   },
 
   output: {

@@ -84,14 +84,7 @@ const configuration: webpack.Configuration = {
           'style-loader',
           'css-loader',
           'sass-loader',
-          {
-            loader: 'postcss-loader',
-            options: {
-              postcssOptions: {
-                plugins: [require('tailwindcss'), require('autoprefixer')],
-              },
-            },
-          },
+          'postcss-loader',
         ],
         exclude: /\.module\.s?(c|a)ss$/,
       },
@@ -113,15 +106,18 @@ const configuration: webpack.Configuration = {
             loader: '@svgr/webpack',
             options: {
               prettier: false,
-              svgo: false,
+              svgo: true,
               svgoConfig: {
-                plugins: [{ removeViewBox: false }],
+                plugins: [
+                  { name: 'removeViewBox', active: false },
+                  { name: 'cleanupIDs', active: true },
+                  { name: 'removeDimensions', active: true },
+                ],
               },
               titleProp: true,
               ref: true,
             },
           },
-          'file-loader',
         ],
       },
     ],

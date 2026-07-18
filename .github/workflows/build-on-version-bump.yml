@@ -14,6 +14,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # ─────────────────────────────────────────────────────────────
+  # Job 1: 检测版本号是否变动
+  # ─────────────────────────────────────────────────────────────
   detect-version-bump:
     name: Detect Version Bump
     runs-on: ubuntu-latest
@@ -66,9 +69,48 @@ jobs:
           echo "previous_version=$previous_version"
           echo "changed=$changed"
 
-  build-and-package:
-    name: Build (${{ matrix.target_id }})
+  # ─────────────────────────────────────────────────────────────
+  # Job 2: 构建 Webpack 产物（只跑一次，结果共享给 4 个平台 job）
+  # webpack 编译产物（JS/CSS）与平台无关，没必要在每台 runner 上各跑一遍。
+  # ─────────────────────────────────────────────────────────────
+  build-webpack:
+    name: Build Webpack Assets
     needs: detect-version-bump
+    if: needs.detect-version-bump.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Sync release/app version
+        run: npm run sync:version
+
+      # --ignore-scripts 跳过 postinstall 中的 build:dll（CI 生产构建不需要开发环境 DLL）
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Build webpack (main + renderer)
+        run: npm run build
+
+      # 将平台无关的 dist 产物上传，供各平台 job 复用
+      - name: Upload webpack dist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: webpack-dist
+          path: release/app/dist
+          retention-days: 1
+
+  # ─────────────────────────────────────────────────────────────
+  # Job 3: 各平台打包（下载 webpack 产物，只跑 electron-builder）
+  # ─────────────────────────────────────────────────────────────
+  build-and-package:
+    name: Package (${{ matrix.target_id }})
+    needs: [detect-version-bump, build-webpack]
     if: needs.detect-version-bump.outputs.changed == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
@@ -104,18 +146,31 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
 
       - name: Sync release/app version
         run: npm run sync:version
 
-      - name: Install dependencies
-        run: npm ci
+      # --ignore-scripts 跳过 build:dll（CI 生产构建不需要开发环境 DLL）
+      - name: Install root dependencies
+        run: npm ci --ignore-scripts
 
-      - name: Build project assets
-        run: npm run build
+      # 为当前平台下载 Electron 原生模块（node-pty 预编译二进制）
+      - name: Install Electron native deps
+        run: npx electron-builder install-app-deps
 
-      - name: Build unpacked app
+      # symlink 不走 cache，每次重建（link-modules.ts 本身执行极快）
+      - name: Link src/node_modules → release/app/node_modules
+        run: node -r ts-node/register ./.erb/scripts/link-modules.ts
+
+      # 下载 build-webpack job 生成的平台无关产物，放到 electron-builder 期望的位置
+      - name: Download webpack dist
+        uses: actions/download-artifact@v4
+        with:
+          name: webpack-dist
+          path: release/app/dist
+
+      # 只跑 electron-builder 打包，不再执行 webpack
+      - name: Package app with electron-builder
         shell: bash
         run: |
           set -euo pipefail
@@ -185,6 +240,9 @@ jobs:
           path: release/artifacts/FFmpegGUI-v${{ needs.detect-version-bump.outputs.version }}-${{ matrix.target_id }}.zip
           if-no-files-found: error
 
+  # ─────────────────────────────────────────────────────────────
+  # Job 4: 发布 GitHub Release（与原来相同）
+  # ─────────────────────────────────────────────────────────────
   publish-release:
     name: Publish GitHub Release
     needs: [detect-version-bump, build-and-package]
@@ -212,7 +270,7 @@ jobs:
           tag="v${version}"
           title="v${version}"
 
-          if gh release view "$tag" >/dev/null 2>&1; then
+          if gh release view "$tag" > /dev/null 2>&1; then
             echo "Release $tag already exists. Regenerating notes..."
             notes="$(gh api "repos/${{ github.repository }}/releases/generate-notes" \
               -f tag_name="$tag" \

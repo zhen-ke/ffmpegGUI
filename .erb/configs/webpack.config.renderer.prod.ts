@@ -19,7 +19,7 @@ checkNodeEnv('production');
 deleteSourceMaps();
 
 const configuration: webpack.Configuration = {
-  devtool: 'source-map',
+  devtool: false,
 
   mode: 'production',
 
@@ -30,7 +30,8 @@ const configuration: webpack.Configuration = {
   output: {
     path: webpackPaths.distRendererPath,
     publicPath: './',
-    filename: 'renderer.js',
+    filename: '[name].[contenthash:8].js',
+    chunkFilename: '[name].[contenthash:8].chunk.js',
     library: {
       type: 'umd',
     },
@@ -60,14 +61,7 @@ const configuration: webpack.Configuration = {
           MiniCssExtractPlugin.loader,
           'css-loader',
           'sass-loader',
-          {
-            loader: 'postcss-loader',
-            options: {
-              postcssOptions: {
-                plugins: [require('tailwindcss'), require('autoprefixer')],
-              },
-            },
-          },
+          'postcss-loader',
         ],
         exclude: /\.module\.s?(c|a)ss$/,
       },
@@ -89,15 +83,18 @@ const configuration: webpack.Configuration = {
             loader: '@svgr/webpack',
             options: {
               prettier: false,
-              svgo: false,
+              svgo: true,
               svgoConfig: {
-                plugins: [{ removeViewBox: false }],
+                plugins: [
+                  { name: 'removeViewBox', active: false },
+                  { name: 'cleanupIDs', active: true },
+                  { name: 'removeDimensions', active: true },
+                ],
               },
               titleProp: true,
               ref: true,
             },
           },
-          'file-loader',
         ],
       },
     ],
@@ -105,7 +102,52 @@ const configuration: webpack.Configuration = {
 
   optimization: {
     minimize: true,
-    minimizer: [new TerserPlugin(), new CssMinimizerPlugin()],
+    minimizer: [
+      new TerserPlugin({
+        parallel: true,
+        terserOptions: {
+          compress: {
+            drop_console: true,
+            drop_debugger: true,
+            pure_funcs: ['console.info', 'console.debug', 'console.warn'],
+            passes: 2,
+          },
+          mangle: {
+            safari10: true,
+          },
+          output: {
+            comments: false,
+            ascii_only: true,
+          },
+        },
+        extractComments: false,
+      }),
+      new CssMinimizerPlugin(),
+    ],
+    splitChunks: {
+      chunks: 'all',
+      cacheGroups: {
+        react: {
+          test: /[\\/]node_modules[\\/](react|react-dom|react-router-dom)[\\/]/,
+          name: 'react-vendor',
+          chunks: 'all',
+          priority: 20,
+        },
+        xterm: {
+          test: /[\\/]node_modules[\\/](@xterm|xterm)[\\/]/,
+          name: 'xterm-vendor',
+          chunks: 'all',
+          priority: 15,
+        },
+        vendor: {
+          test: /[\\/]node_modules[\\/]/,
+          name: 'vendors',
+          chunks: 'all',
+          priority: 10,
+        },
+      },
+    },
+    runtimeChunk: 'single',
   },
 
   plugins: [
