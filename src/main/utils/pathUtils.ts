@@ -158,6 +158,17 @@ function probeFfmpeg(command: string): Promise<boolean> {
   });
 }
 
+/** 路径探测结果缓存：undefined = 还未探测，null = 确认不存在，string = 已确认路径 */
+let _cachedFfmpegPath: string | null | undefined = undefined;
+
+/**
+ * 使 resolveFfmpegPath 缓存失效。
+ * 在下载/更新 FFmpeg 二进制后调用，确保下次解析时重新探测。
+ */
+export function invalidateFfmpegPathCache(): void {
+  _cachedFfmpegPath = undefined;
+}
+
 /**
  * 解析当前可用的 FFmpeg 路径。
  *
@@ -165,13 +176,26 @@ function probeFfmpeg(command: string): Promise<boolean> {
  * 1. 当前版本下载到 cache 的 FFmpeg
  * 2. 旧版本遗留在 userData 的 FFmpeg
  * 3. 系统已安装的 FFmpeg（PATH 与常见安装目录）
+ *
+ * 结果会被缓存；当缓存路径不再可执行时自动失效并重新探测。
  */
 export async function resolveFfmpegPath(): Promise<string | null> {
+  // 快路径：验证缓存路径仍可用
+  if (typeof _cachedFfmpegPath === 'string') {
+    if (await canExecute(_cachedFfmpegPath)) {
+      return _cachedFfmpegPath;
+    }
+    // 缓存失效（如重新下载替换了二进制），重新探测
+    _cachedFfmpegPath = undefined;
+  }
+
+  // 首次探测或缓存失效后重新探测
   const absoluteCandidates = [getFfmpegPath(), getLegacyFfmpegPath()];
 
   for (const candidate of absoluteCandidates) {
     if (await canExecute(candidate)) {
-      return candidate;
+      _cachedFfmpegPath = candidate;
+      return _cachedFfmpegPath;
     }
   }
 
@@ -184,10 +208,12 @@ export async function resolveFfmpegPath(): Promise<string | null> {
     const isAbsolute = path.isAbsolute(candidate);
     if (isAbsolute && !(await canExecute(candidate))) continue;
     if (await probeFfmpeg(candidate)) {
-      return candidate;
+      _cachedFfmpegPath = candidate;
+      return _cachedFfmpegPath;
     }
   }
 
+  _cachedFfmpegPath = null;
   return null;
 }
 

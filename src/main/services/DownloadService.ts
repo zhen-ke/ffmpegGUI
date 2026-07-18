@@ -9,7 +9,7 @@ import path from 'path';
 import { extractArchive } from '../utils/extractionUtils';
 import { downloadFile, ensureDir, moveFile, removeDir } from '../utils/fileUtils';
 import { safeReply } from '../utils/ipcUtils';
-import { getFfmpegPath, getManagedFfmpegDirs } from '../utils/pathUtils';
+import { getFfmpegPath, getManagedFfmpegDirs, invalidateFfmpegPathCache } from '../utils/pathUtils';
 
 // ========== 工具函数 ==========
 
@@ -118,6 +118,9 @@ class DownloadService {
       if (process.platform !== 'win32') {
         await fs.promises.chmod(ffmpegDestPath, 0o755);
       }
+
+      // 安装完成，使路径缓存失效确保下次启动时重新探测
+      invalidateFfmpegPathCache();
 
       console.log('FFmpeg installed successfully to:', ffmpegDestPath);
       safeReply(event, 'ffmpeg-install-complete');

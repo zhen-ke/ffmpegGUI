@@ -6,6 +6,7 @@
 
 import { spawn, type ChildProcessWithoutNullStreams } from 'child_process';
 import os from 'os';
+import { getFfmpegBinDir } from '../utils/pathUtils';
 
 export interface FFmpegProcessCallbacks {
   onOutput: (line: string) => void;
@@ -60,14 +61,25 @@ const OUTPUT_FLUSH_INTERVAL_MS = 80;
 
 /** 构建传给 ffmpeg 子进程的环境变量 */
 function buildFFmpegEnv(): NodeJS.ProcessEnv {
-  const cpuCount = os.cpus().length;
+  const logicalCores = os.cpus().length;
+  // 物理核近似：Intel 超线程下逻辑核 = 物理核 × 2；Apple Silicon 无超线程，两者相等。
+  // 取 ceil(logical / 2) 可在 Intel 上避免过度超线程竞争，Apple Silicon 上最多少用一半，
+  // 但由于 ffmpeg 自身会按需调度，实际差异极小。
+  const physicalCores = Math.max(1, Math.ceil(logicalCores / 2));
   return {
     ...process.env,
-    // 让 ffmpeg 的多线程编解码器与逻辑核数对齐，避免过度超线程竞争
-    OMP_NUM_THREADS: String(cpuCount),
-    // macOS：确保 binaries/ 目录中的 dylib 可被找到
-    ...(process.platform === 'darwin' && process.env.DYLD_LIBRARY_PATH === undefined
-      ? { DYLD_LIBRARY_PATH: '' }
+    // 让 OpenMP/ffmpeg 编解码线程数与物理核对齐，减少超线程竞争
+    OMP_NUM_THREADS: String(physicalCores),
+    // macOS：将 binaries/ 目录前置到动态库搜索路径，确保捆绑的 dylib 优先被找到
+    ...(process.platform === 'darwin'
+      ? {
+          DYLD_LIBRARY_PATH: [
+            getFfmpegBinDir(),
+            process.env.DYLD_LIBRARY_PATH ?? '',
+          ]
+            .filter(Boolean)
+            .join(':'),
+        }
       : {}),
     // 关闭 ANSI 颜色转义，减少日志解析噪声
     AV_LOG_FORCE_NOCOLOR: '1',
@@ -170,7 +182,8 @@ export class FFmpegProcessManager {
       proc.kill('SIGTERM');
     }
 
-    this.scheduleForceKill(5_000);
+    // `q` 信号通常在 500ms 内被 ffmpeg 响应，2s 已足够宽裕
+    this.scheduleForceKill(2_000);
     return true;
   }
 
