@@ -5,6 +5,7 @@
  */
 
 import { spawn, type ChildProcessWithoutNullStreams } from 'child_process';
+import os from 'os';
 
 export interface FFmpegProcessCallbacks {
   onOutput: (line: string) => void;
@@ -22,6 +23,10 @@ interface ProcessState {
   /** 已上报过总时长（只上报一次） */
   hasReportedDuration: boolean;
   forceKillTimer: ReturnType<typeof setTimeout> | null;
+  /** 输出节流定时器 */
+  flushTimer: ReturnType<typeof setTimeout> | null;
+  /** 待合并的输出行缓冲 */
+  pendingLines: string[];
   stdout: LineBuffer;
   stderr: LineBuffer;
   outputFile?: string;
@@ -50,6 +55,25 @@ const RE_PROGRESS = /time=(\d{2}):(\d{2}):(\d{2}(?:\.\d+)?)/g;
 /** 匹配 FFmpeg 输出中的总时长，如 `Duration: 00:02:10.00` */
 const RE_DURATION = /Duration:\s*(\d{2}):(\d{2}):(\d{2}(?:\.\d+)?)/;
 
+/** 输出节流间隔（ms）：合并高频 \r 进度行，减少 IPC 压力 */
+const OUTPUT_FLUSH_INTERVAL_MS = 80;
+
+/** 构建传给 ffmpeg 子进程的环境变量 */
+function buildFFmpegEnv(): NodeJS.ProcessEnv {
+  const cpuCount = os.cpus().length;
+  return {
+    ...process.env,
+    // 让 ffmpeg 的多线程编解码器与逻辑核数对齐，避免过度超线程竞争
+    OMP_NUM_THREADS: String(cpuCount),
+    // macOS：确保 binaries/ 目录中的 dylib 可被找到
+    ...(process.platform === 'darwin' && process.env.DYLD_LIBRARY_PATH === undefined
+      ? { DYLD_LIBRARY_PATH: '' }
+      : {}),
+    // 关闭 ANSI 颜色转义，减少日志解析噪声
+    AV_LOG_FORCE_NOCOLOR: '1',
+  };
+}
+
 export class FFmpegProcessManager {
   private state: ProcessState | null = null;
 
@@ -67,13 +91,28 @@ export class FFmpegProcessManager {
       shell: false,
       windowsHide: true,
       stdio: ['pipe', 'pipe', 'pipe'],
+      env: buildFFmpegEnv(),
     });
+
+    // ── 进程优先级：降低 ffmpeg 优先级，避免编码吃满 CPU 导致 GUI 卡顿 ──
+    if (proc.pid !== undefined) {
+      try {
+        os.setPriority(
+          proc.pid,
+          os.constants.priority.PRIORITY_BELOW_NORMAL,
+        );
+      } catch {
+        // 部分平台/权限下设置可能失败，静默忽略
+      }
+    }
 
     this.state = {
       process: proc,
       isStopping: false,
       hasReportedDuration: false,
       forceKillTimer: null,
+      flushTimer: null,
+      pendingLines: [],
       stdout: new LineBuffer(),
       stderr: new LineBuffer(),
       outputFile,
@@ -83,7 +122,7 @@ export class FFmpegProcessManager {
       const s = this.state;
       if (!s) return;
       const lines = s.stdout.push(data.toString());
-      for (const line of lines) callbacks.onOutput(line);
+      for (const line of lines) this.enqueueOutput(s, line, callbacks);
     });
 
     proc.stderr.on('data', (data: Buffer) => {
@@ -92,14 +131,14 @@ export class FFmpegProcessManager {
 
       const chunk = data.toString();
       const lines = s.stderr.push(chunk);
-      for (const line of lines) callbacks.onOutput(line);
+      for (const line of lines) this.enqueueOutput(s, line, callbacks);
 
       this.tryReportDuration(chunk, callbacks);
       this.tryReportProgress(chunk, callbacks);
     });
 
     proc.on('close', (code) => {
-      // 若已因 error/tardown 置空 state，则 close 事件不再回调（避免重复上报）
+      // 若已因 error/teardown 置空 state，则 close 事件不再回调（避免重复上报）
       if (!this.state) return;
       this.handleClose(code, callbacks);
     });
@@ -152,6 +191,39 @@ export class FFmpegProcessManager {
     return this.state !== null;
   }
 
+  // ─── 输出节流：合并 OUTPUT_FLUSH_INTERVAL_MS 内的多行，统一回调一次 ───────
+
+  private enqueueOutput(
+    s: ProcessState,
+    line: string,
+    callbacks: FFmpegProcessCallbacks,
+  ): void {
+    s.pendingLines.push(line);
+
+    if (s.flushTimer === null) {
+      s.flushTimer = setTimeout(() => {
+        s.flushTimer = null;
+        const lines = s.pendingLines.splice(0);
+        for (const l of lines) callbacks.onOutput(l);
+      }, OUTPUT_FLUSH_INTERVAL_MS);
+    }
+  }
+
+  /** 进程退出时立即刷出还未发送的缓冲行 */
+  private flushPendingOutput(
+    s: ProcessState,
+    callbacks: FFmpegProcessCallbacks,
+  ): void {
+    if (s.flushTimer !== null) {
+      clearTimeout(s.flushTimer);
+      s.flushTimer = null;
+    }
+    const lines = s.pendingLines.splice(0);
+    for (const l of lines) callbacks.onOutput(l);
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+
   private scheduleForceKill(delayMs: number): void {
     const s = this.state;
     if (!s) return;
@@ -170,6 +242,7 @@ export class FFmpegProcessManager {
     const s = this.state;
     if (!s) return;
     if (s.forceKillTimer) clearTimeout(s.forceKillTimer);
+    if (s.flushTimer) clearTimeout(s.flushTimer);
     this.state = null;
   }
 
@@ -177,9 +250,10 @@ export class FFmpegProcessManager {
     const s = this.state;
     if (!s) return;
 
-    // 刷出缓冲区残余行
-    for (const line of s.stdout.flush()) callbacks.onOutput(line);
-    for (const line of s.stderr.flush()) callbacks.onOutput(line);
+    // 刷出缓冲区残余行（LineBuffer + 节流队列）
+    for (const line of s.stdout.flush()) s.pendingLines.push(line);
+    for (const line of s.stderr.flush()) s.pendingLines.push(line);
+    this.flushPendingOutput(s, callbacks);
 
     const stoppedByUser = s.isStopping;
     const outputFile = s.outputFile;
