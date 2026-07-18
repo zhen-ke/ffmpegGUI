@@ -260,7 +260,7 @@ const baseCommandTemplates: readonly Omit<CommandTemplate, 'id'>[] = [
       en: 'H.264 Encoding with Mac Hardware Acceleration',
       zh: 'H.264 编码（Mac 硬件加速）',
     },
-    command: '-i input.mp4 -c:v h264_videotoolbox -q:v 65 -allow_sw 1 -b:a 256k -movflags +faststart output.mp4',
+    command: '-i input.mp4 -c:v h264_videotoolbox -q:v 75 -allow_sw 1 -b:a 256k -movflags +faststart output.mp4',
     description: {
       en: 'H.264 encoding using Mac VideoToolbox hardware acceleration.',
       zh: '使用 Mac VideoToolbox 硬件加速的 H.264 编码。',
@@ -319,7 +319,7 @@ const baseCommandTemplates: readonly Omit<CommandTemplate, 'id'>[] = [
       en: 'H.265 Encoding with Mac Hardware Acceleration',
       zh: 'H.265 编码（Mac 硬件加速）',
     },
-    command: '-i input.mp4 -c:v hevc_videotoolbox -q:v 65 -allow_sw 1 -b:a 256k -movflags +faststart output.mp4',
+    command: '-i input.mp4 -c:v hevc_videotoolbox -tag:v hvc1 -q:v 75 -allow_sw 1 -b:a 256k -movflags +faststart output.mp4',
     description: {
       en: 'H.265 encoding using Mac VideoToolbox hardware acceleration.',
       zh: '使用 Mac VideoToolbox 硬件加速的 H.265 编码。',
@@ -728,6 +728,81 @@ const baseCommandTemplates: readonly Omit<CommandTemplate, 'id'>[] = [
     description: {
       en: 'Create picture-in-picture effect with overlay video in bottom-right corner.',
       zh: '创建画中画效果，叠加视频显示在右下角。',
+    },
+  },
+  // ── macOS VideoToolbox 硬件解码加速 ──────────────────────────────────────
+  {
+    name: {
+      en: 'H.264 Hardware Decode + Encode (Mac VideoToolbox)',
+      zh: 'H.264 硬件解码 + 编码（Mac VideoToolbox）',
+    },
+    command:
+      '-hwaccel videotoolbox -i input.mp4 -c:v h264_videotoolbox -q:v 75 -allow_sw 1 -b:a 256k -movflags +faststart output.mp4',
+    description: {
+      en: 'Use VideoToolbox for both decoding and encoding on macOS. Minimises CPU load; decoder offload reduces overall encoding time.',
+      zh: '在 macOS 上同时使用 VideoToolbox 进行解码和编码，最大限度降低 CPU 负担，解码卸载可进一步缩短编码时间。',
+    },
+  },
+  {
+    name: {
+      en: 'HEVC Hardware Decode + Encode (Mac VideoToolbox)',
+      zh: 'HEVC 硬件解码 + 编码（Mac VideoToolbox）',
+    },
+    command:
+      '-hwaccel videotoolbox -i input.mp4 -c:v hevc_videotoolbox -tag:v hvc1 -q:v 75 -allow_sw 1 -b:a 256k -movflags +faststart output.mp4',
+    description: {
+      en: 'Decode input with VideoToolbox and re-encode to HEVC on macOS. The hvc1 tag ensures playback on Apple devices.',
+      zh: '使用 VideoToolbox 解码输入并在 macOS 上重新编码为 HEVC。hvc1 标签确保在 Apple 设备上正常播放。',
+    },
+  },
+  // ── 软件编码器精调 ────────────────────────────────────────────────────────
+  {
+    name: {
+      en: 'High Quality H.264 (film tune)',
+      zh: '高质量 H.264（film 调优）',
+    },
+    command:
+      '-i input.mp4 -c:v libx264 -preset slow -crf 18 -tune film -c:a aac -b:a 192k -movflags +faststart output.mp4',
+    description: {
+      en: 'High quality x264 encoding optimised for live-action film content. CRF 18 is near-visually lossless; -tune film reduces blocking on skin tones and detailed scenes.',
+      zh: '针对真人影片内容优化的高质量 x264 编码。CRF 18 接近视觉无损；-tune film 可减少肤色和细节场景的块效应。',
+    },
+  },
+  {
+    name: {
+      en: 'High Quality H.265 (grain tune)',
+      zh: '高质量 H.265（grain 调优）',
+    },
+    command:
+      '-i input.mp4 -c:v libx265 -preset slow -crf 20 -tune grain -c:a aac -b:a 192k -movflags +faststart output.mp4',
+    description: {
+      en: 'High quality x265 encoding with grain tuning for film-grain or noisy footage. Better preserves natural grain texture compared to default settings.',
+      zh: '针对含胶片颗粒或噪点素材的高质量 x265 编码。与默认设置相比，更好地保留自然颗粒感。',
+    },
+  },
+  {
+    name: {
+      en: 'AV1 Encoding – SVT-AV1 (Fast + Efficient)',
+      zh: 'AV1 编码 – SVT-AV1（速度/质量均衡）',
+    },
+    command:
+      '-i input.mp4 -c:v libsvtav1 -preset 4 -crf 28 -c:a libopus -b:a 128k output.mp4',
+    description: {
+      en: 'AV1 encoding via SVT-AV1. Preset 4 balances speed and quality; CRF 28 gives excellent compression. Much faster than libaom-av1 at comparable quality.',
+      zh: '使用 SVT-AV1 进行 AV1 编码。preset 4 平衡速度与质量；CRF 28 压缩效果优秀。在相近质量下比 libaom-av1 快得多。',
+    },
+  },
+  // ── 线程控制 ─────────────────────────────────────────────────────────────
+  {
+    name: {
+      en: 'Encode with Thread Limit (leave CPU headroom for GUI)',
+      zh: '限制线程编码（为 GUI 保留 CPU 余量）',
+    },
+    command:
+      '-i input.mp4 -c:v libx264 -preset medium -crf 23 -threads 4 -filter_threads 2 -c:a aac -b:a 128k output.mp4',
+    description: {
+      en: 'Limits FFmpeg to 4 video-codec threads and 2 filter threads so the GUI stays responsive during encoding. Adjust counts to match your CPU core count.',
+      zh: '将 FFmpeg 限制为 4 个视频编码线程和 2 个滤镜线程，使编码过程中 GUI 保持响应。根据 CPU 核心数调整线程数。',
     },
   },
 ];
