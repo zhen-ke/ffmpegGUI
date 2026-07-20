@@ -35,10 +35,13 @@ import { useFileSelection } from './hooks/useFileSelection';
 import { useGlobalHotkeys } from './hooks/useGlobalHotkeys';
 import { useMediaProbe } from './hooks/useMediaProbe';
 import { useTemplateManager } from './hooks/useTemplateManager';
+import { useToast } from './hooks/useToast';
 
-import { AppHeader } from './components/AppHeader';
+import { AppHeader, type GuideStep } from './components/AppHeader';
 import { CommandBox } from './components/CommandBox';
 import { CompletedResultCard } from './components/CompletedResultCard';
+import { FailedResultCard } from './components/FailedResultCard';
+import { ToastContainer } from './components/ToastContainer';
 import { ConfirmModal } from './components/ConfirmModal';
 import { type WorkspacePane } from './components/DrawerTabBar';
 import { type TerminalLogType } from './components/FFmpegTerminal';
@@ -55,6 +58,10 @@ import {
   updateInputArgument,
   updateOutputFileName,
 } from './utils/commandUtils';
+import {
+  deriveSetupReadiness,
+  getSetupBlockerMessageKey,
+} from './utils/setupReadiness';
 
 // ─────────────────────────────────────────────
 // 常量
@@ -133,6 +140,9 @@ function Home() {
   }, []);
 
   const expandDrawerRef = useRef<(() => void) | null>(null);
+  const startButtonRef = useRef<HTMLButtonElement>(null);
+  const prevStatusRef = useRef<string>('idle');
+  const { toasts, pushToast, dismissToast } = useToast();
 
   const handleActivePaneChange = useCallback((pane: WorkspacePane) => {
     setActivePane(pane);
@@ -180,9 +190,11 @@ function Home() {
 
   const handleOperationalError = useCallback(
     (message: string) => {
-      xtermWriteLogRef.current?.('error', t(message));
+      const translated = t(message);
+      xtermWriteLogRef.current?.('error', translated);
+      pushToast('error', translated);
     },
-    [t],
+    [pushToast, t],
   );
 
   // ── 业务 Hooks ──
@@ -252,13 +264,31 @@ function Home() {
 
   // ── 完成结果横幅：可关闭 ──
   const [showCompletedResult, setShowCompletedResult] = useState(false);
+  const [showFailedResult, setShowFailedResult] = useState(false);
   useEffect(() => {
     if (status === 'done' && lastCompletedOutputFile) {
       setShowCompletedResult(true);
+      setShowFailedResult(false);
     } else if (status !== 'done') {
       setShowCompletedResult(false);
     }
   }, [status, lastCompletedOutputFile]);
+
+  useEffect(() => {
+    const prevStatus = prevStatusRef.current;
+    prevStatusRef.current = status;
+
+    if (status === 'error' && prevStatus !== 'error') {
+      setShowFailedResult(true);
+      pushToast('error', t('Task failed. Check the activity log for details.'));
+      handleActivePaneChange('activity');
+      expandDrawerRef.current?.();
+    }
+
+    if (status === 'running') {
+      setShowFailedResult(false);
+    }
+  }, [handleActivePaneChange, pushToast, status, t]);
 
   // ── 三步骤引导：可 × 关闭 / 首次完成后自动隐藏 ──
   const [guideDismissed, setGuideDismissed] = useState(() => {
@@ -407,6 +437,23 @@ function Home() {
     [outputFolder, outputFileName],
   );
 
+  const setupReadiness = useMemo(
+    () =>
+      deriveSetupReadiness({
+        command,
+        inputFiles,
+        outputFolder,
+        outputFileName,
+      }),
+    [command, inputFiles, outputFolder, outputFileName],
+  );
+
+  const isReadyToRun = setupReadiness.isSetupComplete && canStart;
+  const setupBlockerMessage = useMemo(() => {
+    const key = getSetupBlockerMessageKey(setupReadiness.blocker);
+    return key ? t(key) : null;
+  }, [setupReadiness.blocker, t]);
+
   const inputSlots = useMemo(
     () =>
       Array.from({ length: inputSlotCount }, (_, index) => {
@@ -535,11 +582,17 @@ function Home() {
 
   const onStart = useCallback(() => {
     const cmd = command.trim();
-    if (!cmd || !canStart) return;
+    if (!cmd || !canStart || !setupReadiness.isSetupComplete) return;
     handleActivePaneChange('activity');
     xtermClearRef.current?.();
     handleStart(cmd);
-  }, [canStart, command, handleActivePaneChange, handleStart]);
+  }, [
+    canStart,
+    command,
+    handleActivePaneChange,
+    handleStart,
+    setupReadiness.isSetupComplete,
+  ]);
 
   // ── 停止：用 canStop 守卫（状态机保证） ──
 
@@ -556,8 +609,8 @@ function Home() {
       xtermWriteLogRef.current?.('success', t('Command copied to clipboard.'));
     else if (r === 'empty')
       xtermWriteLogRef.current?.('info', t('Nothing to copy.'));
-    else xtermWriteLogRef.current?.('error', t('Failed to copy command.'));
-  }, [copyCommand, t]);
+    else handleOperationalError('Failed to copy command.');
+  }, [copyCommand, handleOperationalError, t]);
 
   // ── 复制日志 ──
 
@@ -573,9 +626,9 @@ function Home() {
       await navigator.clipboard.writeText(text);
       xtermWriteLogRef.current?.('success', t('Log copied to clipboard.'));
     } catch {
-      xtermWriteLogRef.current?.('error', t('Failed to copy logs.'));
+      handleOperationalError('Failed to copy logs.');
     }
-  }, [t]);
+  }, [handleOperationalError, t]);
 
   // ── 全局快捷键 ──
 
@@ -600,13 +653,36 @@ function Home() {
     setLanguage(language === 'en' ? 'zh' : 'en');
   }, [language, setLanguage]);
 
-  const openShellPane = useCallback(() => {
-    handleActivePaneChange('terminal');
+  const handleViewLogs = useCallback(() => {
+    handleActivePaneChange('activity');
+    expandDrawerRef.current?.();
   }, [handleActivePaneChange]);
 
-  const openActivityPane = useCallback(() => {
-    handleActivePaneChange('activity');
-  }, [handleActivePaneChange]);
+  const handleGuideStepClick = useCallback(
+    (step: GuideStep) => {
+      switch (step) {
+        case 'template':
+          document.getElementById(templateControlId)?.click();
+          break;
+        case 'input':
+          document.getElementById(`${inputControlBaseId}-0`)?.focus();
+          break;
+        case 'output':
+          document.getElementById(outputControlId)?.focus();
+          break;
+        case 'start':
+          startButtonRef.current?.scrollIntoView({
+            behavior: 'smooth',
+            block: 'nearest',
+          });
+          startButtonRef.current?.focus();
+          break;
+        default:
+          break;
+      }
+    },
+    [inputControlBaseId, outputControlId, templateControlId],
+  );
 
   const handleOpenCompletedFile = useCallback(async () => {
     if (!lastCompletedOutputFile) return;
@@ -618,12 +694,12 @@ function Home() {
       )) as { success: boolean; error?: string };
 
       if (!result?.success) {
-        xtermWriteLogRef.current?.('error', t('Failed to open output file.'));
+        handleOperationalError('Failed to open output file.');
       }
     } catch {
-      xtermWriteLogRef.current?.('error', t('Failed to open output file.'));
+      handleOperationalError('Failed to open output file.');
     }
-  }, [lastCompletedOutputFile, t]);
+  }, [handleOperationalError, lastCompletedOutputFile]);
 
   const handleOpenCompletedFolder = useCallback(async () => {
     if (!lastCompletedOutputFile) return;
@@ -635,12 +711,12 @@ function Home() {
       )) as { success: boolean; error?: string };
 
       if (!result?.success) {
-        xtermWriteLogRef.current?.('error', t('Failed to open output folder.'));
+        handleOperationalError('Failed to open output folder.');
       }
     } catch {
-      xtermWriteLogRef.current?.('error', t('Failed to open output folder.'));
+      handleOperationalError('Failed to open output folder.');
     }
-  }, [lastCompletedOutputFile, t]);
+  }, [handleOperationalError, lastCompletedOutputFile]);
 
   // ── 派生展示状态 ──
 
@@ -656,10 +732,29 @@ function Home() {
     workflowLabel = t('Running');
     workflowTone =
       'bg-primary-50 text-primary-700 border-primary-200 dark:bg-primary-900/30 dark:text-primary-200 dark:border-primary-800/60';
-  } else if (canStart && hasCommand) {
+  } else if (status === 'error') {
+    workflowLabel = t('Failed');
+    workflowTone =
+      'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-200 dark:border-red-800/60';
+  } else if (isReadyToRun) {
     workflowLabel = t('Ready');
     workflowTone =
       'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-200 dark:border-emerald-800/60';
+  } else if (setupReadiness.blocker === 'command') {
+    workflowLabel = t('Missing command');
+    workflowTone =
+      'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-200 dark:border-amber-800/60';
+  } else if (setupReadiness.blocker === 'input') {
+    workflowLabel = t('Missing input');
+    workflowTone =
+      'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-200 dark:border-amber-800/60';
+  } else if (
+    setupReadiness.blocker === 'outputFolder' ||
+    setupReadiness.blocker === 'outputName'
+  ) {
+    workflowLabel = t('Missing output');
+    workflowTone =
+      'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-200 dark:border-amber-800/60';
   }
 
   // commandSource: 传给 CommandBox 的来源元数据
@@ -716,19 +811,21 @@ function Home() {
       <AppHeader
         language={language}
         toggleLanguage={toggleLanguage}
-        activePane={activePane}
-        openActivityPane={openActivityPane}
-        openShellPane={openShellPane}
         openNewTemplateDialog={openNewTemplateDialog}
         workflowLabel={workflowLabel}
         workflowTone={workflowTone}
         commandSourceLabel={commandSourceLabel}
         hasCommand={hasCommand}
-        hasInputFile={!!inputFiles[0]}
+        hasInputFile={setupReadiness.hasInput}
+        hasOutputReady={
+          setupReadiness.hasOutputFolder && setupReadiness.hasOutputName
+        }
+        isReadyToRun={isReadyToRun}
         isRunning={isRunning}
         progress={progress}
         showOnboardingGuide={!guideDismissed}
         onDismissGuide={dismissGuide}
+        onGuideStepClick={handleGuideStepClick}
       />
 
       {/* ══ 主内容区（两栏 IDE 式：<919px 自动堆叠）══ */}
@@ -842,14 +939,15 @@ function Home() {
             </div>
           </div>
 
-          {/* ⑤ 主操作按钮：Start / Stop */}
+          {/* ⑤ 主操作按钮：Start / Stop（单一主 CTA） */}
           <div className="pt-1">
             {(() => {
               let tone =
                 'bg-slate-100 dark:bg-slate-700/50 text-slate-400 dark:text-slate-500 cursor-not-allowed';
               let icon = <Play size={14} className="fill-current" />;
               let label = t('Start');
-              let disabled = !canStart || !hasCommand;
+              // 运行中显示 Stop；否则仅当真正可运行（命令 + 输入 + 输出齐全）时启用 Start
+              let disabled = !isReadyToRun;
               if (isRunning) {
                 tone =
                   'bg-white dark:bg-slate-700 border border-red-200 dark:border-red-800/50 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 active:scale-[0.98]';
@@ -860,21 +958,36 @@ function Home() {
                 );
                 label = isStopping ? t('Stopping...') : t('Stop');
                 disabled = !canStop;
-              } else if (canStart && hasCommand) {
+              } else if (isReadyToRun) {
                 tone =
                   'bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 text-white shadow-md shadow-primary-500/25 hover:shadow-lg hover:shadow-primary-500/30 hover:-translate-y-0.5 active:translate-y-0';
               }
+              // 禁用时给出明确原因：按钮 tooltip + 下方提示文案，避免「就绪」误导
+              const blockerHint =
+                !isRunning && setupBlockerMessage ? setupBlockerMessage : null;
               return (
-                <button
-                  type="button"
-                  onClick={isRunning ? onStop : onStart}
-                  disabled={disabled}
-                  aria-label={isRunning ? t('Stop') : t('Start')}
-                  className={`w-full flex items-center justify-center gap-2 h-11 rounded-xl text-sm font-semibold transition-[transform,box-shadow,background-color,color] duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-800 ${tone}`}
-                >
-                  {icon}
-                  <span>{label}</span>
-                </button>
+                <div>
+                  <button
+                    ref={startButtonRef}
+                    type="button"
+                    onClick={isRunning ? onStop : onStart}
+                    disabled={disabled}
+                    aria-label={isRunning ? t('Stop') : t('Start')}
+                    title={blockerHint ?? undefined}
+                    className={`w-full flex items-center justify-center gap-2 h-11 rounded-xl text-sm font-semibold transition-[transform,box-shadow,background-color,color] duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-800 ${tone}`}
+                  >
+                    {icon}
+                    <span>{label}</span>
+                  </button>
+                  {blockerHint && (
+                    <p
+                      role="status"
+                      className="mt-1.5 text-[11px] font-medium text-amber-600 dark:text-amber-400 leading-snug"
+                    >
+                      {blockerHint}
+                    </p>
+                  )}
+                </div>
               );
             })()}
           </div>
@@ -888,16 +1001,13 @@ function Home() {
         >
           <CommandBox
             id={commandControlId}
-            canStart={canStart && command.trim().length > 0}
             command={command}
             onCommandChange={updateCommand}
             onDragOver={handleDragOver}
             onDrop={handleDrop}
             onCopy={handleCopyCommand}
             onClear={clearCommand}
-            onStart={onStart}
-            isRunning={isRunning}
-            isStopping={isStopping}
+            isReadyToRun={isReadyToRun}
             placeholder={t('Enter FFmpeg command or drag & drop files here')}
             hasMultipleInputs={hasMultipleInputs}
             commandSource={commandSource}
@@ -932,6 +1042,15 @@ function Home() {
               onDismiss={() => setShowCompletedResult(false)}
             />
           )}
+
+          {showFailedResult && (
+            <FailedResultCard
+              onViewLogs={handleViewLogs}
+              onTryAgain={onStart}
+              canRetry={isReadyToRun}
+              onDismiss={() => setShowFailedResult(false)}
+            />
+          )}
         </main>
       </div>
 
@@ -950,6 +1069,9 @@ function Home() {
         onExpandRef={expandDrawerRef}
         t={t}
       />
+
+      {/* ══ 全局 Toast（轻量错误/成功提示，3–5 秒自动消失）══ */}
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
 
       {/* ══ ConfirmModal（替代所有 window.confirm）══ */}
       <ConfirmModal

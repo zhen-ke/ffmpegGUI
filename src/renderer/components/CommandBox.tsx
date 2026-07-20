@@ -1,9 +1,4 @@
-import {
-  RotateCcw,
-  Loader2,
-  Play,
-  Terminal as TerminalIcon,
-} from 'lucide-react';
+import { RotateCcw, Terminal as TerminalIcon } from 'lucide-react';
 import { useId, type DragEvent } from 'react';
 import { useLanguage } from '../LanguageContext';
 
@@ -21,17 +16,15 @@ export interface CommandBoxProps {
   onDrop: (e: DragEvent<HTMLTextAreaElement>) => void;
   onCopy: () => void;
   onClear: () => void;
-  onStart: () => void;
   /** 点击后将命令重置为模板原始内容 */
   onReset?: () => void;
-  canStart: boolean;
-  isRunning: boolean;
-  isStopping: boolean;
   id?: string;
   placeholder?: string;
   hasMultipleInputs: boolean;
   /** 命令来源信息（模板名 + 是否 dirty） */
   commandSource?: CommandSource | null;
+  /** 是否已满足运行前置条件（用于快捷键提示样式） */
+  isReadyToRun?: boolean;
 }
 
 export function CommandBox({
@@ -41,20 +34,19 @@ export function CommandBox({
   onDrop,
   onCopy,
   onClear,
-  onStart,
   onReset,
-  canStart,
-  isRunning,
-  isStopping,
   id,
   placeholder,
   hasMultipleInputs,
   commandSource,
+  isReadyToRun = false,
 }: CommandBoxProps) {
   const { t } = useLanguage();
   const generatedId = useId();
   const textareaId = id ?? generatedId;
   const helperTextId = `${textareaId}-helper`;
+  const isMac = window.electron.platform === 'darwin';
+  const shortcutLabel = isMac ? '⌘↵' : 'Ctrl+↵';
   const statusText = hasMultipleInputs
     ? t(
         'This command has multiple input files; only the first -i is auto-bound from the input selector.',
@@ -123,7 +115,18 @@ export function CommandBox({
               </span>
             )}
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-2">
+            <span
+              className={`hidden sm:inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-semibold border ${
+                isReadyToRun
+                  ? 'text-primary-700 dark:text-primary-300 bg-primary-50 dark:bg-primary-900/30 border-primary-200/70 dark:border-primary-700/40'
+                  : 'text-slate-400 dark:text-slate-500 bg-slate-100/80 dark:bg-slate-800/60 border-slate-200/70 dark:border-slate-700/50'
+              }`}
+              title={t('Press shortcut to start')}
+            >
+              <span className="font-mono">{shortcutLabel}</span>
+              <span>{t('to start')}</span>
+            </span>
             <button
               type="button"
               onClick={onCopy}
@@ -137,31 +140,6 @@ export function CommandBox({
               className="px-2 py-1 text-[11px] font-medium rounded-md text-slate-500 dark:text-slate-400 hover:bg-red-50 dark:hover:bg-red-900/30 hover:text-red-600 dark:hover:text-red-400 transition-colors duration-200"
             >
               {t('Clear')}
-            </button>
-            <div className="w-px h-4 bg-slate-200 dark:bg-slate-600 mx-1" />
-            <button
-              type="button"
-              onClick={onStart}
-              disabled={!canStart}
-              aria-disabled={!canStart}
-              className={`
-                flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold
-                transition-[transform,box-shadow,background-color,color] duration-200 focus:outline-none
-                focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2
-                dark:focus-visible:ring-offset-slate-800
-                ${
-                  canStart
-                    ? 'bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 text-white shadow-md shadow-primary-500/25 hover:shadow-lg hover:shadow-primary-500/30 hover:-translate-y-0.5 active:translate-y-0'
-                    : 'bg-slate-100 dark:bg-slate-700/50 text-slate-400 dark:text-slate-500 cursor-not-allowed'
-                }
-              `}
-            >
-              {isRunning || isStopping ? (
-                <Loader2 size={12} className="animate-spin" />
-              ) : (
-                <Play size={12} className={canStart ? 'fill-current' : ''} />
-              )}
-              <span>{t('Start')}</span>
             </button>
           </div>
         </div>
@@ -204,4 +182,5 @@ export function CommandBox({
 CommandBox.defaultProps = {
   id: undefined,
   placeholder: undefined,
+  isReadyToRun: false,
 };

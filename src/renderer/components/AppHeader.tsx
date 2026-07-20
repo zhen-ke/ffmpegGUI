@@ -1,64 +1,58 @@
 /**
  * AppHeader — 顶部导航栏
  *
- * 从 Home.tsx 拆分出来，负责品牌标识、状态指示、语言切换和模板操作入口。
- *
- * v2 改动：
- * - 移除 t prop（直接用 useLanguage hook，消除 props drilling）
- * - 加入三步骤工作流引导（Step indicator），新用户友好
+ * v3 改动：
+ * - 移除 Header 内 Activity/Shell 切换（统一由底部抽屉 Tab 负责）
+ * - 四步引导：命令 → 输入 → 输出 → 开始，支持点击跳转
+ * - 就绪状态依赖完整 Setup（命令 + 输入 + 输出）
  */
 
-import { PlusCircle, Terminal as TerminalIcon, X, Zap } from 'lucide-react';
+import { PlusCircle, X, Zap } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { useLanguage } from '../LanguageContext';
-import type { WorkspacePane } from './DrawerTabBar';
+
+export type GuideStep = 'template' | 'input' | 'output' | 'start';
 
 interface AppHeaderProps {
   language: string;
   toggleLanguage: () => void;
-  activePane: WorkspacePane;
-  openActivityPane: () => void;
-  openShellPane: () => void;
   openNewTemplateDialog: () => void;
   workflowLabel: string;
   workflowTone: string;
   commandSourceLabel: string;
-  /** 是否已选择模板或输入了命令 */
   hasCommand: boolean;
-  /** 是否已选择输入文件 */
   hasInputFile: boolean;
-  /** 是否处于运行或停止状态（运行中时不显示步骤引导） */
+  hasOutputReady: boolean;
+  isReadyToRun: boolean;
   isRunning: boolean;
-  /** FFmpeg 进度 0-100 */
   progress: number;
-  /** 是否显示三步骤引导（已关闭或完成后为 false） */
   showOnboardingGuide: boolean;
-  /** 关闭三步骤引导 */
   onDismissGuide: () => void;
+  onGuideStepClick: (step: GuideStep) => void;
 }
 
 export function AppHeader({
   language,
   toggleLanguage,
-  activePane,
-  openActivityPane,
-  openShellPane,
   openNewTemplateDialog,
   workflowLabel,
   workflowTone,
   commandSourceLabel,
   hasCommand,
   hasInputFile,
+  hasOutputReady,
+  isReadyToRun,
   isRunning,
   progress,
   showOnboardingGuide,
   onDismissGuide,
+  onGuideStepClick,
 }: AppHeaderProps) {
   const { t } = useLanguage();
   const isMac = window.electron.platform === 'darwin';
 
   // ── 进度 + ETA（EMA 平滑，避免跳变 / Infinity） ──
-  const rateRef = useRef(0); // % per ms
+  const rateRef = useRef(0);
   const lastProgressRef = useRef(0);
   const lastTimeRef = useRef(0);
   useEffect(() => {
@@ -105,34 +99,75 @@ export function AppHeader({
         : `${t('Estimated remaining')} ${mm}m ${ss}s`;
   }
 
-  // ── 步骤引导逻辑 ─────────────────────────────────────────
-  // step 1: 选择模板或输入命令
-  // step 2: 选择输入文件
-  // step 3: 点击开始（Ready 状态）
-  const step1Done = hasCommand;
-  const step2Done = step1Done && hasInputFile;
-  const step3Active = step2Done; // ready to run
-
-  const steps = [
+  const steps: Array<{
+    key: GuideStep;
+    label: string;
+    done: boolean;
+    active: boolean;
+  }> = [
     {
       key: 'template',
       label: language === 'zh' ? '选择模板' : 'Choose template',
-      done: step1Done,
-      active: !step1Done,
+      done: hasCommand,
+      active: !hasCommand,
     },
     {
       key: 'input',
       label: language === 'zh' ? '选择输入文件' : 'Pick input file',
-      done: step2Done,
-      active: step1Done && !step2Done,
+      done: hasInputFile,
+      active: hasCommand && !hasInputFile,
+    },
+    {
+      key: 'output',
+      label: language === 'zh' ? '选择输出位置' : 'Pick output',
+      done: hasOutputReady,
+      active: hasCommand && hasInputFile && !hasOutputReady,
     },
     {
       key: 'start',
       label: language === 'zh' ? '点击开始' : 'Click start',
       done: false,
-      active: step3Active,
+      active: isReadyToRun,
     },
   ];
+
+  const getStepToneClass = (step: (typeof steps)[number]) => {
+    if (step.done) {
+      return 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200/60 dark:border-emerald-700/30';
+    }
+    if (step.active) {
+      return 'text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20 border border-primary-200/60 dark:border-primary-700/30';
+    }
+    return 'text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-700/30';
+  };
+
+  const renderStep = (step: (typeof steps)[number], index: number) => (
+    <div key={step.key} className="flex items-center gap-1.5">
+      {index > 0 && (
+        <span className="text-slate-300 dark:text-slate-600 text-[10px] select-none">
+          →
+        </span>
+      )}
+      <button
+        type="button"
+        onClick={() => onGuideStepClick(step.key)}
+        className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full transition-colors duration-200 cursor-pointer hover:brightness-95 dark:hover:brightness-110 ${getStepToneClass(step)}`}
+      >
+        {step.done ? (
+          <span className="text-[9px]">✓</span>
+        ) : (
+          <span
+            className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+              step.active
+                ? 'bg-primary-500 animate-pulse'
+                : 'bg-slate-300 dark:bg-slate-600'
+            }`}
+          />
+        )}
+        {step.label}
+      </button>
+    </div>
+  );
 
   return (
     <header
@@ -162,16 +197,6 @@ export function AppHeader({
         <div className="flex items-center gap-2 justify-end flex-wrap">
           <button
             type="button"
-            onClick={
-              activePane === 'terminal' ? openActivityPane : openShellPane
-            }
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-slate-100 dark:bg-slate-700/50 hover:bg-slate-200 dark:hover:bg-slate-600/50 text-slate-600 dark:text-slate-300 rounded-lg border border-slate-200/60 dark:border-slate-600/50 transition-colors duration-200"
-          >
-            <TerminalIcon size={14} />
-            {activePane === 'terminal' ? t('Show Activity') : t('Open Shell')}
-          </button>
-          <button
-            type="button"
             onClick={toggleLanguage}
             aria-label={
               language === 'en'
@@ -195,14 +220,12 @@ export function AppHeader({
 
       {/* 状态行 */}
       <div className="mt-2 flex items-center gap-3 flex-wrap">
-        {/* 工作流状态 pill */}
         <span
           className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold flex-shrink-0 ${workflowTone}`}
         >
           {workflowLabel}
         </span>
 
-        {/* 运行中：进度条 + ETA */}
         {isRunning && (
           <div className="flex items-center gap-2 flex-1 min-w-[140px]">
             <div className="flex-1 h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
@@ -222,40 +245,9 @@ export function AppHeader({
           </div>
         )}
 
-        {/* 三步骤引导（可 × 关闭 / 完成后自动隐藏） */}
-        {showOnboardingGuide && !isRunning && !step2Done && (
+        {showOnboardingGuide && !isRunning && (
           <div className="flex items-center gap-1.5 flex-wrap">
-            {steps.map((step, index) => (
-              <div key={step.key} className="flex items-center gap-1.5">
-                {index > 0 && (
-                  <span className="text-slate-300 dark:text-slate-600 text-[10px] select-none">
-                    →
-                  </span>
-                )}
-                <span
-                  className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full transition-colors duration-200 ${
-                    step.done
-                      ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200/60 dark:border-emerald-700/30'
-                      : step.active
-                        ? 'text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20 border border-primary-200/60 dark:border-primary-700/30'
-                        : 'text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-700/30'
-                  }`}
-                >
-                  {step.done ? (
-                    <span className="text-[9px]">✓</span>
-                  ) : (
-                    <span
-                      className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-                        step.active
-                          ? 'bg-primary-500 animate-pulse'
-                          : 'bg-slate-300 dark:bg-slate-600'
-                      }`}
-                    />
-                  )}
-                  {step.label}
-                </span>
-              </div>
-            ))}
+            {steps.map(renderStep)}
             <button
               type="button"
               onClick={onDismissGuide}
@@ -268,8 +260,7 @@ export function AppHeader({
           </div>
         )}
 
-        {/* 当已就绪或在运行时，显示命令来源标签 */}
-        {(step2Done || isRunning) && (
+        {(isReadyToRun || isRunning) && !showOnboardingGuide && (
           <span className="text-xs text-slate-500 dark:text-slate-400">
             {commandSourceLabel}
           </span>
