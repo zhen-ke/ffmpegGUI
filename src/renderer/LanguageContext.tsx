@@ -194,6 +194,24 @@ export const translations: Record<Language, Record<string, string>> = {
     'No output': 'No output',
     Dismiss: 'Dismiss',
     "Don't show again": "Don't show again",
+    Failed: 'Failed',
+    'Task Failed': 'Task Failed',
+    'Task failed. Check the activity log for details.':
+      'Task failed. Check the activity log for details.',
+    'View Logs': 'View Logs',
+    'Enter a command or select a template.':
+      'Enter a command or select a template.',
+    'Select an input file to continue.': 'Select an input file to continue.',
+    'Select an output folder to continue.':
+      'Select an output folder to continue.',
+    'Enter an output file name to continue.':
+      'Enter an output file name to continue.',
+    'Missing command': 'Missing command',
+    'Missing input': 'Missing input',
+    'Missing output': 'Missing output',
+    'Press shortcut to start': 'Press shortcut to start',
+    'to start': 'to start',
+    Confirm: 'Confirm',
   },
   zh: {
     'Add Template': '添加模板',
@@ -366,6 +384,20 @@ export const translations: Record<Language, Record<string, string>> = {
     'No output': '未选输出',
     Dismiss: '关闭',
     "Don't show again": '不再提示',
+    Failed: '失败',
+    'Task Failed': '任务失败',
+    'Task failed. Check the activity log for details.':
+      '任务失败，请查看运行日志了解详情。',
+    'View Logs': '查看日志',
+    'Enter a command or select a template.': '请输入命令或选择模板。',
+    'Select an input file to continue.': '请选择输入文件。',
+    'Select an output folder to continue.': '请选择输出文件夹。',
+    'Enter an output file name to continue.': '请输入输出文件名。',
+    'Missing command': '缺少命令',
+    'Missing input': '缺少输入',
+    'Missing output': '缺少输出',
+    'Press shortcut to start': '快捷键启动',
+    'to start': '开始',
   },
 };
 
