@@ -15,6 +15,7 @@ interface PipelineStripProps {
   command: string;
   finalOutputPath: string;
   templateName?: string | null;
+  onSelectStep?: (step: 'input' | 'command' | 'output') => void;
 }
 
 function basename(p: string): string {
@@ -28,6 +29,7 @@ export function PipelineStrip({
   command,
   finalOutputPath,
   templateName,
+  onSelectStep,
 }: PipelineStripProps) {
   const { t } = useLanguage();
 
@@ -49,28 +51,30 @@ export function PipelineStrip({
   const outFile = hasOutput ? basename(finalOutputPath) : '';
 
   const chipBase =
-    'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium min-w-0';
+    'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium min-w-0 transition-all duration-150 cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-500/40';
   const filled =
-    'bg-slate-100 dark:bg-slate-700/60 text-slate-700 dark:text-slate-200 border border-slate-200/70 dark:border-slate-600/60';
+    'bg-slate-100 dark:bg-slate-700/60 text-slate-700 dark:text-slate-200 border border-slate-200/70 dark:border-slate-600/60 hover:bg-primary-50 dark:hover:bg-primary-900/30 hover:border-primary-300 dark:hover:border-primary-600 hover:text-primary-700 dark:hover:text-primary-300 shadow-2xs';
   const empty =
-    'bg-transparent text-slate-400 dark:text-slate-500 border border-dashed border-slate-300 dark:border-slate-600';
+    'bg-transparent text-slate-400 dark:text-slate-500 border border-dashed border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800 hover:border-slate-400';
 
   return (
     <div
-      className="flex items-center gap-1 flex-wrap"
+      className="flex items-center gap-1.5 flex-wrap"
       role="group"
       aria-label={t('Pipeline')}
     >
       {/* Input */}
-      <div
+      <button
+        type="button"
+        onClick={() => onSelectStep?.('input')}
         className={`${chipBase} ${hasInput ? filled : empty}`}
         title={hasInput ? inputFiles[0] : t('No input')}
       >
-        <FileInput size={13} className="flex-shrink-0" />
+        <FileInput size={13} className="flex-shrink-0 text-primary-500" />
         <span className="truncate max-w-[120px]">
           {hasInput ? `${inputFile}${extraInputs}` : t('No input')}
         </span>
-      </div>
+      </button>
 
       <ChevronRight
         size={14}
@@ -78,15 +82,17 @@ export function PipelineStrip({
       />
 
       {/* Command */}
-      <div
+      <button
+        type="button"
+        onClick={() => onSelectStep?.('command')}
         className={`${chipBase} ${hasCommand ? filled : empty}`}
         title={hasCommand ? (templateName ?? command) : t('No command')}
       >
-        <Cpu size={13} className="flex-shrink-0" />
+        <Cpu size={13} className="flex-shrink-0 text-cyan-500" />
         <span className="truncate max-w-[200px] font-mono">
           {hasCommand ? cmdSummary : t('No command')}
         </span>
-      </div>
+      </button>
 
       <ChevronRight
         size={14}
@@ -94,15 +100,18 @@ export function PipelineStrip({
       />
 
       {/* Output */}
-      <div
+      <button
+        type="button"
+        onClick={() => onSelectStep?.('output')}
         className={`${chipBase} ${hasOutput ? filled : empty}`}
         title={hasOutput ? finalOutputPath : t('No output')}
       >
-        <FileOutput size={13} className="flex-shrink-0" />
+        <FileOutput size={13} className="flex-shrink-0 text-emerald-500" />
         <span className="truncate max-w-[160px]">
           {hasOutput ? outFile : t('No output')}
         </span>
-      </div>
+      </button>
     </div>
   );
 }
+

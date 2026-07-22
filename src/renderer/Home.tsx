@@ -12,7 +12,7 @@
  * 8. Dropdown 支持清除选中模板，AppHeader 加入三步骤引导
  */
 
-import { Loader2, Play, Square, Upload } from 'lucide-react';
+import { Copy, Lock, Loader2, Play, Square, Upload } from 'lucide-react';
 import {
   useCallback,
   useEffect,
@@ -567,6 +567,35 @@ function Home() {
     [setCommand],
   );
 
+  const handleSelectPipelineStep = useCallback(
+    (step: 'input' | 'command' | 'output') => {
+      if (step === 'input') {
+        const el =
+          document.getElementById(inputControlBaseId) ||
+          document.getElementById(`${inputControlBaseId}-0`);
+        el?.focus();
+        el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } else if (step === 'command') {
+        const el = document.getElementById(commandControlId);
+        el?.focus();
+        el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } else if (step === 'output') {
+        const el = document.getElementById(`${outputControlId}-name`);
+        el?.focus();
+        el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    },
+    [inputControlBaseId, commandControlId, outputControlId],
+  );
+
+  const handleSelectPreset = useCallback(
+    (presetCmd: string, label: string) => {
+      updateCommand(presetCmd);
+      pushToast('info', `${t('Applied preset')}: ${label}`);
+    },
+    [updateCommand, pushToast, t],
+  );
+
   // ── 媒体探针（已提取到 useMediaProbe hook）──
 
   const {
@@ -925,16 +954,37 @@ function Home() {
               />
             </div>
             <div>
-              <p className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5">
-                {t('Final Output Path')}
-              </p>
-              <div className="h-10 px-3 rounded-xl border border-dashed border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-900/40 flex items-center">
-                <span
-                  className="truncate text-sm text-slate-600 dark:text-slate-300 font-mono"
-                  title={finalOutputPath}
-                >
-                  {finalOutputPath}
+              <div className="flex items-center justify-between mb-1.5">
+                <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                  {t('Final Output Path')}
+                </p>
+                <span className="text-[10px] text-slate-400 dark:text-slate-500 font-normal">
+                  {language === 'zh' ? '只读预览' : 'Read-only'}
                 </span>
+              </div>
+              <div className="h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/60 flex items-center justify-between gap-2 shadow-2xs">
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  <Lock size={13} className="text-slate-400 dark:text-slate-500 flex-shrink-0" />
+                  <span
+                    className="truncate text-xs text-slate-700 dark:text-slate-200 font-mono"
+                    title={finalOutputPath}
+                  >
+                    {finalOutputPath}
+                  </span>
+                </div>
+                {finalOutputPath && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(finalOutputPath);
+                      pushToast('info', t('Output path copied to clipboard'));
+                    }}
+                    title={t('Copy output path')}
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-primary-600 dark:hover:text-primary-400 hover:bg-slate-200/60 dark:hover:bg-slate-700/60 transition-colors flex-shrink-0"
+                  >
+                    <Copy size={13} />
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -1012,6 +1062,7 @@ function Home() {
             hasMultipleInputs={hasMultipleInputs}
             commandSource={commandSource}
             onReset={handleResetToTemplate}
+            onSelectPreset={handleSelectPreset}
           />
 
           <PipelineStrip
@@ -1019,6 +1070,7 @@ function Home() {
             command={command}
             finalOutputPath={finalOutputPath}
             templateName={selectedTemplate?.name}
+            onSelectStep={handleSelectPipelineStep}
           />
 
           {isMediaProbeAvailable === true && primaryInputPath && (

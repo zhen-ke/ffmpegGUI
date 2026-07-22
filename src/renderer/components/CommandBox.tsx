@@ -1,5 +1,5 @@
-import { RotateCcw, Terminal as TerminalIcon } from 'lucide-react';
-import { useId, type DragEvent } from 'react';
+import { FileVideo, Film, Music, RotateCcw, Scissors, Sparkles, Terminal as TerminalIcon, UploadCloud } from 'lucide-react';
+import { useState, useId, type DragEvent } from 'react';
 import { useLanguage } from '../LanguageContext';
 
 export interface CommandSource {
@@ -8,6 +8,45 @@ export interface CommandSource {
   /** 命令是否已被手动修改（与模板原始内容不一致） */
   isDirty: boolean;
 }
+
+export interface QuickPreset {
+  id: string;
+  iconName: 'h264' | 'audio' | 'gif' | 'trim';
+  titleEn: string;
+  titleZh: string;
+  command: string;
+}
+
+const QUICK_PRESETS: QuickPreset[] = [
+  {
+    id: 'h264',
+    iconName: 'h264',
+    titleEn: 'Convert to H.264 MP4',
+    titleZh: '转换视频 (H.264)',
+    command: '-i input.mp4 -c:v libx264 -preset medium -crf 23 -c:a aac -b:a 128k output.mp4',
+  },
+  {
+    id: 'audio',
+    iconName: 'audio',
+    titleEn: 'Extract MP3 Audio',
+    titleZh: '提取 MP3 音频',
+    command: '-i input.mp4 -vn -c:a libmp3lame -b:a 192k output.mp3',
+  },
+  {
+    id: 'gif',
+    iconName: 'gif',
+    titleEn: 'Convert to Animated GIF',
+    titleZh: '转换为 GIF 动图',
+    command: '-i input.mp4 -vf "fps=10,scale=320:-2:flags=lanczos" -c:v gif output.gif',
+  },
+  {
+    id: 'trim',
+    iconName: 'trim',
+    titleEn: 'Fast Trim (Lossless Copy)',
+    titleZh: '无损快速剪切',
+    command: '-ss 00:00:10 -i input.mp4 -t 00:00:30 -c copy output_trimmed.mp4',
+  },
+];
 
 export interface CommandBoxProps {
   command: string;
@@ -18,6 +57,7 @@ export interface CommandBoxProps {
   onClear: () => void;
   /** 点击后将命令重置为模板原始内容 */
   onReset?: () => void;
+  onSelectPreset?: (command: string, label: string) => void;
   id?: string;
   placeholder?: string;
   hasMultipleInputs: boolean;
@@ -35,13 +75,14 @@ export function CommandBox({
   onCopy,
   onClear,
   onReset,
+  onSelectPreset,
   id,
   placeholder,
   hasMultipleInputs,
   commandSource,
   isReadyToRun = false,
 }: CommandBoxProps) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const generatedId = useId();
   const textareaId = id ?? generatedId;
   const helperTextId = `${textareaId}-helper`;
@@ -53,11 +94,48 @@ export function CommandBox({
       )
     : t('Drag & drop files or type manually');
 
+  const [isDragTarget, setIsDragTarget] = useState(false);
+
+  const handleDragEnter = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragTarget(true);
+  };
+
+  const handleDragLeave = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+    setIsDragTarget(false);
+  };
+
+  const handleDropInternal = (e: DragEvent<HTMLTextAreaElement>) => {
+    setIsDragTarget(false);
+    onDrop(e);
+  };
+
   return (
     <div className="relative group">
       <div className="absolute -inset-0.5 bg-gradient-to-r from-primary-400 via-cyan-500 to-emerald-500 rounded-xl opacity-0 blur-sm pointer-events-none transition-opacity duration-500 group-hover:opacity-10 dark:group-hover:opacity-[0.08] motion-reduce:transition-none" />
 
-      <div className="relative bg-white dark:bg-slate-800 rounded-xl border-2 border-slate-100 dark:border-slate-700 group-hover:border-slate-200 dark:group-hover:border-slate-600 shadow-sm transition-[border-color,box-shadow,background-color] duration-300 motion-reduce:transition-none focus-within:border-primary-500 focus-within:ring-2 focus-within:ring-primary-500/20 overflow-hidden">
+      <div
+        onDragEnter={handleDragEnter}
+        onDragLeave={handleDragLeave}
+        className="relative bg-white dark:bg-slate-800 rounded-xl border-2 border-slate-100 dark:border-slate-700 group-hover:border-slate-200 dark:group-hover:border-slate-600 shadow-sm transition-[border-color,box-shadow,background-color] duration-300 motion-reduce:transition-none focus-within:border-primary-500 focus-within:ring-2 focus-within:ring-primary-500/20 overflow-hidden"
+      >
+        {/* 拖放高亮蒙层 */}
+        {isDragTarget && (
+          <div className="absolute inset-0 z-20 bg-primary-50/95 dark:bg-slate-900/95 backdrop-blur-sm border-2 border-dashed border-primary-500 rounded-xl flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-150 pointer-events-none">
+            <div className="w-12 h-12 rounded-full bg-primary-100 dark:bg-primary-900/50 flex items-center justify-center text-primary-600 dark:text-primary-400 mb-2 shadow-inner">
+              <UploadCloud size={24} className="animate-bounce" />
+            </div>
+            <p className="text-sm font-semibold text-primary-900 dark:text-primary-200">
+              {language === 'zh' ? '松开以导入文件或解析路径' : 'Drop media file to parse command'}
+            </p>
+            <p className="text-xs text-primary-600 dark:text-primary-400 mt-1">
+              {language === 'zh' ? '将自动读取格式信息与文件路径' : 'File path will be inserted into FFmpeg input parameters'}
+            </p>
+          </div>
+        )}
+
         {/* 顶部工具栏 */}
         <div className="flex items-center justify-between px-4 py-2 border-b border-slate-100 dark:border-slate-700/80 bg-slate-50/60 dark:bg-slate-900/40 rounded-t-xl">
           <div className="flex items-center gap-2 min-w-0">
@@ -144,27 +222,70 @@ export function CommandBox({
           </div>
         </div>
 
-        {/* 命令文本域 */}
-        <label htmlFor={textareaId} className="sr-only">
-          {t('FFmpeg Command')}
-        </label>
-        <textarea
-          id={textareaId}
-          value={command}
-          onChange={(e) => onCommandChange(e.target.value)}
-          onDragOver={onDragOver}
-          onDrop={onDrop}
-          aria-describedby={helperTextId}
-          placeholder={
-            placeholder ?? t('Enter FFmpeg command or drag & drop files here')
-          }
-          spellCheck={false}
-          rows={8}
-          className="w-full px-4 pt-3 pb-2 bg-transparent border-none resize-none font-mono text-sm text-slate-800 dark:text-slate-200 focus:ring-0 leading-relaxed placeholder:text-slate-400 dark:placeholder:text-slate-500 outline-none"
-        />
+        {/* 命令文本域区域 */}
+        <div className="relative min-h-[160px] flex flex-col justify-between">
+          <label htmlFor={textareaId} className="sr-only">
+            {t('FFmpeg Command')}
+          </label>
+          <textarea
+            id={textareaId}
+            value={command}
+            onChange={(e) => onCommandChange(e.target.value)}
+            onDragOver={onDragOver}
+            onDrop={handleDropInternal}
+            aria-describedby={helperTextId}
+            placeholder={
+              placeholder ?? t('Enter FFmpeg command or drag & drop files here')
+            }
+            spellCheck={false}
+            rows={command.length === 0 ? 3 : 7}
+            className="w-full px-4 pt-3 pb-2 bg-transparent border-none resize-none font-mono text-sm text-slate-800 dark:text-slate-200 focus:ring-0 leading-relaxed placeholder:text-slate-400 dark:placeholder:text-slate-500 outline-none"
+          />
+
+          {/* 当命令为空时展示常用快捷预设卡片 */}
+          {command.trim().length === 0 && (
+            <div className="px-4 pb-3 pt-1">
+              <div className="flex items-center gap-1.5 mb-2 text-xs font-medium text-slate-400 dark:text-slate-500">
+                <Sparkles size={12} className="text-amber-500" />
+                <span>{language === 'zh' ? '快速预设 / 常用指令卡片:' : 'Quick Presets:'}</span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {QUICK_PRESETS.map((preset) => {
+                  const title = language === 'zh' ? preset.titleZh : preset.titleEn;
+                  return (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => {
+                        if (onSelectPreset) {
+                          onSelectPreset(preset.command, title);
+                        } else {
+                          onCommandChange(preset.command);
+                        }
+                      }}
+                      className="group/preset flex items-center gap-2 p-2 rounded-lg bg-slate-50 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-700/60 hover:border-primary-400 dark:hover:border-primary-500 hover:bg-primary-50/50 dark:hover:bg-primary-900/20 text-left transition-all duration-150"
+                    >
+                      <div className="w-6 h-6 rounded-md bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700 flex items-center justify-center text-primary-600 dark:text-primary-400 flex-shrink-0 group-hover/preset:scale-105 transition-transform">
+                        {preset.iconName === 'h264' && <FileVideo size={13} />}
+                        {preset.iconName === 'audio' && <Music size={13} />}
+                        {preset.iconName === 'gif' && <Film size={13} />}
+                        {preset.iconName === 'trim' && <Scissors size={13} />}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[11px] font-medium text-slate-700 dark:text-slate-300 truncate group-hover/preset:text-primary-600 dark:group-hover/preset:text-primary-400">
+                          {title}
+                        </p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* 底部：字符数 */}
-        <div className="flex items-center px-4 pb-3 pt-1">
+        <div className="flex items-center justify-between px-4 pb-3 pt-1 border-t border-slate-50 dark:border-slate-800">
           <span
             id={helperTextId}
             className="text-[11px] text-slate-400 dark:text-slate-500 font-mono select-none"
@@ -183,4 +304,7 @@ CommandBox.defaultProps = {
   id: undefined,
   placeholder: undefined,
   isReadyToRun: false,
+  onReset: undefined,
+  onSelectPreset: undefined,
 };
+
