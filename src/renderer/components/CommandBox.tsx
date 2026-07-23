@@ -1,5 +1,14 @@
-import { FileVideo, Film, Music, RotateCcw, Scissors, Sparkles, Terminal as TerminalIcon, UploadCloud } from 'lucide-react';
-import { useState, useId, type DragEvent } from 'react';
+import {
+  FileVideo,
+  Film,
+  Music,
+  RotateCcw,
+  Scissors,
+  Sparkles,
+  Terminal as TerminalIcon,
+  UploadCloud,
+} from 'lucide-react';
+import { memo, useState, useId, type DragEvent } from 'react';
 import { useLanguage } from '../LanguageContext';
 
 export interface CommandSource {
@@ -23,7 +32,8 @@ const QUICK_PRESETS: QuickPreset[] = [
     iconName: 'h264',
     titleEn: 'Convert to H.264 MP4',
     titleZh: '转换视频 (H.264)',
-    command: '-i input.mp4 -c:v libx264 -preset medium -crf 23 -c:a aac -b:a 128k output.mp4',
+    command:
+      '-i input.mp4 -c:v libx264 -preset medium -crf 23 -c:a aac -b:a 128k output.mp4',
   },
   {
     id: 'audio',
@@ -37,7 +47,8 @@ const QUICK_PRESETS: QuickPreset[] = [
     iconName: 'gif',
     titleEn: 'Convert to Animated GIF',
     titleZh: '转换为 GIF 动图',
-    command: '-i input.mp4 -vf "fps=10,scale=320:-2:flags=lanczos" -c:v gif output.gif',
+    command:
+      '-i input.mp4 -vf "fps=10,scale=320:-2:flags=lanczos" -c:v gif output.gif',
   },
   {
     id: 'trim',
@@ -62,12 +73,12 @@ export interface CommandBoxProps {
   placeholder?: string;
   hasMultipleInputs: boolean;
   /** 命令来源信息（模板名 + 是否 dirty） */
-  commandSource?: CommandSource | null;
+  commandSource: CommandSource | null;
   /** 是否已满足运行前置条件（用于快捷键提示样式） */
   isReadyToRun?: boolean;
 }
 
-export function CommandBox({
+function CommandBoxImpl({
   command,
   onCommandChange,
   onDragOver,
@@ -128,10 +139,14 @@ export function CommandBox({
               <UploadCloud size={24} className="animate-bounce" />
             </div>
             <p className="text-sm font-semibold text-primary-900 dark:text-primary-200">
-              {language === 'zh' ? '松开以导入文件或解析路径' : 'Drop media file to parse command'}
+              {language === 'zh'
+                ? '松开以导入文件或解析路径'
+                : 'Drop media file to parse command'}
             </p>
             <p className="text-xs text-primary-600 dark:text-primary-400 mt-1">
-              {language === 'zh' ? '将自动读取格式信息与文件路径' : 'File path will be inserted into FFmpeg input parameters'}
+              {language === 'zh'
+                ? '将自动读取格式信息与文件路径'
+                : 'File path will be inserted into FFmpeg input parameters'}
             </p>
           </div>
         )}
@@ -247,11 +262,16 @@ export function CommandBox({
             <div className="px-4 pb-3 pt-1">
               <div className="flex items-center gap-1.5 mb-2 text-xs font-medium text-slate-400 dark:text-slate-500">
                 <Sparkles size={12} className="text-amber-500" />
-                <span>{language === 'zh' ? '快速预设 / 常用指令卡片:' : 'Quick Presets:'}</span>
+                <span>
+                  {language === 'zh'
+                    ? '快速预设 / 常用指令卡片:'
+                    : 'Quick Presets:'}
+                </span>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {QUICK_PRESETS.map((preset) => {
-                  const title = language === 'zh' ? preset.titleZh : preset.titleEn;
+                  const title =
+                    language === 'zh' ? preset.titleZh : preset.titleEn;
                   return (
                     <button
                       key={preset.id}
@@ -300,7 +320,7 @@ export function CommandBox({
   );
 }
 
-CommandBox.defaultProps = {
+CommandBoxImpl.defaultProps = {
   id: undefined,
   placeholder: undefined,
   isReadyToRun: false,
@@ -308,3 +328,4 @@ CommandBox.defaultProps = {
   onSelectPreset: undefined,
 };
 
+export const CommandBox = memo(CommandBoxImpl);

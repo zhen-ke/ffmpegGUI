@@ -219,11 +219,25 @@ export function WorkspaceDrawer({
           />
         </div>
 
-        {drawerSize !== 'sm' && activePane === 'terminal' && (
-          <div className="absolute inset-0 bg-[#0B1120]">
-            <Terminal />
-          </div>
-        )}
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            visibility:
+              drawerSize === 'sm' || activePane !== 'terminal'
+                ? 'hidden'
+                : 'visible',
+            pointerEvents:
+              drawerSize === 'sm' || activePane !== 'terminal'
+                ? 'none'
+                : 'auto',
+          }}
+          className="bg-[#0B1120]"
+        >
+          {/* 始终挂载：折叠/切 pane 仅切 visibility，避免反复 pty-kill / pty-start。
+              与上方 FFmpegTerminal 的 visibility 策略保持一致。 */}
+          <Terminal />
+        </div>
 
         {drawerSize === 'sm' && (
           <div className="h-full flex flex-col items-center justify-center pointer-events-none select-none">

@@ -19,6 +19,7 @@ import {
   X,
 } from 'lucide-react';
 import React, {
+  memo,
   useCallback,
   useEffect,
   useId,
@@ -629,4 +630,4 @@ Dropdown.defaultProps = {
   onClear: undefined,
 };
 
-export default Dropdown;
+export default memo(Dropdown);

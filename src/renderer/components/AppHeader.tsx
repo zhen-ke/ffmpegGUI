@@ -8,8 +8,9 @@
  */
 
 import { PlusCircle, X, Zap } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { memo } from 'react';
 import { useLanguage } from '../LanguageContext';
+import FFmpegProgressBar from './FFmpegProgressBar';
 
 export type GuideStep = 'template' | 'input' | 'output' | 'start';
 
@@ -25,13 +26,12 @@ interface AppHeaderProps {
   hasOutputReady: boolean;
   isReadyToRun: boolean;
   isRunning: boolean;
-  progress: number;
   showOnboardingGuide: boolean;
   onDismissGuide: () => void;
   onGuideStepClick: (step: GuideStep) => void;
 }
 
-export function AppHeader({
+function AppHeaderImpl({
   language,
   toggleLanguage,
   openNewTemplateDialog,
@@ -43,7 +43,6 @@ export function AppHeader({
   hasOutputReady,
   isReadyToRun,
   isRunning,
-  progress,
   showOnboardingGuide,
   onDismissGuide,
   onGuideStepClick,
@@ -51,53 +50,8 @@ export function AppHeader({
   const { t } = useLanguage();
   const isMac = window.electron.platform === 'darwin';
 
-  // ── 进度 + ETA（EMA 平滑，避免跳变 / Infinity） ──
-  const rateRef = useRef(0);
-  const lastProgressRef = useRef(0);
-  const lastTimeRef = useRef(0);
-  useEffect(() => {
-    if (!isRunning) {
-      rateRef.current = 0;
-      lastProgressRef.current = 0;
-      lastTimeRef.current = 0;
-      return;
-    }
-    const now = performance.now();
-    const prevP = lastProgressRef.current;
-    const prevT = lastTimeRef.current;
-    if (prevT > 0 && progress > prevP) {
-      const dt = now - prevT;
-      const dp = progress - prevP;
-      if (dt > 0) {
-        const inst = dp / dt;
-        rateRef.current =
-          rateRef.current === 0 ? inst : rateRef.current * 0.7 + inst * 0.3;
-      }
-    }
-    lastProgressRef.current = progress;
-    lastTimeRef.current = now;
-  }, [progress, isRunning]);
-
-  const clampedProgress = Math.max(0, Math.min(100, progress));
-  const showEta =
-    isRunning &&
-    clampedProgress > 3 &&
-    rateRef.current > 0 &&
-    Number.isFinite(rateRef.current);
-  let etaLabel: string | null = null;
-  if (showEta) {
-    const remainingMs = (100 - clampedProgress) / rateRef.current;
-    const totalSec = Math.min(
-      99 * 60,
-      Math.max(1, Math.round(remainingMs / 1000)),
-    );
-    const mm = Math.floor(totalSec / 60);
-    const ss = totalSec % 60;
-    etaLabel =
-      language === 'zh'
-        ? `${t('Estimated remaining')} ${mm}分${ss}秒`
-        : `${t('Estimated remaining')} ${mm}m ${ss}s`;
-  }
+  // 进度 + ETA 已移至 FFmpegProgressBar：高频 progress 订阅下放到叶子组件，
+  // AppHeader 不再持有 progress，Home 不再随进度帧重渲整树。
 
   const steps: Array<{
     key: GuideStep;
@@ -226,24 +180,8 @@ export function AppHeader({
           {workflowLabel}
         </span>
 
-        {isRunning && (
-          <div className="flex items-center gap-2 flex-1 min-w-[140px]">
-            <div className="flex-1 h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-primary-500 to-cyan-500 transition-[width] duration-500 ease-out motion-reduce:transition-none"
-                style={{ width: `${clampedProgress}%` }}
-              />
-            </div>
-            <span className="text-[11px] font-semibold text-primary-600 dark:text-primary-400 tabular-nums flex-shrink-0">
-              {clampedProgress.toFixed(0)}%
-            </span>
-            {etaLabel && (
-              <span className="text-[11px] text-slate-500 dark:text-slate-400 tabular-nums flex-shrink-0 hidden sm:inline">
-                {etaLabel}
-              </span>
-            )}
-          </div>
-        )}
+        {/* 进度条：高频订阅已下放到 FFmpegProgressBar 内部；组件内部按 isRunning 自门控 */}
+        <FFmpegProgressBar isRunning={isRunning} language={language} />
 
         {showOnboardingGuide && !isRunning && (
           <div className="flex items-center gap-1.5 flex-wrap">
@@ -269,3 +207,5 @@ export function AppHeader({
     </header>
   );
 }
+
+export const AppHeader = memo(AppHeaderImpl);

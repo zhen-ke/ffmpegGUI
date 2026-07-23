@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { onFFmpegEvent } from '../ipc/ffmpegEvents';
 
 export function useElectronIPC() {
   const [ffmpegExists, setFfmpegExists] = useState<boolean | null>(null);
@@ -28,14 +29,9 @@ export function useElectronIPC() {
     checkFFmpegStatus();
 
     // 监听主进程推送的状态变更（如安装完成后）
-    return window.electron.ipcRenderer.on(
-      'ffmpeg-status',
-      (exists: unknown) => {
-        if (typeof exists === 'boolean') {
-          setFfmpegExists(exists);
-        }
-      },
-    );
+    return onFFmpegEvent('ffmpeg-status', (exists) => {
+      setFfmpegExists(exists);
+    });
   }, [checkFFmpegStatus]);
 
   return {

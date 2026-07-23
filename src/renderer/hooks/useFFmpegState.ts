@@ -14,6 +14,7 @@
  */
 
 import { useCallback, useEffect, useReducer } from 'react';
+import { onFFmpegEvent } from '../ipc/ffmpegEvents';
 import { useLatest } from './useLatest';
 
 // ========== 状态机类型 ==========
@@ -28,8 +29,6 @@ export type FFmpegStatus =
 
 interface FFmpegState {
   status: FFmpegStatus;
-  progress: number;
-  totalDuration: number;
   lastStartedCommand: string;
   lastCompletedOutputFile: string;
 }
@@ -38,8 +37,6 @@ type FFmpegAction =
   | { type: 'START'; payload: { command: string } }
   | { type: 'STARTED' }
   | { type: 'STOP' }
-  | { type: 'PROGRESS'; payload: { time: number; totalDuration: number } }
-  | { type: 'DURATION'; payload: number }
   | { type: 'COMPLETE'; payload: { outputFile: string | null } }
   | { type: 'ERROR' }
   | { type: 'CANCELLED' }
@@ -47,8 +44,6 @@ type FFmpegAction =
 
 const initialState: FFmpegState = {
   status: 'idle',
-  progress: 0,
-  totalDuration: 0,
   lastStartedCommand: '',
   lastCompletedOutputFile: '',
 };
@@ -58,8 +53,6 @@ function reducer(state: FFmpegState, action: FFmpegAction): FFmpegState {
     case 'START':
       return {
         status: 'starting',
-        progress: 0,
-        totalDuration: 0,
         lastStartedCommand: action.payload.command,
         lastCompletedOutputFile: '',
       };
@@ -68,19 +61,10 @@ function reducer(state: FFmpegState, action: FFmpegAction): FFmpegState {
     case 'STOP':
       if (state.status !== 'running') return state;
       return { ...state, status: 'stopping' };
-    case 'DURATION':
-      return { ...state, totalDuration: action.payload };
-    case 'PROGRESS': {
-      const { time, totalDuration } = action.payload;
-      const pct =
-        totalDuration > 0 ? Math.min(100, (time / totalDuration) * 100) : 0;
-      return { ...state, progress: pct };
-    }
     case 'COMPLETE':
       return {
         ...state,
         status: 'done',
-        progress: 100,
         lastCompletedOutputFile: action.payload.outputFile ?? '',
       };
     case 'ERROR':
@@ -109,14 +93,16 @@ export function deriveFFmpegFlags(status: FFmpegStatus) {
 
 // ========== Hook ==========
 
-interface UseFFmpegStateProps {
-  onProgressUpdate?: (currentTime: number) => void;
-}
-
-export function useFFmpegState({ onProgressUpdate }: UseFFmpegStateProps = {}) {
+/**
+ * FFmpeg 状态机 Hook（status-only）。
+ *
+ * 只跟踪低频状态流转（idle/starting/running/stopping/done/error）；
+ * 高频的 progress / duration 不再进入 reducer——避免消费此 hook 的
+ * Home 随进度帧整树重渲。进度订阅已下放到 FFmpegProgressBar 内部。
+ */
+export function useFFmpegState() {
   const [state, dispatch] = useReducer(reducer, initialState);
 
-  const onProgressUpdateRef = useLatest(onProgressUpdate);
   const stateRef = useLatest(state);
 
   const handleStart = useCallback((command: string) => {
@@ -172,43 +158,16 @@ export function useFFmpegState({ onProgressUpdate }: UseFFmpegStateProps = {}) {
 
   useEffect(() => {
     const listeners = [
-      window.electron.ipcRenderer.on('ffmpeg-duration', (data: unknown) => {
-        dispatch({
-          type: 'DURATION',
-          payload: (data as { duration: number }).duration,
-        });
-      }),
-
-      window.electron.ipcRenderer.on('ffmpeg-progress', (data: unknown) => {
-        const { time } = data as { time: number };
-        dispatch({
-          type: 'PROGRESS',
-          payload: { time, totalDuration: stateRef.current.totalDuration },
-        });
-        onProgressUpdateRef.current?.(time);
-      }),
-
-      window.electron.ipcRenderer.on('ffmpeg-error', () => {
+      onFFmpegEvent('ffmpeg-error', () => {
         dispatch({ type: 'ERROR' });
       }),
 
-      window.electron.ipcRenderer.on('ffmpeg-cancelled', () => {
+      onFFmpegEvent('ffmpeg-cancelled', () => {
         dispatch({ type: 'CANCELLED' });
       }),
 
-      window.electron.ipcRenderer.on('ffmpeg-complete', (data: unknown) => {
-        dispatch({
-          type: 'COMPLETE',
-          payload: {
-            outputFile:
-              data &&
-              typeof data === 'object' &&
-              'outputFile' in data &&
-              typeof (data as { outputFile?: unknown }).outputFile === 'string'
-                ? (data as { outputFile: string }).outputFile
-                : null,
-          },
-        });
+      onFFmpegEvent('ffmpeg-complete', ({ outputFile }) => {
+        dispatch({ type: 'COMPLETE', payload: { outputFile } });
       }),
     ];
 
@@ -220,8 +179,6 @@ export function useFFmpegState({ onProgressUpdate }: UseFFmpegStateProps = {}) {
 
   return {
     status: state.status,
-    progress: state.progress,
-    totalDuration: state.totalDuration,
     lastStartedCommand: state.lastStartedCommand,
     lastCompletedOutputFile: state.lastCompletedOutputFile,
     ...flags,

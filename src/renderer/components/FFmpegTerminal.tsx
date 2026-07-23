@@ -13,8 +13,9 @@
  * - 所有 IPC 监听集中在此，useFFmpegState 不再重复监听日志事件
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type MutableRefObject } from 'react';
 import 'xterm/css/xterm.css';
+import { onFFmpegEvent } from '../ipc/ffmpegEvents';
 import { useXterm } from '../hooks/useXterm';
 
 // ========== ANSI 颜色常量 ==========
@@ -49,29 +50,29 @@ function buildLine(type: TerminalLogType, message: string): string {
 
 export interface FFmpegTerminalProps {
   /** 父级持有此 ref 可调用 clear() */
-  onClearRef?: React.MutableRefObject<(() => void) | null>;
+  onClearRef: MutableRefObject<(() => void) | null>;
   /** 父级持有此 ref 可调用 getAllText()，用于复制全部日志 */
-  onCopyRef?: React.MutableRefObject<(() => string) | null>;
+  onCopyRef: MutableRefObject<(() => string) | null>;
   /**
    * 父级持有此 ref 可主动向 xterm 写入一条带样式的日志行。
    * 用于替代原 addLog：系统提示（复制成功、命令已复制等）也写入 xterm，
    * 而不是走独立的 React State toast。
    */
-  onWriteLogRef?: React.MutableRefObject<
+  onWriteLogRef: MutableRefObject<
     ((type: TerminalLogType, message: string) => void) | null
   >;
 }
 
 // ========== 组件 ==========
 
-export const FFmpegTerminal = ({
+export function FFmpegTerminal({
   onClearRef,
   onCopyRef,
   onWriteLogRef,
-}: FFmpegTerminalProps) => {
+}: FFmpegTerminalProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const { write, writeln, clear, getAllText, fit } = useXterm(containerRef, {
+  const { writeln, clear, getAllText } = useXterm(containerRef, {
     autoFit: true,
     webLinks: true,
     scrollback: 10000,
@@ -98,34 +99,21 @@ export const FFmpegTerminal = ({
   // —— 监听所有 ffmpeg-* 日志事件，直接写入 xterm ——
 
   useEffect(() => {
-    const unlistenOutput = window.electron.ipcRenderer.on(
-      'ffmpeg-output',
-      (data: unknown) => {
-        writeln(buildLine('info', data as string));
-      },
-    );
+    const unlistenOutput = onFFmpegEvent('ffmpeg-output', (line) => {
+      writeln(buildLine('info', line));
+    });
 
-    const unlistenError = window.electron.ipcRenderer.on(
-      'ffmpeg-error',
-      (error: unknown) => {
-        writeln(buildLine('error', error as string));
-      },
-    );
+    const unlistenError = onFFmpegEvent('ffmpeg-error', (message) => {
+      writeln(buildLine('error', message));
+    });
 
-    const unlistenCancelled = window.electron.ipcRenderer.on(
-      'ffmpeg-cancelled',
-      (message: unknown) => {
-        const msg = (message as string | undefined) ?? 'FFmpeg process stopped.';
-        writeln(buildLine('info', msg));
-      },
-    );
+    const unlistenCancelled = onFFmpegEvent('ffmpeg-cancelled', (message) => {
+      writeln(buildLine('info', message || 'FFmpeg process stopped.'));
+    });
 
-    const unlistenComplete = window.electron.ipcRenderer.on(
-      'ffmpeg-complete',
-      () => {
-        writeln(buildLine('success', 'FFmpeg process completed successfully.'));
-      },
-    );
+    const unlistenComplete = onFFmpegEvent('ffmpeg-complete', () => {
+      writeln(buildLine('success', 'FFmpeg process completed successfully.'));
+    });
 
     return () => {
       unlistenOutput();
@@ -145,4 +133,4 @@ export const FFmpegTerminal = ({
       <div ref={containerRef} className="h-full w-full" />
     </div>
   );
-};
+}

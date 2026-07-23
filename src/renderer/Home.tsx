@@ -12,7 +12,7 @@
  * 8. Dropdown 支持清除选中模板，AppHeader 加入三步骤引导
  */
 
-import { Copy, Lock, Loader2, Play, Square, Upload } from 'lucide-react';
+import { Upload } from 'lucide-react';
 import {
   useCallback,
   useEffect,
@@ -22,7 +22,7 @@ import {
   useState,
   type DragEvent,
 } from 'react';
-import Dropdown, { type DropdownOption } from './components/Dropdown';
+import { type DropdownOption } from './components/Dropdown';
 import FFmpegDownloader from './components/FFmpegDownloader';
 import { TemplateDialog } from './components/TemplateDialog';
 import { commandTemplates } from './constants/commandTemplates';
@@ -45,9 +45,9 @@ import { ToastContainer } from './components/ToastContainer';
 import { ConfirmModal } from './components/ConfirmModal';
 import { type WorkspacePane } from './components/DrawerTabBar';
 import { type TerminalLogType } from './components/FFmpegTerminal';
-import { FileSelector } from './components/FileSelector';
 import { MediaInfoCard } from './components/MediaInfoCard';
 import { PipelineStrip } from './components/PipelineStrip';
+import SetupPanel from './components/SetupPanel';
 import { WorkspaceDrawer } from './components/WorkspaceDrawer';
 import {
   buildOutputPreview,
@@ -257,7 +257,6 @@ function Home() {
     isStopping,
     lastCompletedOutputFile,
     status,
-    progress,
     handleStart,
     handleStop,
   } = useFFmpegState();
@@ -623,6 +622,13 @@ function Home() {
     setupReadiness.isSetupComplete,
   ]);
 
+  // ── 复制最终输出路径（稳定回调，避免破坏 SetupPanel memo） ──
+  const handleCopyOutputPath = useCallback(() => {
+    if (!finalOutputPath) return;
+    navigator.clipboard.writeText(finalOutputPath);
+    pushToast('info', t('Output path copied to clipboard'));
+  }, [finalOutputPath, pushToast, t]);
+
   // ── 停止：用 canStop 守卫（状态机保证） ──
 
   const onStop = useCallback(() => {
@@ -851,7 +857,6 @@ function Home() {
         }
         isReadyToRun={isReadyToRun}
         isRunning={isRunning}
-        progress={progress}
         showOnboardingGuide={!guideDismissed}
         onDismissGuide={dismissGuide}
         onGuideStepClick={handleGuideStepClick}
@@ -863,185 +868,38 @@ function Home() {
           isCompact ? 'flex-col overflow-y-auto' : 'flex-row'
         } ${isMac ? 'bg-transparent' : 'bg-white/80 dark:bg-slate-800/80'}`}
       >
-        {/* ── 左栏：Setup（模板 / 输入 / 输出 / 开始）── */}
-        <aside
-          className={`${
-            isCompact
-              ? 'w-full'
-              : 'w-[300px] flex-shrink-0 overflow-y-auto border-r border-slate-200/60 dark:border-slate-700/60'
-          } px-4 py-4 space-y-3 ${
-            isMac ? 'bg-white/50 dark:bg-slate-900/40' : ''
-          }`}
-        >
-          {/* ① 模板 */}
-          <div className="min-w-0">
-            <label
-              htmlFor={templateControlId}
-              className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5"
-            >
-              {t('Template')}
-            </label>
-            <Dropdown
-              id={templateControlId}
-              options={templateOptions}
-              onChange={handleTemplateSelectWithConfirm}
-              value={selectedTemplate}
-              placeholder={t('Select a template')}
-              onEdit={handleEditTemplate}
-              onDelete={handleDeleteTemplateWithConfirm}
-              onClear={handleTemplateClear}
-            />
-          </div>
-
-          {/* ② 输入文件（可多，纵向堆叠） */}
-          {inputSlots.map((slot) => (
-            <div key={slot.id} className="min-w-0">
-              <label
-                htmlFor={slot.id}
-                className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5"
-              >
-                {slot.fieldLabel}
-              </label>
-              <FileSelector
-                id={slot.id}
-                type="input"
-                value={slot.selectedValue}
-                onSelect={() => handleSelectInputAtIndex(slot.index)}
-                onClear={() => handleClearInputAtIndex(slot.index)}
-                onDrop={(path) => handleDropInputAtIndex(path, slot.index)}
-                label={slot.label}
-              />
-            </div>
-          ))}
-
-          {/* ③ 输出文件夹 */}
-          <div className="min-w-0">
-            <label
-              htmlFor={outputControlId}
-              className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5"
-            >
-              {t('Output Folder')}
-            </label>
-            <FileSelector
-              id={outputControlId}
-              type="output"
-              value={outputFolder}
-              onSelect={handleSelectOutputFolder}
-              onClear={clearOutputFolder}
-              onDrop={handleOutputFolderDrop}
-              label={t('Select Output Folder')}
-            />
-          </div>
-
-          {/* ④ 输出名 + 最终路径 */}
-          <div className="min-w-0 space-y-3">
-            <div>
-              <label
-                htmlFor={`${outputControlId}-name`}
-                className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5"
-              >
-                {t('Output Name')}
-              </label>
-              <input
-                id={`${outputControlId}-name`}
-                type="text"
-                value={outputFileName}
-                onChange={(event) =>
-                  handleOutputFileNameChange(event.target.value)
-                }
-                spellCheck={false}
-                className="w-full h-10 px-3 rounded-xl border-2 border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-              />
-            </div>
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
-                  {t('Final Output Path')}
-                </p>
-                <span className="text-[10px] text-slate-400 dark:text-slate-500 font-normal">
-                  {language === 'zh' ? '只读预览' : 'Read-only'}
-                </span>
-              </div>
-              <div className="h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/60 flex items-center justify-between gap-2 shadow-2xs">
-                <div className="flex items-center gap-2 min-w-0 flex-1">
-                  <Lock size={13} className="text-slate-400 dark:text-slate-500 flex-shrink-0" />
-                  <span
-                    className="truncate text-xs text-slate-700 dark:text-slate-200 font-mono"
-                    title={finalOutputPath}
-                  >
-                    {finalOutputPath}
-                  </span>
-                </div>
-                {finalOutputPath && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      navigator.clipboard.writeText(finalOutputPath);
-                      pushToast('info', t('Output path copied to clipboard'));
-                    }}
-                    title={t('Copy output path')}
-                    className="p-1.5 rounded-lg text-slate-400 hover:text-primary-600 dark:hover:text-primary-400 hover:bg-slate-200/60 dark:hover:bg-slate-700/60 transition-colors flex-shrink-0"
-                  >
-                    <Copy size={13} />
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* ⑤ 主操作按钮：Start / Stop（单一主 CTA） */}
-          <div className="pt-1">
-            {(() => {
-              let tone =
-                'bg-slate-100 dark:bg-slate-700/50 text-slate-400 dark:text-slate-500 cursor-not-allowed';
-              let icon = <Play size={14} className="fill-current" />;
-              let label = t('Start');
-              // 运行中显示 Stop；否则仅当真正可运行（命令 + 输入 + 输出齐全）时启用 Start
-              let disabled = !isReadyToRun;
-              if (isRunning) {
-                tone =
-                  'bg-white dark:bg-slate-700 border border-red-200 dark:border-red-800/50 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 active:scale-[0.98]';
-                icon = isStopping ? (
-                  <Loader2 size={16} className="animate-spin" />
-                ) : (
-                  <Square size={14} className="fill-current" />
-                );
-                label = isStopping ? t('Stopping...') : t('Stop');
-                disabled = !canStop;
-              } else if (isReadyToRun) {
-                tone =
-                  'bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 text-white shadow-md shadow-primary-500/25 hover:shadow-lg hover:shadow-primary-500/30 hover:-translate-y-0.5 active:translate-y-0';
-              }
-              // 禁用时给出明确原因：按钮 tooltip + 下方提示文案，避免「就绪」误导
-              const blockerHint =
-                !isRunning && setupBlockerMessage ? setupBlockerMessage : null;
-              return (
-                <div>
-                  <button
-                    ref={startButtonRef}
-                    type="button"
-                    onClick={isRunning ? onStop : onStart}
-                    disabled={disabled}
-                    aria-label={isRunning ? t('Stop') : t('Start')}
-                    title={blockerHint ?? undefined}
-                    className={`w-full flex items-center justify-center gap-2 h-11 rounded-xl text-sm font-semibold transition-[transform,box-shadow,background-color,color] duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-800 ${tone}`}
-                  >
-                    {icon}
-                    <span>{label}</span>
-                  </button>
-                  {blockerHint && (
-                    <p
-                      role="status"
-                      className="mt-1.5 text-[11px] font-medium text-amber-600 dark:text-amber-400 leading-snug"
-                    >
-                      {blockerHint}
-                    </p>
-                  )}
-                </div>
-              );
-            })()}
-          </div>
-        </aside>
+        <SetupPanel
+          isCompact={isCompact}
+          isMac={isMac}
+          templateControlId={templateControlId}
+          templateOptions={templateOptions}
+          selectedTemplate={selectedTemplate}
+          onTemplateChange={handleTemplateSelectWithConfirm}
+          onEditTemplate={handleEditTemplate}
+          onDeleteTemplate={handleDeleteTemplateWithConfirm}
+          onClearTemplate={handleTemplateClear}
+          inputSlots={inputSlots}
+          onSelectInput={handleSelectInputAtIndex}
+          onClearInput={handleClearInputAtIndex}
+          onDropInput={handleDropInputAtIndex}
+          outputControlId={outputControlId}
+          outputFolder={outputFolder}
+          onSelectOutputFolder={handleSelectOutputFolder}
+          onClearOutputFolder={clearOutputFolder}
+          onDropOutputFolder={handleOutputFolderDrop}
+          outputFileName={outputFileName}
+          onOutputFileNameChange={handleOutputFileNameChange}
+          finalOutputPath={finalOutputPath}
+          onCopyOutputPath={handleCopyOutputPath}
+          startButtonRef={startButtonRef}
+          isRunning={isRunning}
+          isStopping={isStopping}
+          canStop={canStop}
+          isReadyToRun={isReadyToRun}
+          onStart={onStart}
+          onStop={onStop}
+          setupBlockerMessage={setupBlockerMessage}
+        />
 
         {/* ── 右栏：命令主区（hero）── */}
         <main
