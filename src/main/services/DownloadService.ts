@@ -62,13 +62,43 @@ function getMaxDownloadBytes(): number {
  */
 class DownloadService {
   /**
+   * 安装互斥锁：同一时间只允许一个下载安装任务。
+   * 否则两个任务会同时写入同一批临时文件，互相覆盖/删除对方数据。
+   */
+  private activeInstall: Promise<boolean> | null = null;
+
+  /**
    * 下载并安装 FFmpeg。
    *
    * @param url   下载 URL（必须为 http/https）
    * @param event IPC 事件对象，用于向 renderer 推送进度
-   * @returns     安装成功返回 true，失败返回 false
+   * @returns     安装成功返回 true，失败（或已有任务进行中）返回 false
    */
   async downloadAndInstall(url: string, event: IpcMainEvent): Promise<boolean> {
+    if (this.activeInstall) {
+      safeReply(
+        event,
+        'ffmpeg-install-error',
+        'Another installation is already in progress. Please wait for it to finish.',
+      );
+      return false;
+    }
+
+    this.activeInstall = this.performInstall(url, event);
+    try {
+      return await this.activeInstall;
+    } finally {
+      this.activeInstall = null;
+    }
+  }
+
+  /**
+   * 实际的下载安装流程，由 downloadAndInstall 在互斥锁保护下调用。
+   */
+  private async performInstall(
+    url: string,
+    event: IpcMainEvent,
+  ): Promise<boolean> {
     // 前置校验：在触碰文件系统或网络之前快速失败
     try {
       validateUrl(url);
@@ -77,14 +107,20 @@ class DownloadService {
       return false;
     }
 
-    const tempDir = app.getPath('temp');
-    const downloadDir = path.join(tempDir, 'ffmpeg-download');
-    const extractDir = path.join(tempDir, 'ffmpeg-extract');
+    // 每次任务使用独立的临时目录（mkdtemp 随机后缀）：
+    // 即使历史任务异常残留，也不会与本任务互相覆盖
+    const tempDirs: string[] = [];
 
     try {
-      // 准备临时目录（安装目标目录推迟到 move 前创建，避免失败后留下残留）
-      await ensureDir(downloadDir);
-      await ensureDir(extractDir);
+      const tempDir = app.getPath('temp');
+      const downloadDir = await fs.promises.mkdtemp(
+        path.join(tempDir, 'ffmpeg-download-'),
+      );
+      tempDirs.push(downloadDir);
+      const extractDir = await fs.promises.mkdtemp(
+        path.join(tempDir, 'ffmpeg-extract-'),
+      );
+      tempDirs.push(extractDir);
 
       // ── 阶段 1：下载 ──────────────────────────────────────
       const fileName = path.basename(new URL(url).pathname) || 'ffmpeg-archive';
@@ -131,8 +167,8 @@ class DownloadService {
       safeReply(event, 'ffmpeg-install-error', err.message);
       return false;
     } finally {
-      // 无论成功或失败，始终清理临时目录
-      await Promise.allSettled([removeDir(downloadDir), removeDir(extractDir)]);
+      // 无论成功或失败，始终清理本任务的临时目录
+      await Promise.allSettled(tempDirs.map((dir) => removeDir(dir)));
     }
   }
 

@@ -200,6 +200,37 @@ export class FFmpegProcessManager {
     }
   }
 
+  /**
+   * 等待当前进程真正退出（close 事件触发、stdio 关闭）。
+   *
+   * 用于应用退出路径：cleanup() 发出 SIGTERM 后主进程若立即退出，
+   * 2s 的 SIGKILL 兜底定时器会随主进程消亡而失效，可能留下孤儿进程。
+   * 调用方应先 cleanup() 再 await 本方法，然后再退出主进程。
+   *
+   * 超时兜底大于内部 SIGKILL 的 2s，正常路径必定在超时前 resolve；
+   * 即使超时也只是按调用方预期继续退出流程，进程已被 SIGKILL。
+   *
+   * @param timeoutMs 最长等待时间，默认 3000ms
+   */
+  async waitForExit(timeoutMs = 3_000): Promise<void> {
+    const s = this.state;
+    if (!s) return;
+
+    await new Promise<void>((resolve) => {
+      const timer = setTimeout(resolve, timeoutMs);
+      // 进程已退出（极少见的竞态：SIGTERM 后立即收到 close）时直接返回
+      if (s.process.exitCode !== null) {
+        clearTimeout(timer);
+        resolve();
+        return;
+      }
+      s.process.once('close', () => {
+        clearTimeout(timer);
+        resolve();
+      });
+    });
+  }
+
   isRunning(): boolean {
     return this.state !== null;
   }

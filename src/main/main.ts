@@ -128,6 +128,11 @@ async function createWindow(): Promise<void> {
     }),
     webPreferences: {
       preload: getPreloadPath(),
+      // 显式声明安全基线，不依赖 Electron 默认值（当前默认虽安全，但版本升级可能改变）
+      contextIsolation: true,
+      nodeIntegration: false,
+      // preload 只使用 electron API 与 process.platform/arch，沙箱内均可正常工作
+      sandbox: true,
     },
   });
 
@@ -177,9 +182,27 @@ async function createWindow(): Promise<void> {
 
 // ========== 进程清理 ==========
 
-function cleanupProcesses(): void {
-  ffmpegService.cleanup();
+/**
+ * 终止子进程，并等待 ffmpeg 真正退出后再 resolve。
+ *
+ * 为什么必须等待：cleanup 发出 SIGTERM 后主进程若立即退出，
+ * FFmpegProcessManager 里 2s 的 SIGKILL 兜底定时器会随主进程消亡而失效，
+ * ffmpeg 可能成为孤儿进程。ptyService/ffmpegService 的 cleanup 均为幂等，
+ * 重复调用安全（无进程运行时是 no-op）。
+ */
+function cleanupProcesses(): Promise<void> {
   ptyService.cleanup();
+  ffmpegService.cleanup();
+  // 内部 SIGKILL 兜底为 2s，等待 3s 足以覆盖正常退出路径
+  return ffmpegService.waitForExit(3_000);
+}
+
+/** 清理完成后真正退出主进程。app.exit 不再触发 before-quit，可避免重入 */
+function exitAfterCleanup(): void {
+  cleanupProcesses().then(
+    () => app.exit(0),
+    () => app.exit(0),
+  );
 }
 
 // ========== 单实例锁 ==========
@@ -217,15 +240,21 @@ if (!gotTheLock) {
 // ========== 应用生命周期 ==========
 
 app.on('window-all-closed', () => {
-  cleanupProcesses();
-  if (process.platform !== 'darwin') {
-    app.quit();
+  if (process.platform === 'darwin') {
+    // macOS：窗口全关不退出，但仍需终止子进程（幂等，此处不等待）
+    ptyService.cleanup();
+    ffmpegService.cleanup();
+    return;
   }
+  // 等待 ffmpeg 真正退出后再结束主进程，避免孤儿进程
+  exitAfterCleanup();
 });
 
 if (process.platform === 'darwin') {
-  app.on('before-quit', () => {
+  app.on('before-quit', (event) => {
     app.isQuitting = true;
-    cleanupProcesses();
+    // 取消本次默认退出，待 ffmpeg 终止后由 exitAfterCleanup 主动 app.exit
+    event.preventDefault();
+    exitAfterCleanup();
   });
 }

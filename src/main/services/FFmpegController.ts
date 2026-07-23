@@ -203,6 +203,14 @@ class FFmpegController {
     this.manager.cleanup();
   }
 
+  /**
+   * 等待当前 FFmpeg 进程真正退出，供应用退出路径使用。
+   * 详见 FFmpegProcessManager.waitForExit。
+   */
+  async waitForExit(timeoutMs?: number): Promise<void> {
+    return this.manager.waitForExit(timeoutMs);
+  }
+
   isRunning(): boolean {
     return this.manager.isRunning();
   }

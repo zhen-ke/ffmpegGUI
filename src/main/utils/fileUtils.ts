@@ -3,7 +3,7 @@
  * 提供文件移动、下载等功能
  */
 
-import { exec } from 'child_process';
+import { spawn } from 'child_process';
 import fs from 'fs';
 
 // ========== 类型 ==========
@@ -108,23 +108,26 @@ function downloadWithCurl(
   options: DownloadOptions,
 ): Promise<void> {
   return new Promise<void>((resolve, reject) => {
+    // 用 spawn + 参数数组，不经过 shell：
+    // URL/路径中的 `$()`、反引号、引号等不会被解释，从根本上避免 shell 注入；
+    // 同时每个参数独立传递，含空格也无需手动加引号
     const args: string[] = ['-L', '--progress-bar', '--fail'];
 
     // curl 的 --max-time 单位为秒
     if (options.timeoutMs && options.timeoutMs > 0) {
       const timeoutSeconds = Math.ceil(options.timeoutMs / 1000);
-      args.push(`--max-time ${timeoutSeconds}`);
+      args.push('--max-time', String(timeoutSeconds));
     }
 
     if (options.maxBytes && options.maxBytes > 0) {
-      args.push(`--max-filesize ${Math.floor(options.maxBytes)}`);
+      args.push('--max-filesize', String(Math.floor(options.maxBytes)));
     }
+
+    args.push('-o', destPath, url);
 
     // --progress-bar 输出形如 `  3.5%` 至 `100.0%`，比 -# 更易解析
     // 使用变量名 `curlProc` 避免与全局 `process` 冲突
-    const curlProc = exec(
-      `curl ${args.join(' ')} -o "${destPath}" "${url}"`,
-    );
+    const curlProc = spawn('curl', args);
 
     let lastProgress = 0;
 
