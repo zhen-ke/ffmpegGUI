@@ -10,7 +10,7 @@
 
 import { Play, Terminal as TerminalIcon } from 'lucide-react';
 import type React from 'react';
-import { useCallback, useEffect, useRef } from 'react';
+import { memo, useCallback, useEffect, useRef } from 'react';
 import type { MutableRefObject } from 'react';
 import { DrawerSize, DrawerTabBar, type WorkspacePane } from './DrawerTabBar';
 import { FFmpegTerminal, type TerminalLogType } from './FFmpegTerminal';
@@ -45,7 +45,7 @@ interface WorkspaceDrawerProps {
   t: (key: string) => string;
 }
 
-export function WorkspaceDrawer({
+function WorkspaceDrawerImpl({
   activePane,
   onActivePaneChange,
   canStop,
@@ -265,3 +265,5 @@ export function WorkspaceDrawer({
     </div>
   );
 }
+
+export const WorkspaceDrawer = memo(WorkspaceDrawerImpl);

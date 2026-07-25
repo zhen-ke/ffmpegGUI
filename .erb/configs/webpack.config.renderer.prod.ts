@@ -47,7 +47,8 @@ const configuration: webpack.Configuration = {
             loader: 'css-loader',
             options: {
               modules: true,
-              sourceMap: true,
+              // 生产环境无需 CSS sourceMap：减小产物体积、加快构建
+              sourceMap: false,
               importLoaders: 1,
             },
           },

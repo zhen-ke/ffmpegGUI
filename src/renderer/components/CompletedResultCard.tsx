@@ -5,6 +5,7 @@
  */
 
 import { X } from 'lucide-react';
+import { memo } from 'react';
 import { useLanguage } from '../LanguageContext';
 
 interface CompletedResultCardProps {
@@ -19,7 +20,7 @@ interface CompletedResultCardProps {
   onDismiss?: () => void;
 }
 
-export function CompletedResultCard({
+function CompletedResultCardImpl({
   lastCompletedOutputFile,
   completedOutputFolder,
   canStart,
@@ -107,3 +108,5 @@ export function CompletedResultCard({
     </div>
   );
 }
+
+export const CompletedResultCard = memo(CompletedResultCardImpl);

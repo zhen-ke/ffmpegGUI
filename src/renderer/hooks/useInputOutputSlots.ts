@@ -1,5 +1,6 @@
 import { useCallback, useMemo, type Dispatch, type SetStateAction } from 'react';
 import { type ToastType } from './useToast';
+import { useStableValue } from './useStableValue';
 import {
   buildOutputPreview,
   countInputArguments,
@@ -88,6 +89,10 @@ export function useInputOutputSlots(options: {
   );
 
   const inputArguments = useMemo(() => parseInputArguments(command), [command]);
+  // 纯函数 parseInputArguments 每次按键都返回新数组引用，会让下游
+  // inputSlots / SetupPanel memo 失效。值稳定化：解析结果结构不变时
+  // 保持同一引用，避免无关按键引发 SetupPanel 重渲。
+  const stableInputArguments = useStableValue(inputArguments);
   const outputFileName = useMemo(() => parseOutputFileName(command), [command]);
   const finalOutputPath = useMemo(
     () => buildOutputPreview(outputFolder, outputFileName),
@@ -115,7 +120,7 @@ export function useInputOutputSlots(options: {
   const inputSlots = useMemo(
     () =>
       Array.from({ length: inputSlotCount }, (_, index) => {
-        const token = inputArguments[index] ?? '';
+        const token = stableInputArguments[index] ?? '';
         const selectedValue =
           inputFiles[index] ||
           (/^(?:[a-zA-Z]:[\\/]|\\\\|\/)/.test(token) ? token : '');
@@ -139,7 +144,7 @@ export function useInputOutputSlots(options: {
         };
       }),
     [
-      inputArguments,
+      stableInputArguments,
       inputFiles,
       inputSlotCount,
       inputControlBaseId,

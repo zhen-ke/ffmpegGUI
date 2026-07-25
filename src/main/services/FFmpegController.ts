@@ -143,6 +143,13 @@ class FFmpegController {
         args = ['-y', ...args];
       }
 
+      // -hide_banner：抑制 stderr 中的构建信息 / libav 版本等多行噪声，
+      // 降低 LineBuffer / 进度正则的解析压力，终端日志更干净。
+      // 不影响 Duration: / time= 解析。
+      if (!args.includes('-hide_banner')) {
+        args = ['-hide_banner', ...args];
+      }
+
       const callbacks: FFmpegProcessCallbacks = {
         onOutput: (line) => safeReply(ipcEvent, 'ffmpeg-output', line),
         onProgress: (time) =>

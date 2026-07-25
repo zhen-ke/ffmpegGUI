@@ -5,7 +5,7 @@
  */
 
 import { ChevronDown, Loader2 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import type { MediaProbeResult } from '../../shared/mediaProbe';
 import { useLanguage } from '../LanguageContext';
 
@@ -62,7 +62,7 @@ interface MediaInfoCardProps {
 
 // ── Component ─────────────────────────────────────────────
 
-export function MediaInfoCard({
+function MediaInfoCardImpl({
   mediaInfo,
   isLoading,
   hasError,
@@ -255,3 +255,5 @@ export function MediaInfoCard({
     </div>
   );
 }
+
+export const MediaInfoCard = memo(MediaInfoCardImpl);

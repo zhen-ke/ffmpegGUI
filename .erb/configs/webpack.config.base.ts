@@ -29,13 +29,13 @@ const configuration: webpack.Configuration = {
         test: /\.[jt]sx?$/,
         exclude: /node_modules/,
         use: {
-          loader: 'ts-loader',
+          // esbuild-loader 比 ts-loader 快一个数量级（即使 ts-loader 已开
+          // transpileOnly）。类型检查交由 CI / IDE 负责，不阻塞打包。
+          loader: 'esbuild-loader',
           options: {
-            // Remove this line to enable type checking in webpack builds
-            transpileOnly: true,
-            compilerOptions: {
-              module: 'esnext',
-            },
+            target: 'es2022',
+            // .tsx 走 jsx=automatic，与 tsconfig 的 jsx: 'react-jsx' 对齐
+            jsx: 'automatic',
           },
         },
       },

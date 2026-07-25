@@ -8,6 +8,7 @@
  */
 
 import { ChevronRight, Cpu, FileInput, FileOutput } from 'lucide-react';
+import { memo } from 'react';
 import { useLanguage } from '../LanguageContext';
 
 interface PipelineStripProps {
@@ -24,7 +25,7 @@ function basename(p: string): string {
   return i >= 0 ? p.slice(i + 1) : p;
 }
 
-export function PipelineStrip({
+function PipelineStripImpl({
   inputFiles,
   command,
   finalOutputPath,
@@ -114,4 +115,6 @@ export function PipelineStrip({
     </div>
   );
 }
+
+export const PipelineStrip = memo(PipelineStripImpl);
 
