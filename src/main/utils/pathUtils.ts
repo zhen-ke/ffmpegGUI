@@ -32,7 +32,10 @@ const COMMON_FFMPEG_DIRS: Readonly<Record<NodeJS.Platform, string[]>> = {
       'ffmpeg',
       'bin',
     ),
-    path.join(process.env.ChocolateyInstall ?? 'C:\\ProgramData\\chocolatey', 'bin'),
+    path.join(
+      process.env.ChocolateyInstall ?? 'C:\\ProgramData\\chocolatey',
+      'bin',
+    ),
   ],
   aix: [],
   freebsd: [],
@@ -93,11 +96,13 @@ export function getManagedFfmpegDirs(): string[] {
       )
     : [];
 
-  return [...new Set([
-    path.dirname(getFfmpegPath()),
-    ...legacyCacheDirs,
-    path.dirname(getLegacyFfmpegPath()),
-  ])];
+  return [
+    ...new Set([
+      path.dirname(getFfmpegPath()),
+      ...legacyCacheDirs,
+      path.dirname(getLegacyFfmpegPath()),
+    ]),
+  ];
 }
 
 /**
@@ -125,7 +130,11 @@ export function getFfmpegSearchDirs(): string[] {
   return [...new Set(candidates.filter(Boolean))];
 }
 
-function buildProbeEnv(): NodeJS.ProcessEnv {
+/**
+ * 构建探测 ffmpeg/ffprobe 等可执行文件时使用的环境变量。
+ * 将 FFmpeg 搜索目录前置到 PATH，确保打包内置/历史路径优先于系统 PATH。
+ */
+export function buildProbeEnv(): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env };
   env.PATH = [...getFfmpegSearchDirs(), process.env.PATH ?? '']
     .filter(Boolean)
@@ -133,7 +142,10 @@ function buildProbeEnv(): NodeJS.ProcessEnv {
   return env;
 }
 
-async function canExecute(filePath: string): Promise<boolean> {
+/**
+ * 检查文件是否可访问（Windows 仅判断存在，类 Unix 判断存在且可执行）。
+ */
+export async function canExecute(filePath: string): Promise<boolean> {
   try {
     await fs.promises.access(
       filePath,
@@ -145,7 +157,11 @@ async function canExecute(filePath: string): Promise<boolean> {
   }
 }
 
-function probeFfmpeg(command: string): Promise<boolean> {
+/**
+ * 探测可执行文件是否可用（执行 `<command> -version`，5s 超时）。
+ * 通用：可用于 ffmpeg、ffprobe 等任意命令。
+ */
+export function probeExecutableExists(command: string): Promise<boolean> {
   return new Promise<boolean>((resolve) => {
     const child = execFile(command, ['-version'], {
       timeout: 5_000,
@@ -207,7 +223,7 @@ export async function resolveFfmpegPath(): Promise<string | null> {
   for (const candidate of [...new Set(systemCandidates)]) {
     const isAbsolute = path.isAbsolute(candidate);
     if (isAbsolute && !(await canExecute(candidate))) continue;
-    if (await probeFfmpeg(candidate)) {
+    if (await probeExecutableExists(candidate)) {
       _cachedFfmpegPath = candidate;
       return _cachedFfmpegPath;
     }

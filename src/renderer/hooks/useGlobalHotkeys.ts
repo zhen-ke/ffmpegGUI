@@ -1,4 +1,5 @@
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
+import { useLatest } from './useLatest';
 
 interface GlobalHotkeysOptions {
   onStart: () => void;
@@ -19,13 +20,9 @@ export function useGlobalHotkeys({
   onCopyCommand,
   onClearLogs,
 }: GlobalHotkeysOptions) {
-  const onStartRef = useRef(onStart);
-  const onCopyRef = useRef(onCopyCommand);
-  const onClearRef = useRef(onClearLogs);
-
-  onStartRef.current = onStart;
-  onCopyRef.current = onCopyCommand;
-  onClearRef.current = onClearLogs;
+  const onStartRef = useLatest(onStart);
+  const onCopyRef = useLatest(onCopyCommand);
+  const onClearRef = useLatest(onClearLogs);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -55,5 +52,7 @@ export function useGlobalHotkeys({
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
+    // useLatest 返回稳定 ref，无需列入 deps（eslint 无法识别自定义 hook 返回稳定 ref）
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 }

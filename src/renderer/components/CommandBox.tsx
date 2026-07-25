@@ -1,3 +1,4 @@
+/* eslint-disable react/require-default-props -- defaultProps 已弃用（React 19 移除），改用默认参数；此规则与此方向冲突 */
 import {
   FileVideo,
   Film,
@@ -319,13 +320,5 @@ function CommandBoxImpl({
     </div>
   );
 }
-
-CommandBoxImpl.defaultProps = {
-  id: undefined,
-  placeholder: undefined,
-  isReadyToRun: false,
-  onReset: undefined,
-  onSelectPreset: undefined,
-};
 
 export const CommandBox = memo(CommandBoxImpl);

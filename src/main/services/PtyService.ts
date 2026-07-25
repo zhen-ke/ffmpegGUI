@@ -3,7 +3,10 @@
  */
 
 import { app } from 'electron';
-import type { IPty } from '@homebridge/node-pty-prebuilt-multiarch';
+import type {
+  IDisposable,
+  IPty,
+} from '@homebridge/node-pty-prebuilt-multiarch';
 import * as pty from '@homebridge/node-pty-prebuilt-multiarch';
 import type { WebContents } from 'electron';
 import fs from 'fs';
@@ -83,6 +86,8 @@ function getInitialCwd(): string {
 interface PtyState {
   process: IPty;
   sender: WebContents;
+  /** onData / onExit 返回的 disposable，teardown 时统一释放，避免回调悬挂。 */
+  disposables: IDisposable[];
 }
 
 // ========== PtyService ==========
@@ -98,9 +103,18 @@ class PtyService {
    * @throws 若已有进程在运行则抛出错误，调用方可选择处理或忽略。
    */
   start(sender: WebContents, cols = 80, rows = 24): void {
+    // macOS 窗口关闭重建后，旧 PTY 仍存活但绑定到已销毁的 sender，
+    // 导致新窗口 start 被拒。检测到这种僵尸会话时先清理再重建。
     if (this.state) {
-      console.warn('PTY is already running. Call kill() before starting a new session.');
-      return;
+      if (this.state.sender.isDestroyed()) {
+        console.warn('PTY session bound to a destroyed sender; rebuilding.');
+        this.kill();
+      } else {
+        console.warn(
+          'PTY is already running. Call kill() before starting a new session.',
+        );
+        return;
+      }
     }
 
     const shell = DEFAULT_SHELL[process.platform] ?? FALLBACK_SHELL;
@@ -115,22 +129,28 @@ class PtyService {
     });
 
     // 先建立状态，再绑定回调——确保回调执行时 state 已就绪
-    this.state = { process: proc, sender };
+    const disposables: IDisposable[] = [];
+    this.state = { process: proc, sender, disposables };
 
-    proc.onData((data) => {
-      this.sendToRenderer('pty-output', data);
-    });
+    // 保存 onData/onExit 返回的 disposable，teardown 时统一 dispose
+    disposables.push(
+      proc.onData((data) => {
+        this.sendToRenderer('pty-output', data);
+      }),
+    );
 
-    proc.onExit(({ exitCode }) => {
-      console.log('PTY exited with code:', exitCode);
-      // 使用本地快照通知 renderer，之后再清理状态
-      // 避免 teardown() 提前将 sender 置空导致通知丢失
-      const currentSender = this.state?.sender;
-      this.teardown();
-      if (currentSender && !currentSender.isDestroyed()) {
-        currentSender.send('pty-exit', exitCode);
-      }
-    });
+    disposables.push(
+      proc.onExit(({ exitCode }) => {
+        console.log('PTY exited with code:', exitCode);
+        // 使用本地快照通知 renderer，之后再清理状态
+        // 避免 teardown() 提前将 sender 置空导致通知丢失
+        const currentSender = this.state?.sender;
+        this.teardown();
+        if (currentSender && !currentSender.isDestroyed()) {
+          currentSender.send('pty-exit', exitCode);
+        }
+      }),
+    );
   }
 
   /**
@@ -162,8 +182,8 @@ class PtyService {
   kill(): void {
     if (!this.state) return;
     const { process: proc } = this.state;
-    // 先清理状态，再 kill 进程
-    // 这样 onExit 回调触发时 state 已为 null，不会二次 teardown
+    // 先释放监听并清空状态，再 kill 进程：
+    // 这样进程退出时不会再触发已 dispose 的 onData/onExit 回调
     this.teardown();
     try {
       proc.kill();
@@ -197,6 +217,15 @@ class PtyService {
    * 清除所有运行时状态。不负责 kill 进程本身——由调用方决定。
    */
   private teardown(): void {
+    if (!this.state) return;
+    // 释放 onData / onExit 等监听，避免回调悬挂到已 kill 的进程
+    this.state.disposables.forEach((disposable) => {
+      try {
+        disposable.dispose();
+      } catch (e) {
+        console.warn('PTY disposable dispose failed:', e);
+      }
+    });
     this.state = null;
   }
 }

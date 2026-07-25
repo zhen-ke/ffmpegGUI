@@ -10,6 +10,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { useCallback, useEffect, useRef } from 'react';
 import { Terminal } from 'xterm';
+import { useLatest } from './useLatest';
 import { TERMINAL_THEME } from '../constants/terminalTheme';
 
 const TERMINAL_OPTIONS = {
@@ -67,11 +68,9 @@ export const useXterm = (
 
   const termRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
-  // 用 ref 保持 onResize/onInit 的最新引用，避免加入 effect deps
-  const onResizeRef = useRef(onResize);
-  const onInitRef = useRef(onInit);
-  onResizeRef.current = onResize;
-  onInitRef.current = onInit;
+  // 用 useLatest 保持 onResize/onInit 的最新引用，避免加入 effect deps
+  const onResizeRef = useLatest(onResize);
+  const onInitRef = useLatest(onInit);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -122,6 +121,8 @@ export const useXterm = (
       termRef.current = null;
       fitAddonRef.current = null;
     };
+    // onResizeRef / onInitRef 由 useLatest 提供，稳定，无需列入 deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [containerRef, autoFit, webLinks, scrollback, cursorBlink, disableCursor]);
 
   // ── 使用 useCallback 保证引用稳定，避免 FFmpegTerminal useEffect 反复重注册 ──
@@ -169,5 +170,15 @@ export const useXterm = (
     termRef.current?.focus();
   }, []);
 
-  return { term: termRef, write, writeln, clear, getSelection, getAllText, resize, fit, focus };
+  return {
+    term: termRef,
+    write,
+    writeln,
+    clear,
+    getSelection,
+    getAllText,
+    resize,
+    fit,
+    focus,
+  };
 };

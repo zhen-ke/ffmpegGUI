@@ -1,3 +1,4 @@
+/* eslint-disable react/require-default-props -- defaultProps 已弃用（React 19 移除），改用默认参数；此规则与此方向冲突 */
 /**
  * Dropdown 模板选择组件（重构版）
  *
@@ -622,12 +623,5 @@ function Dropdown({
     </div>
   );
 }
-
-Dropdown.defaultProps = {
-  id: undefined,
-  onEdit: undefined,
-  onDelete: undefined,
-  onClear: undefined,
-};
 
 export default memo(Dropdown);

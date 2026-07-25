@@ -7,9 +7,19 @@ import { app, type IpcMainEvent } from 'electron';
 import fs from 'fs';
 import path from 'path';
 import { extractArchive } from '../utils/extractionUtils';
-import { downloadFile, ensureDir, moveFile, removeDir } from '../utils/fileUtils';
+import {
+  downloadFile,
+  ensureDir,
+  moveFile,
+  removeDir,
+} from '../utils/fileUtils';
 import { safeReply } from '../utils/ipcUtils';
-import { getFfmpegPath, getManagedFfmpegDirs, invalidateFfmpegPathCache } from '../utils/pathUtils';
+import {
+  getFfmpegPath,
+  getManagedFfmpegDirs,
+  invalidateFfmpegPathCache,
+} from '../utils/pathUtils';
+import { invalidateFfprobePathCache } from './MediaProbeService';
 
 // ========== 工具函数 ==========
 
@@ -51,7 +61,8 @@ function getMaxDownloadBytes(): number {
   const env = process.env.FFMPEG_GUI_MAX_DOWNLOAD_BYTES;
   if (!env) return MAX_DOWNLOAD_BYTES_DEFAULT;
   const parsed = Number(env);
-  if (!Number.isFinite(parsed) || parsed <= 0) return MAX_DOWNLOAD_BYTES_DEFAULT;
+  if (!Number.isFinite(parsed) || parsed <= 0)
+    return MAX_DOWNLOAD_BYTES_DEFAULT;
   return parsed;
 }
 
@@ -128,9 +139,14 @@ class DownloadService {
 
       safeReply(event, 'ffmpeg-download-progress', 0);
       // downloadFile 返回 void，严格写入 archivePath，无需捕获返回值
-      await downloadFile(url, archivePath, (progress) => {
-        safeReply(event, 'ffmpeg-download-progress', progress);
-      }, { timeoutMs: DOWNLOAD_TIMEOUT_MS, maxBytes: getMaxDownloadBytes() });
+      await downloadFile(
+        url,
+        archivePath,
+        (progress) => {
+          safeReply(event, 'ffmpeg-download-progress', progress);
+        },
+        { timeoutMs: DOWNLOAD_TIMEOUT_MS, maxBytes: getMaxDownloadBytes() },
+      );
 
       // ── 阶段 2：解压 ──────────────────────────────────────
       safeReply(event, 'ffmpeg-extract-progress', 0);
@@ -157,6 +173,8 @@ class DownloadService {
 
       // 安装完成，使路径缓存失效确保下次启动时重新探测
       invalidateFfmpegPathCache();
+      // ffprobe 通常随 ffmpeg 一同下载，同步失效其探测缓存
+      invalidateFfprobePathCache();
 
       console.log('FFmpeg installed successfully to:', ffmpegDestPath);
       safeReply(event, 'ffmpeg-install-complete');

@@ -43,7 +43,8 @@ function Home() {
   const outputControlId = useId();
   const commandControlId = useId();
 
-  const { activePane, isCompact, expandDrawerRef, handleActivePaneChange } = useWorkspaceLayout();
+  const { activePane, isCompact, expandDrawerRef, handleActivePaneChange } =
+    useWorkspaceLayout();
   const { confirmState, openConfirm, closeConfirm } = useConfirmModal();
 
   const startButtonRef = useRef<HTMLButtonElement>(null);
@@ -77,8 +78,10 @@ function Home() {
 
   const {
     command,
+    lastAppliedCommand,
     updateCommand,
     updateCommandWithPaths,
+    applyTemplateCommand,
     setCommand,
     handleDragOver,
     handleDrop,
@@ -86,7 +89,9 @@ function Home() {
     copyCommand,
   } = useCommandManager({ inputFiles, outputFolder });
 
-  const templateManager = useTemplateManager({ onError: handleOperationalError });
+  const templateManager = useTemplateManager({
+    onError: handleOperationalError,
+  });
 
   const {
     canStart,
@@ -111,11 +116,10 @@ function Home() {
   } = useTemplateSync({
     templateManager,
     command,
-    updateCommand,
+    lastAppliedCommand,
+    applyTemplateCommand,
     updateCommandWithPaths,
-    setCommand,
     clearCommand,
-    inputFiles,
     outputFolder,
     openConfirm,
     closeConfirm,
@@ -177,17 +181,14 @@ function Home() {
     onFileDrop: handleDropInputAtIndex,
   });
 
-  const {
-    showOnboardingGuide,
-    dismissGuide,
-    handleGuideStepClick,
-  } = useOnboardingGuide({
-    status,
-    templateControlId,
-    inputControlBaseId,
-    outputControlId,
-    startButtonRef,
-  });
+  const { showOnboardingGuide, dismissGuide, handleGuideStepClick } =
+    useOnboardingGuide({
+      status,
+      templateControlId,
+      inputControlBaseId,
+      outputControlId,
+      startButtonRef,
+    });
 
   const {
     mediaInfo,
@@ -241,7 +242,7 @@ function Home() {
       handleOperationalError('Failed to copy logs.');
     }
   }, [handleOperationalError, t]);
-  
+
   const handleSelectPreset = useCallback(
     (presetCmd: string, label: string) => {
       // 根据命令内容找到对应的内置模板，同步模板下拉选中状态
@@ -255,7 +256,13 @@ function Home() {
       }
       pushToast('info', `${t('Applied preset')}: ${label}`);
     },
-    [templateOptions, handleTemplateSelectWithConfirm, updateCommand, pushToast, t],
+    [
+      templateOptions,
+      handleTemplateSelectWithConfirm,
+      updateCommand,
+      pushToast,
+      t,
+    ],
   );
 
   useGlobalHotkeys({

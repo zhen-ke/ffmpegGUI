@@ -10,11 +10,13 @@
 
 import { Play, Terminal as TerminalIcon } from 'lucide-react';
 import type React from 'react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import type { MutableRefObject } from 'react';
 import { DrawerSize, DrawerTabBar, type WorkspacePane } from './DrawerTabBar';
 import { FFmpegTerminal, type TerminalLogType } from './FFmpegTerminal';
 import Terminal from './Terminal/Terminal';
+import { useLocalStorage } from '../hooks/useLocalStorage';
+import { useLatest } from '../hooks/useLatest';
 
 const PX_TARGETS: Record<DrawerSize, number> = { sm: 0, md: 260, lg: 470 };
 const LS_PX_KEY = 'ffmpeg-drawer-px-v1';
@@ -58,52 +60,46 @@ export function WorkspaceDrawer({
   t,
 }: WorkspaceDrawerProps) {
   // ── 抽屉高度（px 单一真相源）──
-  const [drawerHeightPx, setDrawerHeightPx] = useState<number>(() => {
-    try {
-      const saved = Number(localStorage.getItem(LS_PX_KEY));
-      return Number.isFinite(saved) && saved >= 0 ? saved : PX_TARGETS.md;
-    } catch {
-      return PX_TARGETS.md;
-    }
-  });
+  const [drawerHeightPx, setDrawerHeightPx] = useLocalStorage<number>(
+    LS_PX_KEY,
+    PX_TARGETS.md,
+    {
+      // 读写自带 try/catch，写入自动持久化，取代手写 persist
+      serialize: String,
+      deserialize: (raw) => {
+        const n = Number(raw);
+        return Number.isFinite(n) && n >= 0 ? n : PX_TARGETS.md;
+      },
+    },
+  );
   const lastNonZeroRef = useRef<number>(drawerHeightPx || PX_TARGETS.md);
   const preRunHeightRef = useRef<number>(drawerHeightPx);
-  const heightRef = useRef<number>(drawerHeightPx);
-  heightRef.current = drawerHeightPx;
+  // useLatest 统一管理渲染期 ref 同步，替代手写 heightRef.current = drawerHeightPx
+  const heightRef = useLatest(drawerHeightPx);
 
   // 派生高亮态（仅用于三档按钮的选中视觉）
   const drawerSize = deriveDrawerSize(drawerHeightPx);
-
-  const persist = useCallback((px: number) => {
-    try {
-      localStorage.setItem(LS_PX_KEY, String(px));
-    } catch {
-      /* ignore */
-    }
-  }, []);
 
   const setSizeTarget = useCallback(
     (sz: DrawerSize) => {
       const px = PX_TARGETS[sz];
       setDrawerHeightPx(px);
       if (px > 0) lastNonZeroRef.current = px;
-      persist(px);
+      // 持久化由 useLocalStorage 自动完成
     },
-    [persist],
+    [setDrawerHeightPx],
   );
 
   const toggleDrawer = useCallback(() => {
     setDrawerHeightPx((prev) => {
       if (prev > 0) {
         lastNonZeroRef.current = prev;
-        persist(0);
         return 0;
       }
-      const restore = lastNonZeroRef.current || PX_TARGETS.md;
-      persist(restore);
-      return restore;
+      return lastNonZeroRef.current || PX_TARGETS.md;
     });
-  }, [persist]);
+    // 持久化由 useLocalStorage 自动完成
+  }, [setDrawerHeightPx]);
 
   // 暴露 imperative expand：父级在 Start / 切 pane 时调用，若折叠则展开。
   // 同步调用、不依赖 effect，避免瞬时命令（如 -version）isRunning 未稳定时抽屉不弹。
@@ -116,7 +112,7 @@ export function WorkspaceDrawer({
     return () => {
       onExpandRef.current = null;
     };
-  }, [onExpandRef]);
+  }, [onExpandRef, setDrawerHeightPx]);
 
   // 运行时自动展开到 lg，结束后恢复
   const prevIsRunningRef = useRef(false);
@@ -129,7 +125,7 @@ export function WorkspaceDrawer({
     } else if (wasRunning && !isRunning) {
       setDrawerHeightPx(preRunHeightRef.current);
     }
-  }, [isRunning]);
+  }, [isRunning, heightRef, setDrawerHeightPx]);
 
   // ── 拖拽 resize ──
   const onHandlePointerDown = useCallback(
@@ -150,7 +146,6 @@ export function WorkspaceDrawer({
         window.removeEventListener('pointermove', onMove);
         window.removeEventListener('pointerup', onUp);
         setDrawerHeightPx((h) => {
-          persist(h);
           if (h > 0) lastNonZeroRef.current = h;
           return h;
         });
@@ -158,7 +153,7 @@ export function WorkspaceDrawer({
       window.addEventListener('pointermove', onMove);
       window.addEventListener('pointerup', onUp);
     },
-    [persist],
+    [setDrawerHeightPx, heightRef],
   );
 
   return (

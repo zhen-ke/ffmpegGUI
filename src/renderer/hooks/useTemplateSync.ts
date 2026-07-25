@@ -1,11 +1,19 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useLatest } from './useLatest';
 import { type DropdownOption } from '../components/Dropdown';
-import { commandTemplates, type CommandTemplate } from '../constants/commandTemplates';
-import { updateCommandPaths } from '../utils/commandUtils';
+import {
+  commandTemplates,
+  type CommandTemplate,
+} from '../constants/commandTemplates';
 import { type Template } from '../types/template';
 
 /**
- * useTemplateSync bridges the template manager and command manager, syncing the selected template to the command state.
+ * useTemplateSync bridges the template manager and command manager, syncing the
+ * selected template to the command state.
+ *
+ * 命令与基线（lastAppliedCommand）由 useCommandManager 的 reducer 原子持有，
+ * 本 hook 只负责：选模板时调用 applyTemplateCommand、计算 dirty、联动路径替换。
+ * 不再各自持有 lastAppliedCommand state，避免两条路径写同一 state 造成 isCommandDirty 闪烁。
  */
 export function useTemplateSync(options: {
   templateManager: {
@@ -17,13 +25,22 @@ export function useTemplateSync(options: {
     clearTemplateSelection: () => void;
   };
   command: string;
-  updateCommand: (cmd: string) => void;
-  updateCommandWithPaths: (cmd?: string, inputs?: string[], output?: string) => void;
-  setCommand: Dispatch<SetStateAction<string>>;
+  /** 最近一次应用模板 / 路径替换得到的基线命令（由 useCommandManager 的 reducer 原子持有） */
+  lastAppliedCommand: string | null;
+  /** 应用模板命令（command + 基线原子写入，由 useCommandManager 提供） */
+  applyTemplateCommand: (tplCmd: string) => void;
+  updateCommandWithPaths: (
+    cmd?: string,
+    inputs?: string[],
+    output?: string,
+  ) => void;
   clearCommand: () => void;
-  inputFiles: string[];
   outputFolder: string;
-  openConfirm: (title: string, onConfirm: () => void, opts?: { description?: string; danger?: boolean }) => void;
+  openConfirm: (
+    title: string,
+    onConfirm: () => void,
+    opts?: { description?: string; danger?: boolean },
+  ) => void;
   closeConfirm: () => void;
   t: (key: string) => string;
 }): {
@@ -40,10 +57,10 @@ export function useTemplateSync(options: {
   const {
     templateManager,
     command,
-    updateCommand,
+    lastAppliedCommand,
+    applyTemplateCommand,
     updateCommandWithPaths,
     clearCommand,
-    inputFiles,
     outputFolder,
     openConfirm,
     closeConfirm,
@@ -72,19 +89,9 @@ export function useTemplateSync(options: {
     [templateOptions, selectedTemplateId],
   );
 
-  const inputFilesRef = useRef(inputFiles);
-  const outputFolderRef = useRef(outputFolder);
-  const commandRef = useRef(command);
-  const selectedTemplateIdRef = useRef<string | null>(selectedTemplateId);
-
-  const [lastAppliedCommand, setLastAppliedCommand] = useState<string | null>(
-    null,
-  );
-  
-  inputFilesRef.current = inputFiles;
-  outputFolderRef.current = outputFolder;
-  commandRef.current = command;
-  selectedTemplateIdRef.current = selectedTemplateId;
+  // selectedTemplateId 在 handleTemplateSelectWithConfirm 中需读取最新值，
+  // 用 useLatest 统一管理，避免手写渲染期 ref 同步。
+  const selectedTemplateIdRef = useLatest(selectedTemplateId);
 
   const isInitialRender = useRef(true);
   useEffect(() => {
@@ -96,33 +103,12 @@ export function useTemplateSync(options: {
   }, [outputFolder, updateCommandWithPaths]);
 
   const selectedTemplateCommand = selectedTemplate?.command;
-  
-  const applyTemplateCommand = useCallback(
-    (tplCmd: string) => {
-      const currentInputs = inputFilesRef.current;
-      const o = outputFolderRef.current;
-      if (currentInputs.length > 0 || o) {
-        const expected = updateCommandPaths(tplCmd, currentInputs, o);
-        setLastAppliedCommand(expected);
-        updateCommandWithPaths(tplCmd, currentInputs, o);
-      } else {
-        setLastAppliedCommand(tplCmd);
-        updateCommand(tplCmd);
-      }
-    },
-    [updateCommand, updateCommandWithPaths, setLastAppliedCommand],
-  );
 
+  // 选模板时原子应用：command + 基线同时写入，该帧即干净，不会先脏后净地闪烁
   useEffect(() => {
     if (!selectedTemplateId || !selectedTemplateCommand) return;
     applyTemplateCommand(selectedTemplateCommand);
   }, [applyTemplateCommand, selectedTemplateCommand, selectedTemplateId]);
-
-  useEffect(() => {
-    if (!selectedTemplateId) {
-      setLastAppliedCommand(null);
-    }
-  }, [selectedTemplateId]);
 
   const isCommandDirty = useMemo(() => {
     if (!selectedTemplateId) return false;
@@ -145,6 +131,8 @@ export function useTemplateSync(options: {
       if (template.id === selectedTemplateIdRef.current) return;
       handleTemplateSelect(template);
     },
+    // selectedTemplateIdRef 由 useLatest 提供，稳定，无需列入 deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [handleTemplateSelect],
   );
 

@@ -3,10 +3,9 @@ import {
   ReactNode,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
-  useState,
 } from 'react';
+import { useLocalStorage } from './hooks/useLocalStorage';
 
 type Language = 'en' | 'zh';
 
@@ -402,14 +401,11 @@ export const translations: Record<Language, Record<string, string>> = {
 };
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
-  const [language, setLanguage] = useState<Language>(() => {
-    const savedLanguage = localStorage.getItem('language') as Language | null;
-    return savedLanguage || 'en';
+  // 语言偏好持久化：裸字符串（历史格式），非 JSON
+  const [language, setLanguage] = useLocalStorage<Language>('language', 'en', {
+    serialize: String,
+    deserialize: (raw) => (raw || 'en') as Language,
   });
-
-  useEffect(() => {
-    localStorage.setItem('language', language);
-  }, [language]);
 
   const t = useCallback(
     (key: string): string => {
@@ -424,7 +420,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
 
   const contextValue = useMemo(
     () => ({ language, setLanguage, t }),
-    [language, t],
+    [language, setLanguage, t],
   );
 
   return (

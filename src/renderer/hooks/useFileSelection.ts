@@ -6,19 +6,19 @@
 import { useCallback, useState } from 'react';
 import { useLatest } from './useLatest';
 import { ipcInvoke } from '../ipc/ipcTyped';
+import { getFileDirectory } from '../utils/filePath';
 
 /**
- * 从文件路径中提取所在目录（兼容 `/` 和 `\` 分隔符）。
+ * 在指定位置写入文件路径，用空串填充空位，保证返回密集数组（无稀疏空洞）。
  *
- * 注：renderer 进程无法直接使用 Node.js path 模块，
- * 此处用字符串操作替代 path.dirname，逻辑与主进程保持一致。
+ * 直接 `next[index] = filePath` 在 index 超出当前长度时会产生稀疏数组空洞，
+ * 后续靠 pop-trim 兜底非常脆弱；这里显式填充空串，使数组始终密集。
  */
-function getFileDirectory(filePath: string): string {
-  const lastSlash = Math.max(
-    filePath.lastIndexOf('/'),
-    filePath.lastIndexOf('\\'),
-  );
-  return lastSlash > 0 ? filePath.substring(0, lastSlash) : filePath;
+function setFileAt(files: string[], index: number, value: string): string[] {
+  const next = [...files];
+  while (next.length < index) next.push('');
+  next[index] = value;
+  return next;
 }
 
 // ========== 类型 ==========
@@ -52,11 +52,7 @@ export function useFileSelection({ onError }: UseFileSelectionProps = {}) {
       if (result.canceled || result.filePaths.length === 0) return '';
 
       const filePath = result.filePaths[0];
-      setInputFiles((prev) => {
-        const next = [...prev];
-        next[index] = filePath;
-        return next;
-      });
+      setInputFiles((prev) => setFileAt(prev, index, filePath));
 
       // 智能联动：输出目录为空时自动设为输入文件所在目录
       if (index === 0) {
@@ -94,39 +90,27 @@ export function useFileSelection({ onError }: UseFileSelectionProps = {}) {
 
   const clearInputFile = useCallback((index = 0) => {
     setInputFiles((prev) => {
-      const next = [...prev];
-      next[index] = '';
-
+      // 先密集写入空串（保证无空洞），再裁掉尾部空槽
+      const next = setFileAt(prev, index, '');
       while (next.length > 0 && !next[next.length - 1]) {
         next.pop();
       }
-
       return next;
     });
   }, []);
   const clearOutputFolder = useCallback(() => setOutputFolder(''), []);
 
-  const handleInputFileDrop = useCallback(
-    (filePath: string, index = 0) => {
-      setInputFiles((prev) => {
-        const next = [...prev];
-        next[index] = filePath;
-        return next;
-      });
+  const handleInputFileDrop = useCallback((filePath: string, index = 0) => {
+    setInputFiles((prev) => setFileAt(prev, index, filePath));
 
-      if (index === 0) {
-        setOutputFolder((prev) => prev || getFileDirectory(filePath));
-      }
-    },
-    [],
-  );
+    if (index === 0) {
+      setOutputFolder((prev) => prev || getFileDirectory(filePath));
+    }
+  }, []);
 
-  const handleOutputFolderDrop = useCallback(
-    (folderPath: string) => {
-      setOutputFolder(folderPath);
-    },
-    [],
-  );
+  const handleOutputFolderDrop = useCallback((folderPath: string) => {
+    setOutputFolder(folderPath);
+  }, []);
 
   return {
     inputFile: inputFiles[0] ?? '',

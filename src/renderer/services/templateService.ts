@@ -1,16 +1,15 @@
 import { v4 as uuidv4 } from 'uuid';
 import { Template } from '../types/template';
+import {
+  readLocalStorage,
+  writeLocalStorage,
+} from '../utils/localStorageUtils';
 
 const CUSTOM_TEMPLATES_KEY = 'custom_ffmpeg_templates';
 
 export const templateService = {
   getCustomTemplates(): Template[] {
-    try {
-      const stored = localStorage.getItem(CUSTOM_TEMPLATES_KEY);
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
-    }
+    return readLocalStorage<Template[]>(CUSTOM_TEMPLATES_KEY, []);
   },
 
   saveCustomTemplate(template: Omit<Template, 'id' | 'isCustom'>): Template {
@@ -22,7 +21,7 @@ export const templateService = {
     };
 
     customTemplates.push(newTemplate);
-    localStorage.setItem(CUSTOM_TEMPLATES_KEY, JSON.stringify(customTemplates));
+    writeLocalStorage(CUSTOM_TEMPLATES_KEY, customTemplates);
     return newTemplate;
   },
 
@@ -31,16 +30,13 @@ export const templateService = {
     const index = customTemplates.findIndex((t) => t.id === template.id);
     if (index !== -1) {
       customTemplates[index] = template;
-      localStorage.setItem(
-        CUSTOM_TEMPLATES_KEY,
-        JSON.stringify(customTemplates),
-      );
+      writeLocalStorage(CUSTOM_TEMPLATES_KEY, customTemplates);
     }
   },
 
   deleteCustomTemplate(templateId: string): void {
     const customTemplates = this.getCustomTemplates();
     const filtered = customTemplates.filter((t) => t.id !== templateId);
-    localStorage.setItem(CUSTOM_TEMPLATES_KEY, JSON.stringify(filtered));
+    writeLocalStorage(CUSTOM_TEMPLATES_KEY, filtered);
   },
 };

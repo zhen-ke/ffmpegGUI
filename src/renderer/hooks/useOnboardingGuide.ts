@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState, type RefObject } from 'react';
+import { useCallback, useEffect, type RefObject } from 'react';
 import { type GuideStep } from '../components/AppHeader';
+import { useLocalStorage } from './useLocalStorage';
 
 const LS_ONBOARDING_COMPLETED = 'onboarding-completed-v1';
 const LS_ONBOARDING_DISMISSED = 'onboarding-dismissed-v1';
@@ -26,36 +27,28 @@ export function useOnboardingGuide(options: {
     startButtonRef,
   } = options;
 
-  const [guideDismissed, setGuideDismissed] = useState(() => {
-    try {
-      return (
-        localStorage.getItem(LS_ONBOARDING_DISMISSED) === '1' ||
-        localStorage.getItem(LS_ONBOARDING_COMPLETED) === '1'
-      );
-    } catch {
-      return false;
-    }
-  });
+  // 拆成两个 key 各自持久化（保留历史存储格式），合并后即 guideDismissed
+  const [dismissed, setDismissed] = useLocalStorage<boolean>(
+    LS_ONBOARDING_DISMISSED,
+    false,
+    { serialize: (b) => (b ? '1' : '0'), deserialize: (s) => s === '1' },
+  );
+  const [completed, setCompleted] = useLocalStorage<boolean>(
+    LS_ONBOARDING_COMPLETED,
+    false,
+    { serialize: (b) => (b ? '1' : '0'), deserialize: (s) => s === '1' },
+  );
+  const guideDismissed = dismissed || completed;
 
   const dismissGuide = useCallback(() => {
-    setGuideDismissed(true);
-    try {
-      localStorage.setItem(LS_ONBOARDING_DISMISSED, '1');
-    } catch {
-      /* ignore */
-    }
-  }, []);
+    setDismissed(true);
+  }, [setDismissed]);
 
   useEffect(() => {
     if (status === 'done') {
-      try {
-        localStorage.setItem(LS_ONBOARDING_COMPLETED, '1');
-      } catch {
-        /* ignore */
-      }
-      setGuideDismissed(true);
+      setCompleted(true);
     }
-  }, [status]);
+  }, [status, setCompleted]);
 
   const handleGuideStepClick = useCallback(
     (step: GuideStep) => {

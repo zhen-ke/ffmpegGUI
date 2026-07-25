@@ -1,15 +1,16 @@
-import { useCallback, useEffect, useRef, useState, type Dispatch, type MutableRefObject, type SetStateAction } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type Dispatch,
+  type MutableRefObject,
+  type SetStateAction,
+} from 'react';
 import { type WorkspacePane } from '../components/DrawerTabBar';
 import { type ToastType } from './useToast';
 import { ipcInvoke } from '../ipc/ipcTyped';
-
-function getPathDirectory(filePath: string): string {
-  const lastSlash = Math.max(
-    filePath.lastIndexOf('/'),
-    filePath.lastIndexOf('\\'),
-  );
-  return lastSlash > 0 ? filePath.slice(0, lastSlash) : filePath;
-}
+import { getFileDirectory } from '../utils/filePath';
 
 /**
  * useResultCards manages the state of result cards.
@@ -44,7 +45,7 @@ export function useResultCards(options: {
 
   const [showCompletedResult, setShowCompletedResult] = useState(false);
   const [showFailedResult, setShowFailedResult] = useState(false);
-  
+
   const prevStatusRef = useRef<string>('idle');
 
   useEffect(() => {
@@ -81,7 +82,10 @@ export function useResultCards(options: {
     if (!lastCompletedOutputFile) return;
 
     try {
-      const result = await ipcInvoke('open-output-file', lastCompletedOutputFile);
+      const result = await ipcInvoke(
+        'open-output-file',
+        lastCompletedOutputFile,
+      );
 
       if (!result?.success) {
         handleOperationalError('Failed to open output file.');
@@ -95,7 +99,10 @@ export function useResultCards(options: {
     if (!lastCompletedOutputFile) return;
 
     try {
-      const result = await ipcInvoke('open-output-folder', lastCompletedOutputFile);
+      const result = await ipcInvoke(
+        'open-output-folder',
+        lastCompletedOutputFile,
+      );
 
       if (!result?.success) {
         handleOperationalError('Failed to open output folder.');
@@ -104,9 +111,9 @@ export function useResultCards(options: {
       handleOperationalError('Failed to open output folder.');
     }
   }, [handleOperationalError, lastCompletedOutputFile]);
-  
+
   const completedOutputFolder = lastCompletedOutputFile
-    ? getPathDirectory(lastCompletedOutputFile)
+    ? getFileDirectory(lastCompletedOutputFile)
     : '';
 
   return {

@@ -1,8 +1,13 @@
 import { execFile } from 'child_process';
-import fs from 'fs';
 import path from 'path';
 import type { MediaProbeResult } from '../../shared/mediaProbe';
-import { getFfmpegSearchDirs, resolveFfmpegPath } from '../utils/pathUtils';
+import {
+  buildProbeEnv,
+  canExecute,
+  getFfmpegSearchDirs,
+  probeExecutableExists,
+  resolveFfmpegPath,
+} from '../utils/pathUtils';
 
 interface RawProbeStream {
   codec_type?: string;
@@ -52,36 +57,17 @@ function parseFrameRate(value: string | undefined): number | null {
   return num / den;
 }
 
-function buildProbeEnv() {
-  return {
-    ...process.env,
-    PATH: [...getFfmpegSearchDirs(), process.env.PATH ?? '']
-      .filter(Boolean)
-      .join(path.delimiter),
-  };
-}
+// buildProbeEnv / canExecute / probeExecutableExists 复用自 pathUtils，
+// 与 ffmpeg 探测逻辑保持单一实现，避免三处逐字重复。
 
-function canExecute(filePath: string): Promise<boolean> {
-  return fs.promises
-    .access(
-      filePath,
-      process.platform === 'win32' ? fs.constants.F_OK : fs.constants.X_OK,
-    )
-    .then(() => true)
-    .catch(() => false);
-}
+/** ffprobe 路径探测结果缓存：undefined = 未探测，null = 确认不存在，string = 已确认路径 */
+let _cachedFfprobePath: string | null | undefined = undefined;
 
-function probeExecutableExists(executable: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    const child = execFile(executable, ['-version'], {
-      timeout: 5_000,
-      windowsHide: true,
-      env: buildProbeEnv(),
-    });
-
-    child.on('error', () => resolve(false));
-    child.on('close', (code) => resolve(code === 0));
-  });
+/**
+ * 使 ffprobe 路径缓存失效。在 FFmpeg 下载/更新后调用，确保下次重新探测。
+ */
+export function invalidateFfprobePathCache(): void {
+  _cachedFfprobePath = undefined;
 }
 
 async function findFirstAvailableCandidate(
@@ -104,6 +90,14 @@ async function findFirstAvailableCandidate(
 }
 
 async function resolveFfprobePath(): Promise<string | null> {
+  // 快路径：缓存路径仍可用则直接返回
+  if (typeof _cachedFfprobePath === 'string') {
+    if (await canExecute(_cachedFfprobePath)) {
+      return _cachedFfprobePath;
+    }
+    _cachedFfprobePath = undefined;
+  }
+
   const ffmpegPath = await resolveFfmpegPath();
   const localCandidate = ffmpegPath
     ? path.join(path.dirname(ffmpegPath), FFPROBE_BIN)
@@ -114,7 +108,8 @@ async function resolveFfprobePath(): Promise<string | null> {
     (await canExecute(localCandidate)) &&
     (await probeExecutableExists(localCandidate))
   ) {
-    return localCandidate;
+    _cachedFfprobePath = localCandidate;
+    return _cachedFfprobePath;
   }
 
   const candidates = [
@@ -122,7 +117,10 @@ async function resolveFfprobePath(): Promise<string | null> {
     ...getFfmpegSearchDirs().map((dir) => path.join(dir, FFPROBE_BIN)),
   ];
 
-  return findFirstAvailableCandidate([...new Set(candidates)]);
+  _cachedFfprobePath = await findFirstAvailableCandidate([
+    ...new Set(candidates),
+  ]);
+  return _cachedFfprobePath;
 }
 
 export async function isMediaProbeAvailable(): Promise<boolean> {
