@@ -16,6 +16,7 @@
 import { useCallback, useEffect, useReducer } from 'react';
 import { onFFmpegEvent } from '../ipc/ffmpegEvents';
 import { useLatest } from './useLatest';
+import { ipcInvoke } from '../ipc/ipcTyped';
 
 // ========== 状态机类型 ==========
 
@@ -111,15 +112,9 @@ export function useFFmpegState() {
 
     dispatch({ type: 'START', payload: { command: trimmed } });
 
-    window.electron.ipcRenderer
-      .invoke('start-ffmpeg', trimmed)
-      .then((result: unknown) => {
-        if (
-          result &&
-          typeof result === 'object' &&
-          'success' in result &&
-          (result as { success: boolean }).success === true
-        ) {
+    ipcInvoke('start-ffmpeg', trimmed)
+      .then((result) => {
+        if (result.success) {
           dispatch({ type: 'STARTED' });
         } else {
           dispatch({ type: 'ERROR' });
@@ -136,21 +131,14 @@ export function useFFmpegState() {
   const handleStop = useCallback(() => {
     if (stateRef.current.status !== 'running') return;
 
-    window.electron.ipcRenderer
-      .invoke('stop-ffmpeg')
-      .then((result: unknown) => {
-        if (
-          result &&
-          typeof result === 'object' &&
-          'success' in result &&
-          (result as { success: boolean }).success === true
-        ) {
+    ipcInvoke('stop-ffmpeg')
+      .then((result) => {
+        if (result.success) {
           dispatch({ type: 'STOP' });
         }
         return undefined;
       })
       .catch(() => {
-        // stop 失败由 ffmpeg-error 事件处理
         return undefined;
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps

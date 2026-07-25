@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { FFmpegAsset, fetchFFmpegAssets } from '../../utils/fetchFFmpegAssets';
+import { ipcSend, onIpcEvent } from '../ipc/ipcTyped';
 import { useLanguage } from '../LanguageContext';
 import {
   Download,
@@ -69,30 +70,30 @@ const FFmpegDownloader: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    const removeFFmpegDownloadProgressListener = window.electron.ipcRenderer.on(
+    const removeFFmpegDownloadProgressListener = onIpcEvent(
       'ffmpeg-download-progress',
-      (progress: number) => {
+      (progress) => {
         setDownloadProgress(progress);
       },
     );
 
-    const removeFFmpegExtractProgressListener = window.electron.ipcRenderer.on(
+    const removeFFmpegExtractProgressListener = onIpcEvent(
       'ffmpeg-extract-progress',
-      (progress: number) => {
+      (progress) => {
         setExtractProgress(progress);
       },
     );
 
-    const removeFFmpegInstallCompleteListener = window.electron.ipcRenderer.on(
+    const removeFFmpegInstallCompleteListener = onIpcEvent(
       'ffmpeg-install-complete',
       () => {
         setInstalling(false);
       },
     );
 
-    const removeFFmpegInstallErrorListener = window.electron.ipcRenderer.on(
+    const removeFFmpegInstallErrorListener = onIpcEvent(
       'ffmpeg-install-error',
-      (errorMessage: string) => {
+      (errorMessage) => {
         setInstalling(false);
         setError(errorMessage);
       },
@@ -113,10 +114,7 @@ const FFmpegDownloader: React.FC = () => {
   const handleDownload = () => {
     if (selectedAsset) {
       setInstalling(true);
-      window.electron.ipcRenderer.sendMessage(
-        'download-ffmpeg',
-        selectedAsset.downloadUrl,
-      );
+      ipcSend('download-ffmpeg', selectedAsset.downloadUrl);
     }
   };
 

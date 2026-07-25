@@ -8,6 +8,7 @@
 
 import { useEffect, useState } from 'react';
 import type { MediaProbeResult } from '../../shared/mediaProbe';
+import { ipcInvoke } from '../ipc/ipcTyped';
 
 interface UseMediaProbeProps {
   /** 第一个输入文件路径；为空字符串时不触发探针 */
@@ -35,8 +36,7 @@ export function useMediaProbe({
   useEffect(() => {
     let cancelled = false;
 
-    window.electron.ipcRenderer
-      .invoke('check-media-probe-status')
+    ipcInvoke('check-media-probe-status')
       .then((result) => {
         if (!cancelled) {
           setIsMediaProbeAvailable(result === true);
@@ -80,19 +80,14 @@ export function useMediaProbe({
     setHasMediaInfoError(false);
     setMediaInfo(null);
 
-    window.electron.ipcRenderer
-      .invoke('probe-media', primaryInputPath)
+    ipcInvoke('probe-media', primaryInputPath)
       .then((result) => {
         if (!cancelled) {
-          const probeResult = result as
-            | { success: true; data: MediaProbeResult }
-            | { success: false; error: string };
-
-          if (probeResult?.success) {
-            setMediaInfo(probeResult.data);
+          if (result.success) {
+            setMediaInfo(result.data);
             setHasMediaInfoError(false);
           } else {
-            if (probeResult?.error === 'FFprobe is not available.') {
+            if (result.error === 'FFprobe is not available.') {
               setMediaInfo(null);
               setHasMediaInfoError(false);
               setIsMediaProbeAvailable(false);

@@ -8,6 +8,10 @@
  * - 带数据的 handler：`IpcResult<T>`，成功时附带 `data: T`
  */
 
+// Import MediaProbeResult type reference for documentation only;
+// the actual import happens in renderer-side consumer code.
+import type { MediaProbeResult } from './mediaProbe';
+
 export type IpcResult<T = undefined> =
   | (T extends undefined ? { success: true } : { success: true; data: T })
   | { success: false; error: string };
@@ -34,4 +38,44 @@ export interface FFmpegEventPayloads {
   'ffmpeg-complete': { outputFile: string | null };
   /** FFmpeg 可用性变更（安装完成等） */
   'ffmpeg-status': boolean;
+}
+
+/**
+ * 全局 IPC 事件通道 → 载荷类型映射。
+ * 继承 FFmpeg 事件，并新增 PTY、安装器等通道。
+ */
+export interface IpcEventPayloads extends FFmpegEventPayloads {
+  'pty-output': string;
+  'pty-exit': number;
+  'ffmpeg-download-progress': number;
+  'ffmpeg-extract-progress': number;
+  'ffmpeg-install-complete': void;
+  'ffmpeg-install-error': string;
+}
+
+/**
+ * IPC invoke（请求-响应）通道 → 参数/返回类型映射。
+ */
+export interface IpcInvokeMap {
+  'start-ffmpeg': { args: [command: string]; result: IpcResult };
+  'stop-ffmpeg': { args: []; result: IpcResult };
+  'check-ffmpeg-status': { args: []; result: boolean };
+  'check-media-probe-status': { args: []; result: boolean };
+  'probe-media': { args: [filePath: string]; result: IpcResult<MediaProbeResult> };
+  'select-input-file': { args: [currentPath?: string]; result: { canceled: boolean; filePaths: string[] } };
+  'select-output-folder': { args: [currentPath?: string]; result: { canceled: boolean; filePaths: string[] } };
+  'open-output-file': { args: [filePath: string]; result: IpcResult };
+  'open-output-folder': { args: [filePath: string]; result: IpcResult };
+  'pty-start': { args: [cols: number, rows: number]; result: void };
+  'pty-kill': { args: []; result: void };
+  'fetch-osx-experts-html': { args: []; result: string };
+}
+
+/**
+ * IPC 单向发送通道 → 参数元组类型映射。
+ */
+export interface IpcSendMap {
+  'download-ffmpeg': [url: string];
+  'pty-resize': [cols: number, rows: number];
+  'pty-input': [data: string];
 }

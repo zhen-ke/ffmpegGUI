@@ -5,6 +5,7 @@
 
 import { useCallback, useState } from 'react';
 import { useLatest } from './useLatest';
+import { ipcInvoke } from '../ipc/ipcTyped';
 
 /**
  * 从文件路径中提取所在目录（兼容 `/` 和 `\` 分隔符）。
@@ -21,11 +22,6 @@ function getFileDirectory(filePath: string): string {
 }
 
 // ========== 类型 ==========
-
-interface DialogResult {
-  canceled: boolean;
-  filePaths: string[];
-}
 
 interface UseFileSelectionProps {
   onError?: (message: string) => void;
@@ -48,10 +44,10 @@ export function useFileSelection({ onError }: UseFileSelectionProps = {}) {
    */
   const handleSelectInputFile = useCallback(async (index = 0) => {
     try {
-      const result = (await window.electron.ipcRenderer.invoke(
+      const result = await ipcInvoke(
         'select-input-file',
         inputFilesRef.current[index] ?? inputFilesRef.current[0] ?? '',
-      )) as DialogResult;
+      );
 
       if (result.canceled || result.filePaths.length === 0) return '';
 
@@ -81,10 +77,10 @@ export function useFileSelection({ onError }: UseFileSelectionProps = {}) {
    */
   const handleSelectOutputFolder = useCallback(async () => {
     try {
-      const result = (await window.electron.ipcRenderer.invoke(
+      const result = await ipcInvoke(
         'select-output-folder',
         outputFolderRef.current,
-      )) as DialogResult;
+      );
 
       if (result.canceled || result.filePaths.length === 0) return;
 

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { onFFmpegEvent } from '../ipc/ffmpegEvents';
+import { ipcInvoke } from '../ipc/ipcTyped';
 
 export function useElectronIPC() {
   const [ffmpegExists, setFfmpegExists] = useState<boolean | null>(null);
@@ -10,11 +11,9 @@ export function useElectronIPC() {
    */
   const checkFFmpegStatus = useCallback(async (): Promise<boolean> => {
     try {
-      const result = await window.electron.ipcRenderer.invoke(
-        'check-ffmpeg-status',
-      );
-      // invoke 返回 unknown，严格比较确保类型安全
-      const isAvailable = result === true;
+      const result = await ipcInvoke('check-ffmpeg-status');
+      // invoke 返回 boolean
+      const isAvailable = result;
       setFfmpegExists(isAvailable);
       return isAvailable;
     } catch (error) {

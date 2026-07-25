@@ -9,6 +9,7 @@
 import { useCallback, type RefObject } from 'react';
 import { type Terminal } from 'xterm';
 import { useXterm } from '../../hooks/useXterm';
+import { ipcInvoke, ipcSend, onIpcEvent } from '../../ipc/ipcTyped';
 
 // ========== Hook ==========
 
@@ -29,15 +30,12 @@ export function useTerminal(
   containerRef: RefObject<HTMLDivElement>,
 ): UseTerminalReturn {
   const handleResize = useCallback((cols: number, rows: number) => {
-    window.electron.ipcRenderer.sendMessage('pty-resize', cols, rows);
+    ipcSend('pty-resize', cols, rows);
   }, []);
 
   const handleInit = useCallback((term: Terminal) => {
-    const { ipcRenderer } = window.electron;
-
     // ── PTY 连接 ──
-    ipcRenderer
-      .invoke('pty-start', term.cols, term.rows)
+    ipcInvoke('pty-start', term.cols, term.rows)
       .catch((err: unknown) => {
         const message = err instanceof Error ? err.message : String(err);
         term.writeln(
@@ -46,18 +44,18 @@ export function useTerminal(
       });
 
     // on 返回取消订阅函数；payload 为 unknown，按通道契约转为具体类型
-    const unlistenOutput = ipcRenderer.on('pty-output', (data: unknown) => {
-      term.write(data as string);
+    const unlistenOutput = onIpcEvent('pty-output', (data) => {
+      term.write(data);
     });
 
-    const unlistenExit = ipcRenderer.on('pty-exit', (code: unknown) => {
+    const unlistenExit = onIpcEvent('pty-exit', (code) => {
       term.writeln(
-        `\r\n\x1b[33m[Process exited with code ${code as number}]\x1b[0m`,
+        `\r\n\x1b[33m[Process exited with code ${code}]\x1b[0m`,
       );
     });
 
     const onDataDisposable = term.onData((data) =>
-      ipcRenderer.sendMessage('pty-input', data),
+      ipcSend('pty-input', data),
     );
 
     // 返回清理函数
@@ -65,7 +63,7 @@ export function useTerminal(
       onDataDisposable.dispose();
       unlistenOutput();
       unlistenExit();
-      ipcRenderer.invoke('pty-kill');
+      ipcInvoke('pty-kill');
     };
   }, []);
 

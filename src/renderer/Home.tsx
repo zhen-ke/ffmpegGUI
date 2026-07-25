@@ -1,31 +1,7 @@
-/**
- * Home - FFmpeg GUI 主界面
- *
- * 改动历史：
- * 1. useFFmpegState 升级为状态机，isRunning/isStopping 由 deriveFFmpegFlags 派生
- * 2. 所有 window.confirm 替换为 <ConfirmModal>，Electron 内视觉一致
- * 3. 彻底移除 useLogs，系统提示统一写入 xterm（xtermWriteLogRef）
- * 4. FFmpegTerminal 始终挂载（visibility 控制），drawerSize=sm 不销毁 xterm
- * 5. header/drawer 拆分为 AppHeader / WorkspaceDrawer 组件
- * 6. 提取 useMediaProbe hook、MediaInfoCard、CompletedResultCard 组件
- * 7. isCommandDirty 改用 useState 确保正确响应模板注入
- * 8. Dropdown 支持清除选中模板，AppHeader 加入三步骤引导
- */
-
 import { Upload } from 'lucide-react';
-import {
-  useCallback,
-  useEffect,
-  useId,
-  useMemo,
-  useRef,
-  useState,
-  type DragEvent,
-} from 'react';
-import { type DropdownOption } from './components/Dropdown';
+import { useCallback, useId, useRef } from 'react';
 import FFmpegDownloader from './components/FFmpegDownloader';
 import { TemplateDialog } from './components/TemplateDialog';
-import { commandTemplates } from './constants/commandTemplates';
 import { useLanguage } from './LanguageContext';
 
 import { useCommandManager } from './hooks/useCommandManager';
@@ -37,156 +13,47 @@ import { useMediaProbe } from './hooks/useMediaProbe';
 import { useTemplateManager } from './hooks/useTemplateManager';
 import { useToast } from './hooks/useToast';
 
-import { AppHeader, type GuideStep } from './components/AppHeader';
+import { AppHeader } from './components/AppHeader';
 import { CommandBox } from './components/CommandBox';
 import { CompletedResultCard } from './components/CompletedResultCard';
 import { FailedResultCard } from './components/FailedResultCard';
 import { ToastContainer } from './components/ToastContainer';
 import { ConfirmModal } from './components/ConfirmModal';
-import { type WorkspacePane } from './components/DrawerTabBar';
 import { type TerminalLogType } from './components/FFmpegTerminal';
 import { MediaInfoCard } from './components/MediaInfoCard';
 import { PipelineStrip } from './components/PipelineStrip';
 import SetupPanel from './components/SetupPanel';
 import { WorkspaceDrawer } from './components/WorkspaceDrawer';
-import {
-  buildOutputPreview,
-  countInputArguments,
-  parseInputArguments,
-  parseOutputFileName,
-  updateCommandPaths,
-  updateInputArgument,
-  updateOutputFileName,
-} from './utils/commandUtils';
-import {
-  deriveSetupReadiness,
-  getSetupBlockerMessageKey,
-} from './utils/setupReadiness';
 
-// ─────────────────────────────────────────────
-// 常量
-// ─────────────────────────────────────────────
-
-const LS_WORKSPACE_PANE_KEY = 'ffmpeg-workspace-pane-v1';
-const LS_ONBOARDING_COMPLETED = 'onboarding-completed-v1';
-const LS_ONBOARDING_DISMISSED = 'onboarding-dismissed-v1';
-const COMPACT_MEDIA_QUERY = '(max-width: 919px)';
-
-// ─────────────────────────────────────────────
-// ConfirmModal 状态类型
-// ─────────────────────────────────────────────
-
-type ConfirmState =
-  | { isOpen: false }
-  | {
-      isOpen: true;
-      title: string;
-      description?: string;
-      danger?: boolean;
-      onConfirm: () => void;
-    };
-
-function getIndexedInputLabel(language: string, index: number): string {
-  return language === 'zh' ? `输入 ${index + 1}` : `Input ${index + 1}`;
-}
-
-function getIndexedSelectLabel(language: string, index: number): string {
-  return language === 'zh'
-    ? `选择输入 ${index + 1}`
-    : `Select Input ${index + 1}`;
-}
-
-function getPathDirectory(filePath: string): string {
-  const lastSlash = Math.max(
-    filePath.lastIndexOf('/'),
-    filePath.lastIndexOf('\\'),
-  );
-  return lastSlash > 0 ? filePath.slice(0, lastSlash) : filePath;
-}
-
-// ─────────────────────────────────────────────
-// 主组件
-// ─────────────────────────────────────────────
+import { useWorkspaceLayout } from './hooks/useWorkspaceLayout';
+import { useConfirmModal } from './hooks/useConfirmModal';
+import { useWindowDragDrop } from './hooks/useWindowDragDrop';
+import { useOnboardingGuide } from './hooks/useOnboardingGuide';
+import { useTemplateSync } from './hooks/useTemplateSync';
+import { useInputOutputSlots } from './hooks/useInputOutputSlots';
+import { useResultCards } from './hooks/useResultCards';
 
 function Home() {
   const { language, setLanguage, t } = useLanguage();
   const { ffmpegExists } = useElectronIPC();
   const isMac = window.electron.platform === 'darwin';
-  const [activePane, setActivePane] = useState<WorkspacePane>(() => {
-    try {
-      return (
-        (localStorage.getItem(LS_WORKSPACE_PANE_KEY) as WorkspacePane) ??
-        'activity'
-      );
-    } catch {
-      return 'activity';
-    }
-  });
+
   const templateControlId = useId();
   const inputControlBaseId = useId();
   const outputControlId = useId();
   const commandControlId = useId();
 
-  // ── 抽屉高度已迁移至 WorkspaceDrawer（px 单一真相源） ──
-  // ── 响应式：窄屏（<919px）自动堆叠为单列 ──
+  const { activePane, isCompact, expandDrawerRef, handleActivePaneChange } = useWorkspaceLayout();
+  const { confirmState, openConfirm, closeConfirm } = useConfirmModal();
 
-  const [isCompact, setIsCompact] = useState(false);
-  useEffect(() => {
-    const mq = window.matchMedia(COMPACT_MEDIA_QUERY);
-    const handler = () => setIsCompact(mq.matches);
-    handler();
-    mq.addEventListener('change', handler);
-    return () => mq.removeEventListener('change', handler);
-  }, []);
-
-  const expandDrawerRef = useRef<(() => void) | null>(null);
   const startButtonRef = useRef<HTMLButtonElement>(null);
-  const prevStatusRef = useRef<string>('idle');
   const { toasts, pushToast, dismissToast } = useToast();
-
-  const handleActivePaneChange = useCallback((pane: WorkspacePane) => {
-    setActivePane(pane);
-    // 切 pane / Start 时若抽屉折叠则撑开（复刻原内联副作用，瞬时命令也能弹日志）
-    expandDrawerRef.current?.();
-    try {
-      localStorage.setItem(LS_WORKSPACE_PANE_KEY, pane);
-    } catch {
-      /* ignore */
-    }
-  }, []);
-
-  // ── 统一 ConfirmModal 状态（替代所有 window.confirm）──
-
-  const [confirmState, setConfirmState] = useState<ConfirmState>({
-    isOpen: false,
-  });
-  const [isWindowDragActive, setIsWindowDragActive] = useState(false);
-  const dragCounter = useRef(0);
-
-  const openConfirm = useCallback(
-    (
-      title: string,
-      onConfirm: () => void,
-      opts?: { description?: string; danger?: boolean },
-    ) => {
-      setConfirmState({ isOpen: true, title, onConfirm, ...opts });
-    },
-    [],
-  );
-
-  const closeConfirm = useCallback(() => {
-    setConfirmState({ isOpen: false });
-  }, []);
-
-  // ── xterm 命令式 API refs ──
 
   const xtermClearRef = useRef<(() => void) | null>(null);
   const xtermCopyRef = useRef<(() => string) | null>(null);
   const xtermWriteLogRef = useRef<
     ((type: TerminalLogType, message: string) => void) | null
   >(null);
-
-  // ── 错误处理：写入 xterm ──
 
   const handleOperationalError = useCallback(
     (message: string) => {
@@ -196,8 +63,6 @@ function Home() {
     },
     [pushToast, t],
   );
-
-  // ── 业务 Hooks ──
 
   const {
     inputFiles,
@@ -221,35 +86,8 @@ function Home() {
     copyCommand,
   } = useCommandManager({ inputFiles, outputFolder });
 
-  const {
-    selectedTemplateId,
-    customTemplates,
-    isTemplateDialogOpen,
-    editingTemplate,
-    transformTemplate,
-    handleTemplateSelect,
-    handleSaveTemplate,
-    handleDeleteTemplate,
-    handleEditTemplate,
-    clearTemplateSelection,
-    openNewTemplateDialog,
-    closeTemplateDialog,
-  } = useTemplateManager({ onError: handleOperationalError });
+  const templateManager = useTemplateManager({ onError: handleOperationalError });
 
-  const templateOptions = useMemo(
-    () => [
-      ...customTemplates.map(transformTemplate),
-      ...commandTemplates.map(transformTemplate),
-    ],
-    [customTemplates, transformTemplate],
-  );
-
-  const selectedTemplate = useMemo(
-    () => templateOptions.find((tpl) => tpl.id === selectedTemplateId) ?? null,
-    [templateOptions, selectedTemplateId],
-  );
-
-  // FFmpeg 状态以 hook 的派生结果为单一真源，避免 UI 自己重复推导。
   const {
     canStart,
     canStop,
@@ -261,341 +99,95 @@ function Home() {
     handleStop,
   } = useFFmpegState();
 
-  // ── 完成结果横幅：可关闭 ──
-  const [showCompletedResult, setShowCompletedResult] = useState(false);
-  const [showFailedResult, setShowFailedResult] = useState(false);
-  useEffect(() => {
-    if (status === 'done' && lastCompletedOutputFile) {
-      setShowCompletedResult(true);
-      setShowFailedResult(false);
-    } else if (status !== 'done') {
-      setShowCompletedResult(false);
-    }
-  }, [status, lastCompletedOutputFile]);
-
-  useEffect(() => {
-    const prevStatus = prevStatusRef.current;
-    prevStatusRef.current = status;
-
-    if (status === 'error' && prevStatus !== 'error') {
-      setShowFailedResult(true);
-      pushToast('error', t('Task failed. Check the activity log for details.'));
-      handleActivePaneChange('activity');
-      expandDrawerRef.current?.();
-    }
-
-    if (status === 'running') {
-      setShowFailedResult(false);
-    }
-  }, [handleActivePaneChange, pushToast, status, t]);
-
-  // ── 三步骤引导：可 × 关闭 / 首次完成后自动隐藏 ──
-  const [guideDismissed, setGuideDismissed] = useState(() => {
-    try {
-      return (
-        localStorage.getItem(LS_ONBOARDING_DISMISSED) === '1' ||
-        localStorage.getItem(LS_ONBOARDING_COMPLETED) === '1'
-      );
-    } catch {
-      return false;
-    }
+  const {
+    templateOptions,
+    selectedTemplate,
+    commandSource,
+    commandSourceLabel,
+    handleTemplateSelectWithConfirm,
+    handleDeleteTemplateWithConfirm,
+    handleTemplateClear,
+    handleResetToTemplate,
+  } = useTemplateSync({
+    templateManager,
+    command,
+    updateCommand,
+    updateCommandWithPaths,
+    setCommand,
+    clearCommand,
+    inputFiles,
+    outputFolder,
+    openConfirm,
+    closeConfirm,
+    t,
   });
-  const dismissGuide = useCallback(() => {
-    setGuideDismissed(true);
-    try {
-      localStorage.setItem(LS_ONBOARDING_DISMISSED, '1');
-    } catch {
-      /* ignore */
-    }
-  }, []);
-  useEffect(() => {
-    if (status === 'done') {
-      try {
-        localStorage.setItem(LS_ONBOARDING_COMPLETED, '1');
-      } catch {
-        /* ignore */
-      }
-      setGuideDismissed(true);
-    }
-  }, [status]);
 
-  // ── Refs for stale-closure safety ──
+  const {
+    showCompletedResult,
+    setShowCompletedResult,
+    showFailedResult,
+    setShowFailedResult,
+    completedOutputFolder,
+    handleViewLogs,
+    handleOpenCompletedFile,
+    handleOpenCompletedFolder,
+  } = useResultCards({
+    status,
+    lastCompletedOutputFile,
+    handleActivePaneChange,
+    expandDrawerRef,
+    pushToast,
+    handleOperationalError,
+    t,
+  });
 
-  const inputFilesRef = useRef(inputFiles);
-  const outputFolderRef = useRef(outputFolder);
-  const commandRef = useRef(command);
-  const selectedTemplateIdRef = useRef<string | null>(selectedTemplateId);
-  // lastAppliedCommand: 用 state 而非 ref，确保模板注入后 isCommandDirty 正确触发重算
-  const [lastAppliedCommand, setLastAppliedCommand] = useState<string | null>(
-    null,
-  );
-  inputFilesRef.current = inputFiles;
-  outputFolderRef.current = outputFolder;
-  commandRef.current = command;
-  selectedTemplateIdRef.current = selectedTemplateId;
+  const {
+    inputSlots,
+    primaryInputPath,
+    outputFileName,
+    finalOutputPath,
+    setupReadiness,
+    isReadyToRun,
+    setupBlockerMessage,
+    hasMultipleInputs,
+    handleSelectInputAtIndex,
+    handleClearInputAtIndex,
+    handleDropInputAtIndex,
+    handleOutputFileNameChange,
+    handleCopyOutputPath,
+    handleSelectPipelineStep,
+  } = useInputOutputSlots({
+    command,
+    setCommand,
+    inputFiles,
+    outputFolder,
+    handleSelectInputFile,
+    clearInputFile,
+    handleInputFileDrop,
+    canStart,
+    language,
+    t,
+    pushToast,
+    inputControlBaseId,
+    outputControlId,
+    commandControlId,
+  });
 
-  // ── 运行时自动展开/恢复抽屉已迁移至 WorkspaceDrawer ──
+  const { isWindowDragActive, dragHandlers } = useWindowDragDrop({
+    onFileDrop: handleDropInputAtIndex,
+  });
 
-  // ── 文件变化 → 更新命令路径 ──
-
-  const isInitialRender = useRef(true);
-  useEffect(() => {
-    if (isInitialRender.current) {
-      isInitialRender.current = false;
-      return;
-    }
-    if (outputFolder) updateCommandWithPaths();
-  }, [outputFolder, updateCommandWithPaths]);
-
-  // ── 模板变化 → 更新命令 ──
-
-  const selectedTemplateCommand = selectedTemplate?.command;
-  const applyTemplateCommand = useCallback(
-    (tplCmd: string) => {
-      const currentInputs = inputFilesRef.current;
-      const o = outputFolderRef.current;
-      if (currentInputs.length > 0 || o) {
-        // updateCommandWithPaths 内部调用 updateCommandPaths 再 setCommand
-        // 同步计算期望值写入 state，确保 isCommandDirty 正确响应
-        const expected = updateCommandPaths(tplCmd, currentInputs, o);
-        setLastAppliedCommand(expected);
-        updateCommandWithPaths(tplCmd, currentInputs, o);
-      } else {
-        setLastAppliedCommand(tplCmd);
-        updateCommand(tplCmd);
-      }
-    },
-    [updateCommand, updateCommandWithPaths, setLastAppliedCommand],
-  );
-  useEffect(() => {
-    if (!selectedTemplateId || !selectedTemplateCommand) return;
-    applyTemplateCommand(selectedTemplateCommand);
-  }, [applyTemplateCommand, selectedTemplateCommand, selectedTemplateId]);
-
-  // 清空模板选中时，重置 lastAppliedCommand
-  useEffect(() => {
-    if (!selectedTemplateId) {
-      setLastAppliedCommand(null);
-    }
-  }, [selectedTemplateId]);
-
-  // dirty：有模板被选中，且当前命令与最后一次模板注入的值不一致
-  const isCommandDirty = useMemo(() => {
-    if (!selectedTemplateId) return false;
-    if (lastAppliedCommand === null) return false;
-    return command.trim() !== lastAppliedCommand.trim();
-  }, [command, selectedTemplateId, lastAppliedCommand]);
-
-  // 重置：把命令恢复到模板的最后注入值
-  const handleResetToTemplate = useCallback(() => {
-    if (!selectedTemplateCommand) return;
-    applyTemplateCommand(selectedTemplateCommand);
-  }, [applyTemplateCommand, selectedTemplateCommand]);
-
-  // 清除模板选中：同时清空命令和 lastAppliedCommand
-  const handleTemplateClear = useCallback(() => {
-    clearTemplateSelection();
-    clearCommand();
-  }, [clearTemplateSelection, clearCommand]);
-
-  // ── 模板切换：直接替换命令 ──
-
-  const handleTemplateSelectWithConfirm = useCallback(
-    (template: DropdownOption) => {
-      if (template.id === selectedTemplateIdRef.current) return;
-      handleTemplateSelect(template);
-    },
-    [handleTemplateSelect],
-  );
-
-  // ── 模板删除：弹 ConfirmModal（danger 模式）──
-
-  const handleDeleteTemplateWithConfirm = useCallback(
-    (templateId: string) => {
-      openConfirm(
-        t('Delete this custom template?'),
-        () => {
-          handleDeleteTemplate(templateId);
-          closeConfirm();
-        },
-        { danger: true },
-      );
-    },
-    [handleDeleteTemplate, openConfirm, closeConfirm, t],
-  );
-
-  const inputSlotCount = useMemo(
-    () => Math.max(1, countInputArguments(command), inputFiles.length),
-    [command, inputFiles.length],
-  );
-
-  const inputArguments = useMemo(() => parseInputArguments(command), [command]);
-  const outputFileName = useMemo(() => parseOutputFileName(command), [command]);
-  const finalOutputPath = useMemo(
-    () => buildOutputPreview(outputFolder, outputFileName),
-    [outputFolder, outputFileName],
-  );
-
-  const setupReadiness = useMemo(
-    () =>
-      deriveSetupReadiness({
-        command,
-        inputFiles,
-        outputFolder,
-        outputFileName,
-      }),
-    [command, inputFiles, outputFolder, outputFileName],
-  );
-
-  const isReadyToRun = setupReadiness.isSetupComplete && canStart;
-  const setupBlockerMessage = useMemo(() => {
-    const key = getSetupBlockerMessageKey(setupReadiness.blocker);
-    return key ? t(key) : null;
-  }, [setupReadiness.blocker, t]);
-
-  const inputSlots = useMemo(
-    () =>
-      Array.from({ length: inputSlotCount }, (_, index) => {
-        const token = inputArguments[index] ?? '';
-        const selectedValue =
-          inputFiles[index] ||
-          (/^(?:[a-zA-Z]:[\\/]|\\\\|\/)/.test(token) ? token : '');
-        const actionLabel =
-          inputSlotCount === 1
-            ? t('Select Input File')
-            : getIndexedSelectLabel(language, index);
-        const fieldLabel =
-          inputSlotCount === 1
-            ? t('Input File')
-            : getIndexedInputLabel(language, index);
-        const label =
-          token && !selectedValue ? `${actionLabel} (${token})` : actionLabel;
-
-        return {
-          id: `${inputControlBaseId}-${index}`,
-          index,
-          label,
-          fieldLabel,
-          selectedValue,
-        };
-      }),
-    [
-      inputArguments,
-      inputFiles,
-      inputSlotCount,
-      inputControlBaseId,
-      language,
-      t,
-    ],
-  );
-  const primaryInputPath = inputSlots[0]?.selectedValue ?? '';
-
-  const handleSelectInputAtIndex = useCallback(
-    async (index: number) => {
-      const filePath = await handleSelectInputFile(index);
-      if (!filePath) return;
-
-      setCommand((prev) => updateInputArgument(prev, index, filePath));
-    },
-    [handleSelectInputFile, setCommand],
-  );
-
-  const handleClearInputAtIndex = useCallback(
-    (index: number) => {
-      clearInputFile(index);
-      setCommand((prev) => updateInputArgument(prev, index));
-    },
-    [clearInputFile, setCommand],
-  );
-
-  const handleDropInputAtIndex = useCallback(
-    (filePath: string, index: number) => {
-      handleInputFileDrop(filePath, index);
-      setCommand((prev) => updateInputArgument(prev, index, filePath));
-    },
-    [handleInputFileDrop, setCommand],
-  );
-
-  const handleWindowDragEnter = useCallback((e: DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    dragCounter.current += 1;
-    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
-      setIsWindowDragActive(true);
-    }
-  }, []);
-
-  const handleWindowDragLeave = useCallback((e: DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    dragCounter.current -= 1;
-    if (dragCounter.current === 0) {
-      setIsWindowDragActive(false);
-    }
-  }, []);
-
-  const handleWindowDragOver = useCallback((e: DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-  }, []);
-
-  const handleWindowDrop = useCallback(
-    (e: DragEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      setIsWindowDragActive(false);
-      dragCounter.current = 0;
-
-      const { files } = e.dataTransfer;
-      if (files && files.length > 0) {
-        const file = files[0] as File & { path: string };
-        if (file.path) {
-          handleDropInputAtIndex(file.path, 0);
-        }
-      }
-    },
-    [handleDropInputAtIndex],
-  );
-
-  const handleOutputFileNameChange = useCallback(
-    (value: string) => {
-      setCommand((prev) =>
-        updateOutputFileName(prev, value, outputFolderRef.current),
-      );
-    },
-    [setCommand],
-  );
-
-  const handleSelectPipelineStep = useCallback(
-    (step: 'input' | 'command' | 'output') => {
-      if (step === 'input') {
-        const el =
-          document.getElementById(inputControlBaseId) ||
-          document.getElementById(`${inputControlBaseId}-0`);
-        el?.focus();
-        el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      } else if (step === 'command') {
-        const el = document.getElementById(commandControlId);
-        el?.focus();
-        el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      } else if (step === 'output') {
-        const el = document.getElementById(`${outputControlId}-name`);
-        el?.focus();
-        el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
-    },
-    [inputControlBaseId, commandControlId, outputControlId],
-  );
-
-  const handleSelectPreset = useCallback(
-    (presetCmd: string, label: string) => {
-      updateCommand(presetCmd);
-      pushToast('info', `${t('Applied preset')}: ${label}`);
-    },
-    [updateCommand, pushToast, t],
-  );
-
-  // ── 媒体探针（已提取到 useMediaProbe hook）──
+  const {
+    showOnboardingGuide,
+    dismissGuide,
+    handleGuideStepClick,
+  } = useOnboardingGuide({
+    status,
+    templateControlId,
+    inputControlBaseId,
+    outputControlId,
+    startButtonRef,
+  });
 
   const {
     mediaInfo,
@@ -605,8 +197,6 @@ function Home() {
   } = useMediaProbe({
     primaryInputPath,
   });
-
-  // ── 运行 ──
 
   const onStart = useCallback(() => {
     const cmd = command.trim();
@@ -622,21 +212,10 @@ function Home() {
     setupReadiness.isSetupComplete,
   ]);
 
-  // ── 复制最终输出路径（稳定回调，避免破坏 SetupPanel memo） ──
-  const handleCopyOutputPath = useCallback(() => {
-    if (!finalOutputPath) return;
-    navigator.clipboard.writeText(finalOutputPath);
-    pushToast('info', t('Output path copied to clipboard'));
-  }, [finalOutputPath, pushToast, t]);
-
-  // ── 停止：用 canStop 守卫（状态机保证） ──
-
   const onStop = useCallback(() => {
     if (!canStop) return;
     handleStop();
   }, [canStop, handleStop]);
-
-  // ── 复制命令 ──
 
   const handleCopyCommand = useCallback(async () => {
     const r = await copyCommand();
@@ -646,8 +225,6 @@ function Home() {
       xtermWriteLogRef.current?.('info', t('Nothing to copy.'));
     else handleOperationalError('Failed to copy command.');
   }, [copyCommand, handleOperationalError, t]);
-
-  // ── 复制日志 ──
 
   const handleCopyLogs = useCallback(async () => {
     const getText = xtermCopyRef.current;
@@ -664,8 +241,22 @@ function Home() {
       handleOperationalError('Failed to copy logs.');
     }
   }, [handleOperationalError, t]);
-
-  // ── 全局快捷键 ──
+  
+  const handleSelectPreset = useCallback(
+    (presetCmd: string, label: string) => {
+      // 根据命令内容找到对应的内置模板，同步模板下拉选中状态
+      const matchingTemplate = templateOptions.find(
+        (tpl) => tpl.command === presetCmd,
+      );
+      if (matchingTemplate) {
+        handleTemplateSelectWithConfirm(matchingTemplate);
+      } else {
+        updateCommand(presetCmd);
+      }
+      pushToast('info', `${t('Applied preset')}: ${label}`);
+    },
+    [templateOptions, handleTemplateSelectWithConfirm, updateCommand, pushToast, t],
+  );
 
   useGlobalHotkeys({
     onStart,
@@ -673,87 +264,12 @@ function Home() {
     onClearLogs: () => xtermClearRef.current?.(),
   });
 
-  const hasMultipleInputs = useMemo(
-    () => countInputArguments(command) > 1,
-    [command],
-  );
   const hasCommand = command.trim().length > 0;
   const currentCommand = command.trim();
-  const completedOutputFolder = lastCompletedOutputFile
-    ? getPathDirectory(lastCompletedOutputFile)
-    : '';
-  // （showCompletedResult 已转为 state）
 
   const toggleLanguage = useCallback(() => {
     setLanguage(language === 'en' ? 'zh' : 'en');
   }, [language, setLanguage]);
-
-  const handleViewLogs = useCallback(() => {
-    handleActivePaneChange('activity');
-    expandDrawerRef.current?.();
-  }, [handleActivePaneChange]);
-
-  const handleGuideStepClick = useCallback(
-    (step: GuideStep) => {
-      switch (step) {
-        case 'template':
-          document.getElementById(templateControlId)?.click();
-          break;
-        case 'input':
-          document.getElementById(`${inputControlBaseId}-0`)?.focus();
-          break;
-        case 'output':
-          document.getElementById(outputControlId)?.focus();
-          break;
-        case 'start':
-          startButtonRef.current?.scrollIntoView({
-            behavior: 'smooth',
-            block: 'nearest',
-          });
-          startButtonRef.current?.focus();
-          break;
-        default:
-          break;
-      }
-    },
-    [inputControlBaseId, outputControlId, templateControlId],
-  );
-
-  const handleOpenCompletedFile = useCallback(async () => {
-    if (!lastCompletedOutputFile) return;
-
-    try {
-      const result = (await window.electron.ipcRenderer.invoke(
-        'open-output-file',
-        lastCompletedOutputFile,
-      )) as { success: boolean; error?: string };
-
-      if (!result?.success) {
-        handleOperationalError('Failed to open output file.');
-      }
-    } catch {
-      handleOperationalError('Failed to open output file.');
-    }
-  }, [handleOperationalError, lastCompletedOutputFile]);
-
-  const handleOpenCompletedFolder = useCallback(async () => {
-    if (!lastCompletedOutputFile) return;
-
-    try {
-      const result = (await window.electron.ipcRenderer.invoke(
-        'open-output-folder',
-        lastCompletedOutputFile,
-      )) as { success: boolean; error?: string };
-
-      if (!result?.success) {
-        handleOperationalError('Failed to open output folder.');
-      }
-    } catch {
-      handleOperationalError('Failed to open output folder.');
-    }
-  }, [handleOperationalError, lastCompletedOutputFile]);
-
-  // ── 派生展示状态 ──
 
   let workflowLabel = t('Needs Setup');
   let workflowTone =
@@ -792,26 +308,6 @@ function Home() {
       'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-200 dark:border-amber-800/60';
   }
 
-  // commandSource: 传给 CommandBox 的来源元数据
-  const commandSource = useMemo(() => {
-    if (!selectedTemplate) return null;
-    return {
-      label: selectedTemplate.name,
-      isDirty: isCommandDirty,
-    };
-  }, [selectedTemplate, isCommandDirty]);
-
-  let commandSourceLabel = t('No template selected');
-  if (selectedTemplate) {
-    commandSourceLabel = isCommandDirty
-      ? t('Modified (from template)')
-      : t('Working from template');
-  } else if (hasCommand) {
-    commandSourceLabel = t('Custom command');
-  }
-
-  // ── 加载态 ──
-
   if (ffmpegExists === null) {
     return (
       <div className="h-full flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
@@ -830,23 +326,15 @@ function Home() {
 
   if (!ffmpegExists) return <FFmpegDownloader />;
 
-  // ─────────────────────────────────────────────
-  // 渲染
-  // ─────────────────────────────────────────────
-
   return (
     <div
-      onDragEnter={handleWindowDragEnter}
-      onDragLeave={handleWindowDragLeave}
-      onDragOver={handleWindowDragOver}
-      onDrop={handleWindowDrop}
+      {...dragHandlers}
       className="h-full flex flex-col mac-vibrant-bg overflow-hidden relative transition-colors duration-300 motion-reduce:transition-none"
     >
-      {/* ══ 导航条 ══ */}
       <AppHeader
         language={language}
         toggleLanguage={toggleLanguage}
-        openNewTemplateDialog={openNewTemplateDialog}
+        openNewTemplateDialog={templateManager.openNewTemplateDialog}
         workflowLabel={workflowLabel}
         workflowTone={workflowTone}
         commandSourceLabel={commandSourceLabel}
@@ -857,12 +345,11 @@ function Home() {
         }
         isReadyToRun={isReadyToRun}
         isRunning={isRunning}
-        showOnboardingGuide={!guideDismissed}
+        showOnboardingGuide={showOnboardingGuide}
         onDismissGuide={dismissGuide}
         onGuideStepClick={handleGuideStepClick}
       />
 
-      {/* ══ 主内容区（两栏 IDE 式：<919px 自动堆叠）══ */}
       <div
         className={`flex-1 min-h-0 flex backdrop-blur-sm ${
           isCompact ? 'flex-col overflow-y-auto' : 'flex-row'
@@ -875,7 +362,7 @@ function Home() {
           templateOptions={templateOptions}
           selectedTemplate={selectedTemplate}
           onTemplateChange={handleTemplateSelectWithConfirm}
-          onEditTemplate={handleEditTemplate}
+          onEditTemplate={templateManager.handleEditTemplate}
           onDeleteTemplate={handleDeleteTemplateWithConfirm}
           onClearTemplate={handleTemplateClear}
           inputSlots={inputSlots}
@@ -901,7 +388,6 @@ function Home() {
           setupBlockerMessage={setupBlockerMessage}
         />
 
-        {/* ── 右栏：命令主区（hero）── */}
         <main
           className={`flex-1 min-w-0 px-4 py-4 space-y-4 ${
             isCompact ? '' : 'overflow-y-auto'
@@ -964,7 +450,6 @@ function Home() {
         </main>
       </div>
 
-      {/* ══ 抽屉 ══ */}
       <WorkspaceDrawer
         activePane={activePane}
         onActivePaneChange={handleActivePaneChange}
@@ -980,10 +465,8 @@ function Home() {
         t={t}
       />
 
-      {/* ══ 全局 Toast（轻量错误/成功提示，3–5 秒自动消失）══ */}
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
 
-      {/* ══ ConfirmModal（替代所有 window.confirm）══ */}
       <ConfirmModal
         isOpen={confirmState.isOpen}
         title={confirmState.isOpen ? confirmState.title : ''}
@@ -993,12 +476,11 @@ function Home() {
         onCancel={closeConfirm}
       />
 
-      {/* ══ Template Dialog ══ */}
       <TemplateDialog
-        isOpen={isTemplateDialogOpen}
-        onClose={closeTemplateDialog}
-        onSave={handleSaveTemplate}
-        initialTemplate={editingTemplate}
+        isOpen={templateManager.isTemplateDialogOpen}
+        onClose={templateManager.closeTemplateDialog}
+        onSave={templateManager.handleSaveTemplate}
+        initialTemplate={templateManager.editingTemplate}
       />
 
       {isWindowDragActive && (

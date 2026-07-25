@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { ipcInvoke } from '../renderer/ipc/ipcTyped';
 
 export interface FFmpegAsset {
   version: string;
@@ -28,9 +29,7 @@ export async function fetchFFmpegAssets(
     }
     if (platform === 'darwin') {
       // 通过主进程获取 HTML 内容
-      const html = await window.electron.ipcRenderer.invoke(
-        'fetch-osx-experts-html',
-      );
+      const html = await ipcInvoke('fetch-osx-experts-html');
 
       const isArm64 = window.electron.arch === 'arm64'; // 使用从 preload 获取的架构信息
 
