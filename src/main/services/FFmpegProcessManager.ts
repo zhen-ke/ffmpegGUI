@@ -4,7 +4,8 @@
  * - 不做任何 Electron UI（dialog/notification/i18n）
  */
 
-import { spawn, type ChildProcessWithoutNullStreams } from 'child_process';
+import { spawn, type ChildProcessByStdio } from 'child_process';
+import type { Readable } from 'stream';
 import os from 'os';
 import { getFfmpegBinDir } from '../utils/pathUtils';
 
@@ -18,16 +19,20 @@ export interface FFmpegProcessCallbacks {
 }
 
 interface ProcessState {
-  process: ChildProcessWithoutNullStreams;
-  /** 用户主动触发了停止（写 q / SIGTERM） */
+  process: ChildProcessByStdio<null, Readable, Readable>;
+  /** 用户主动触发了停止（SIGTERM） */
   isStopping: boolean;
   /** 已上报过总时长（只上报一次） */
   hasReportedDuration: boolean;
   forceKillTimer: ReturnType<typeof setTimeout> | null;
   /** 输出节流定时器 */
   flushTimer: ReturnType<typeof setTimeout> | null;
+  /** 进度节流定时器 */
+  progressTimer: ReturnType<typeof setTimeout> | null;
   /** 待合并的输出行缓冲 */
   pendingLines: string[];
+  /** 待上报的最新进度时间（秒） */
+  latestProgressTime: number;
   stdout: LineBuffer;
   stderr: LineBuffer;
   outputFile?: string;
@@ -58,6 +63,9 @@ const RE_DURATION = /Duration:\s*(\d{2}):(\d{2}):(\d{2}(?:\.\d+)?)/;
 
 /** 输出节流间隔（ms）：合并高频 \r 进度行，减少 IPC 压力 */
 const OUTPUT_FLUSH_INTERVAL_MS = 80;
+
+/** 进度节流间隔（ms）：ffmpeg 默认按帧刷进度，节流到 ~5Hz 上报进度条 */
+const PROGRESS_FLUSH_INTERVAL_MS = 200;
 
 /** 构建传给 ffmpeg 子进程的环境变量 */
 function buildFFmpegEnv(): NodeJS.ProcessEnv {
@@ -105,7 +113,9 @@ export class FFmpegProcessManager {
       cwd: workingDirectory,
       shell: false,
       windowsHide: true,
-      stdio: ['pipe', 'pipe', 'pipe'],
+      // stdin 用 'ignore'：本进程不与 ffmpeg 交互（停止走 SIGTERM，见 stop()），
+      // 不再分配无用的 stdin 管道，也避免任何 stdin 读取边界。
+      stdio: ['ignore', 'pipe', 'pipe'],
       env: buildFFmpegEnv(),
     });
 
@@ -127,7 +137,9 @@ export class FFmpegProcessManager {
       hasReportedDuration: false,
       forceKillTimer: null,
       flushTimer: null,
+      progressTimer: null,
       pendingLines: [],
+      latestProgressTime: NaN,
       stdout: new LineBuffer(),
       stderr: new LineBuffer(),
       outputFile,
@@ -144,16 +156,20 @@ export class FFmpegProcessManager {
       const s = this.state;
       if (!s) return;
 
-      // 在 LineBuffer 切出的完整行上跑进度 / 时长解析，而非原始 chunk。
-      // 原因：Node 的 data 事件不保证按行边界切分，`time=00:01:23.45`
-      // 可能被拆到两个 chunk，导致正则两段都匹配失败、进度条偶发卡顿。
-      // LineBuffer 按 \r?\n|\r 切分，进度行以 \r 结尾，只有完整行才会被
-      // 推入 lines，因此正则总是在完整内容上运行。
+      // 在 LineBuffer 切出的完整行上解析进度 / 时长（非原始 chunk，避免
+      // time= 跨 chunk 边界漏匹配）。同时区分“进度行”与“普通日志行”：
+      // 进度行（frame=... time=...）由进度条呈现，不再灌入终端，避免长
+      // 编码时 xterm 被逐帧 \r 行刷屏、把真正的日志（Input/Output/错误）
+      // 顶出 scrollback。普通日志行照常节流送终端。
       const lines = s.stderr.push(data.toString());
       for (const line of lines) {
-        this.enqueueOutput(s, line, callbacks);
         this.tryReportDuration(line, callbacks);
-        this.tryReportProgress(line, callbacks);
+        const time = this.extractProgress(line);
+        if (Number.isNaN(time)) {
+          this.enqueueOutput(s, line, callbacks);
+        } else {
+          this.scheduleProgressEmit(s, time, callbacks);
+        }
       }
     });
 
@@ -298,6 +314,7 @@ export class FFmpegProcessManager {
     if (!s) return;
     if (s.forceKillTimer) clearTimeout(s.forceKillTimer);
     if (s.flushTimer) clearTimeout(s.flushTimer);
+    if (s.progressTimer) clearTimeout(s.progressTimer);
     this.state = null;
   }
 
@@ -327,18 +344,41 @@ export class FFmpegProcessManager {
     callbacks.onError(`FFmpeg process exited with code ${code}.`);
   }
 
-  private tryReportProgress(chunk: string, callbacks: FFmpegProcessCallbacks) {
-    // 重置 lastIndex，确保每次从头匹配
+  /**
+   * 从一行 ffmpeg 输出中提取进度时间（秒）。无匹配返回 NaN。
+   * 纯函数，不做回调副作用——由调用方决定是否节流上报。
+   */
+  private extractProgress(line: string): number {
+    // 重置 lastIndex，避免全局正则 lastIndex 状态污染
     RE_PROGRESS.lastIndex = 0;
+    const match = RE_PROGRESS.exec(line);
+    if (!match) return NaN;
 
-    let match: RegExpExecArray | null;
-    let last: RegExpExecArray | null = null;
-    while ((match = RE_PROGRESS.exec(chunk)) !== null) last = match;
-    if (!last) return;
+    const [, h, m, s] = match;
+    return this.toSeconds(h, m, s);
+  }
 
-    const [, h, m, s] = last;
-    const time = this.toSeconds(h, m, s);
-    if (Number.isFinite(time)) callbacks.onProgress(time);
+  /**
+   * 节流上报进度：ffmpeg 默认按帧刷进度（可达数十/秒），每帧都走 IPC
+   * 会造成大量跨进程消息与 React 状态更新。合并到 ~5Hz 上报最新值，
+   * 进度条 CSS 500ms 过渡足以平滑，ETA 的 EMA 也更稳定。
+   */
+  private scheduleProgressEmit(
+    s: ProcessState,
+    time: number,
+    callbacks: FFmpegProcessCallbacks,
+  ): void {
+    s.latestProgressTime = time;
+    if (s.progressTimer !== null) return;
+
+    s.progressTimer = setTimeout(() => {
+      s.progressTimer = null;
+      // state 已变更（进程退出/teardown）则丢弃此次上报，避免陈旧回调
+      if (this.state !== s) return;
+      if (Number.isFinite(s.latestProgressTime)) {
+        callbacks.onProgress(s.latestProgressTime);
+      }
+    }, PROGRESS_FLUSH_INTERVAL_MS);
   }
 
   private tryReportDuration(chunk: string, callbacks: FFmpegProcessCallbacks) {
