@@ -43,6 +43,23 @@ function resolveOutputFilePath(
   return path.resolve(workingDirectory ?? process.cwd(), outputFile);
 }
 
+/**
+ * 将 ffmpeg 参数数组格式化为可粘贴的 shell 命令字符串。
+ * 仅用于终端回显——展示实际执行的命令（含 GUI 注入的 -hide_banner / -y），
+ * 让用户看到 ffmpeg 真正接收到的参数，消除“命令没生效”的疑虑。
+ * 按 shell 规则对含空白或元字符的参数加引号。
+ */
+function formatCommandForDisplay(args: string[]): string {
+  const quote = (s: string): string => {
+    if (s === '') return '""';
+    if (!/^[A-Za-z0-9_.,:@/+=\-]+$/.test(s)) {
+      return `"${s.replace(/(["\\])/g, '\\$1')}"`;
+    }
+    return s;
+  };
+  return ['ffmpeg', ...args].map(quote).join(' ');
+}
+
 class FFmpegController {
   private manager = new FFmpegProcessManager();
 
@@ -187,6 +204,11 @@ class FFmpegController {
         safeReply(ipcEvent, 'ffmpeg-error', error);
         return { success: false, error };
       }
+
+      // 在 spawn 前向终端回显实际执行的命令（含 GUI 注入的 -hide_banner / -y），
+      // 让用户看到 ffmpeg 真正接收到的参数，消除“命令没生效”的疑虑。
+      // 走 ffmpeg-output 通道、不经 ProcessManager 的 80ms 节流，确保首行即显示。
+      safeReply(ipcEvent, 'ffmpeg-output', `$ ${formatCommandForDisplay(args)}`);
 
       // 进程启动是异步效果；我们不等待其完成
       this.manager.start(

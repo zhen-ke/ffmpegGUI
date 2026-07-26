@@ -68,7 +68,10 @@ function buildFFmpegEnv(): NodeJS.ProcessEnv {
   const physicalCores = Math.max(1, Math.ceil(logicalCores / 2));
   return {
     ...process.env,
-    // 让 OpenMP/ffmpeg 编解码线程数与物理核对齐，减少超线程竞争
+    // OMP_NUM_THREADS 只影响基于 OpenMP 的组件（libaom-av1、SVT-AV1 及部分
+    // OpenMP 滤镜）。x264 / x265 自有线程模型，不受此变量影响（由其各自的
+    // -threads 控制）。此处对齐物理核数可在 AV1 模板上减少超线程竞争，对
+    // 其他编码器无副作用；保留以惠及 AV1 编码路径。
     OMP_NUM_THREADS: String(physicalCores),
     // macOS：将 binaries/ 目录前置到动态库搜索路径，确保捆绑的 dylib 优先被找到
     ...(process.platform === 'darwin'
