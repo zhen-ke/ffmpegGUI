@@ -62,12 +62,25 @@ describe('commandParser', () => {
     expect(extractOutputFile(args)).toBeUndefined();
   });
 
-  it('prefers absolute output path when deriving working directory', () => {
+  it('prefers first absolute input dir over output dir for working directory', () => {
+    // 辅助输入（字幕/水印/列表）通常与主输入同目录，cwd 用输入目录更直觉；
+    // 输出已被 GUI 改为绝对路径，cwd 不影响输出写入位置。
     const args = parseFFmpegCommand(
       '-i "/tmp/input file.mp4" -c:v libx264 "/tmp/out/output file.mp4"',
     );
 
-    expect(deriveWorkingDirectory(args)).toBe('/tmp/out');
+    expect(deriveWorkingDirectory(args)).toBe('/tmp');
+  });
+
+  it('resolves relative aux inputs against the main input dir, not output dir', () => {
+    // 复现 P0-2：第二输入 subtitles.srt 为相对路径，输出为绝对路径。
+    // 旧逻辑 cwd=输出目录 → ffmpeg 在输出目录找 subtitles.srt 失败；
+    // 新逻辑 cwd=主输入目录 → 与主视频同目录查找。
+    const args = parseFFmpegCommand(
+      '-i "/tmp/input file.mp4" -i subtitles.srt -c copy "/tmp/out/output.mp4"',
+    );
+
+    expect(deriveWorkingDirectory(args)).toBe('/tmp');
   });
 
   it('falls back to first absolute input path when output is relative', () => {
@@ -79,7 +92,34 @@ describe('commandParser', () => {
   });
 
   it('detects unsupported shell control operators', () => {
-    const args = parseFFmpegCommand('-i in.mp4 out.mp4 && ffmpeg -version');
-    expect(containsUnsupportedShellOperators(args)).toBe(true);
+    expect(
+      containsUnsupportedShellOperators(
+        parseFFmpegCommand('-i in.mp4 out.mp4 && ffmpeg -version'),
+      ),
+    ).toBe(true);
+  });
+
+  // ── P1-5: OPTIONS_WITH_VALUES 补全与 flag 移除 ──────────────────────
+
+  it('does not mistake -vframes value for output file', () => {
+    // -vframes 带值，其后的 `1` 是选项值，不是输出文件
+    expect(
+      extractOutputFile(parseFFmpegCommand('-i input.mp4 -vframes 1')),
+    ).toBeUndefined();
+  });
+
+  it('does not mistake -vol value for output file', () => {
+    // 复现：-vol 256 无输出文件，旧逻辑误判 `256` 为输出文件
+    expect(
+      extractOutputFile(parseFFmpegCommand('-i input.mp3 -vol 256')),
+    ).toBeUndefined();
+  });
+
+  it('detects output after -an flag (Remove Audio template)', () => {
+    // -an 是不带值的 flag，移出 OPTIONS_WITH_VALUES 后不再吞掉其后的输出文件
+    const args = parseFFmpegCommand(
+      '-i input.mp4 -c:v copy -an output_no_audio.mp4',
+    );
+    expect(extractOutputFile(args)).toBe('output_no_audio.mp4');
   });
 });

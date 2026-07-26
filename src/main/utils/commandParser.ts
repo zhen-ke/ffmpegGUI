@@ -21,24 +21,41 @@ const SHELL_OPERATORS = new Set([
  *
  * 注：此列表覆盖常见场景，无法穷举 FFmpeg 全部选项。
  * 识别输出文件的核心规则是：args 末尾最后一个非选项 token。
+ *
+ * 重要：只收录“带值”选项。`-vn` / `-an` / `-sn` / `-dn` / `-shortest`
+ * 等是不带值的 flag，绝不能放入本集合——否则会把紧随其后的输出文件
+ * 误当作“选项值”而跳过，导致输出识别失败（曾导致“移除音频”模板的
+ * 输出文件识别不到）。
  */
 const OPTIONS_WITH_VALUES = new Set([
-  // 输入 / 输出
-  '-i', '-f',
+  // 输入 / 容器 / demuxer 选项
+  '-i', '-f', '-c', '-b', '-map', '-map_metadata', '-map_chapters',
+  '-itsoffset', '-itsscale', '-loop', '-framerate', '-readrate',
+  '-stream_loop', '-video_size', '-pixel_format', '-rtbufsize', '-safe',
   // 视频
-  '-vf', '-vcodec', '-c:v', '-b:v', '-r', '-s', '-vn',
+  '-vf', '-filter', '-filter:v', '-filter_complex', '-lavfi',
+  '-vcodec', '-c:v', '-b:v', '-maxrate', '-bufsize',
+  '-r', '-s', '-aspect', '-vframes', '-fpsmax', '-vsync',
+  '-vtag', '-tag:v', '-qscale', '-q:v', '-qmin', '-qmax',
+  '-vbsf', '-bsf', '-bsf:v', '-profile:v', '-level',
   // 音频
-  '-af', '-acodec', '-c:a', '-b:a', '-ar', '-ac', '-an',
+  '-af', '-filter:a', '-acodec', '-c:a', '-b:a',
+  '-ar', '-ac', '-vol', '-ab', '-aq', '-q:a', '-atag', '-tag:a',
+  '-absf', '-bsf:a',
+  // 字幕
+  '-scodec', '-c:s', '-sbsf', '-bsf:s',
   // 时间
   '-ss', '-t', '-to', '-duration',
-  // 流映射
-  '-map', '-map_metadata', '-map_chapters',
-  // 元数据 / 字幕
-  '-metadata', '-disposition', '-scodec', '-c:s',
-  // 其他常用
-  '-preset', '-crf', '-pix_fmt', '-aspect', '-threads',
-  '-pass', '-passlogfile', '-profile:v', '-level',
-  '-movflags', '-fflags', '-flags',
+  // 元数据 / 章节 / 处置
+  '-metadata', '-disposition', '-attach',
+  // 编码器调参（通用 + 硬件）
+  '-preset', '-tune', '-crf', '-pix_fmt', '-threads',
+  '-pass', '-passlogfile', '-filter_threads',
+  '-qcomp', '-psy-rd', '-aq-mode', '-aq-strength',
+  '-cpu-used', '-row-mt',
+  '-qp', '-qp_i', '-qp_p', '-global_quality', '-cq', '-quality', '-allow_sw',
+  // 容器 / 标志位 / 其他
+  '-movflags', '-fflags', '-flags', '-sws_flags', '-id3v2_version',
 ]);
 
 // ========== 公共 API ==========
@@ -120,12 +137,16 @@ export function extractOutputFile(args: string[]): string | undefined {
  * 在用户已选择输入文件或输出目录时，尽量相对到更符合直觉的位置。
  */
 export function deriveWorkingDirectory(args: string[]): string | undefined {
-  const outputFile = extractOutputFile(args);
-  if (outputFile && path.isAbsolute(outputFile)) {
-    return path.dirname(outputFile);
-  }
-
-  return args.reduce<string | undefined>((directory, token, index) => {
+  // 优先使用第一个绝对路径输入文件所在目录。
+  //
+  // 理由：辅助输入（字幕 / 水印 / concat 列表 / 图片序列 / 背景音乐等）
+  // 通常与主输入文件放在同一目录，相对解析到主输入目录更符合用户直觉。
+  // 此前“输出目录优先”会让这些相对辅助文件落到输出目录而找不到，
+  // 导致 ffmpeg 报 No such file，命令“不生效”。
+  //
+  // 输出文件由 GUI 改写为绝对路径（绑定用户选择的输出目录），因此 cwd
+  // 不再影响输出写入位置——改优先级对输出无影响，对辅助输入是修复。
+  const inputDir = args.reduce<string | undefined>((directory, token, index) => {
     if (directory || token !== '-i') {
       return directory;
     }
@@ -133,4 +154,13 @@ export function deriveWorkingDirectory(args: string[]): string | undefined {
     const input = stripSurroundingQuotes(args[index + 1] ?? '').trim();
     return input && path.isAbsolute(input) ? path.dirname(input) : directory;
   }, undefined);
+  if (inputDir) return inputDir;
+
+  // 无绝对输入时回退到绝对输出目录：相对输出文件会写到该目录
+  const outputFile = extractOutputFile(args);
+  if (outputFile && path.isAbsolute(outputFile)) {
+    return path.dirname(outputFile);
+  }
+
+  return undefined;
 }

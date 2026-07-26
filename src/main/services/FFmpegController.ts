@@ -138,8 +138,16 @@ class FFmpegController {
           safeReply(ipcEvent, 'ffmpeg-cancelled', message);
           return { success: false, error: message };
         }
+        // 用户已确认覆盖；-y 在下方统一注入
+      }
 
-        // 用户确认覆盖，注入 -y 跳过 FFmpeg 自身的交互提示
+      // 无条件注入 -y：
+      // 本进程 stdin 为管道（非 TTY），ffmpeg 遇已存在输出文件时不会交互
+      // 提示，而是直接报错退出。GUI 的覆盖对话框只覆盖“我们能识别到的
+      // 输出”，一旦 extractOutputFile 漏判（例如命令以未知取值选项结尾），
+      // 就不会注入 -y，ffmpeg 仍会因文件已存在而失败。因此此处无条件注入，
+      // 作为兜底；若用户已显式写 -y 或 -n，尊重其选择，不重复 / 不冲突。
+      if (!args.includes('-y') && !args.includes('-n')) {
         args = ['-y', ...args];
       }
 

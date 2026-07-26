@@ -141,12 +141,17 @@ export class FFmpegProcessManager {
       const s = this.state;
       if (!s) return;
 
-      const chunk = data.toString();
-      const lines = s.stderr.push(chunk);
-      for (const line of lines) this.enqueueOutput(s, line, callbacks);
-
-      this.tryReportDuration(chunk, callbacks);
-      this.tryReportProgress(chunk, callbacks);
+      // 在 LineBuffer 切出的完整行上跑进度 / 时长解析，而非原始 chunk。
+      // 原因：Node 的 data 事件不保证按行边界切分，`time=00:01:23.45`
+      // 可能被拆到两个 chunk，导致正则两段都匹配失败、进度条偶发卡顿。
+      // LineBuffer 按 \r?\n|\r 切分，进度行以 \r 结尾，只有完整行才会被
+      // 推入 lines，因此正则总是在完整内容上运行。
+      const lines = s.stderr.push(data.toString());
+      for (const line of lines) {
+        this.enqueueOutput(s, line, callbacks);
+        this.tryReportDuration(line, callbacks);
+        this.tryReportProgress(line, callbacks);
+      }
     });
 
     proc.on('close', (code) => {
@@ -172,18 +177,21 @@ export class FFmpegProcessManager {
     s.isStopping = true;
 
     const { process: proc } = s;
+    // 本进程 stdio 为管道（非 TTY），ffmpeg 在非 TTY 下自动禁用 -stdin，
+    // 不会读取 `q` 键——向管道写 `q` 是空操作。因此直接发 SIGTERM：
+    // ffmpeg 的 SIGTERM handler 会写完当前帧并正常收尾（写 trailer /
+    // moov atom），保证输出文件可播放。与 cleanup()（应用退出路径）
+    // 保持一致的优雅停止语义，避免此前“停止=2s 后 SIGKILL 硬杀”导致
+    // 输出文件未收尾的问题。
     try {
-      if (proc.stdin.writable) {
-        proc.stdin.write('q\n');
-      } else {
-        proc.kill('SIGTERM');
-      }
-    } catch {
       proc.kill('SIGTERM');
+    } catch {
+      // kill 抛错通常意味着进程已退出，忽略即可
     }
 
-    // `q` 信号通常在 500ms 内被 ffmpeg 响应，2s 已足够宽裕
-    this.scheduleForceKill(2_000);
+    // SIGTERM 优雅退出对大文件 / AV1 等慢编码可能需要数秒，
+    // 5s 内仍未退出则 SIGKILL 兜底。
+    this.scheduleForceKill(5_000);
     return true;
   }
 
