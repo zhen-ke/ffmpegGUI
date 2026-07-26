@@ -34,12 +34,10 @@ const configuration: webpack.Configuration = {
     renderer: [
       'react',
       'react-dom',
-      'react-router-dom',
       'lucide-react',
       '@xterm/addon-fit',
       '@xterm/addon-web-links',
       'xterm',
-      'axios',
       'uuid',
     ],
   },

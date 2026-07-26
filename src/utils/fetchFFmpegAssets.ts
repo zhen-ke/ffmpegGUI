@@ -1,4 +1,3 @@
-import axios from 'axios';
 import { ipcInvoke } from '../renderer/ipc/ipcTyped';
 
 export interface FFmpegAsset {
@@ -17,10 +16,17 @@ export async function fetchFFmpegAssets(
 ): Promise<FFmpegAsset[]> {
   try {
     if (platform === 'win32') {
-      const response = await axios.get(WINDOWS_URL);
-      const { data } = response;
-
-      return data.assets.map((asset: any) => ({
+      // 用原生 fetch 取代 axios：GitHub API 返回 Access-Control-Allow-Origin: *，
+      // 且 CSP 未限制 connect-src，可直连。少一个运行时依赖。
+      const response = await fetch(WINDOWS_URL);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: failed to fetch FFmpeg assets`);
+      }
+      const data = (await response.json()) as {
+        tag_name: string;
+        assets: { name: string; size: number; browser_download_url: string }[];
+      };
+      return data.assets.map((asset) => ({
         version: data.tag_name,
         name: asset.name,
         size: asset.size,
