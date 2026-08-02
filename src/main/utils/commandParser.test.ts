@@ -4,6 +4,10 @@ import {
   extractOutputFile,
   parseFFmpegCommand,
 } from './commandParser';
+import { FALLBACK_OPTIONS_WITH_VALUES } from './ffmpegOptions';
+
+// 测试环境无 electron/ffmpeg，注入内置兜底集合，避免 extractOutputFile 走异步路径
+const OPTS = FALLBACK_OPTIONS_WITH_VALUES;
 
 describe('commandParser', () => {
   it('parses quoted paths without keeping quote characters', () => {
@@ -52,14 +56,14 @@ describe('commandParser', () => {
     );
   });
 
-  it('extracts output file from parsed args', () => {
+  it('extracts output file from parsed args', async () => {
     const args = parseFFmpegCommand('-i in.mp4 -c:v libx264 "out file.mp4"');
-    expect(extractOutputFile(args)).toBe('out file.mp4');
+    expect(await extractOutputFile(args, OPTS)).toBe('out file.mp4');
   });
 
-  it('does not treat stdout marker as output file', () => {
+  it('does not treat stdout marker as output file', async () => {
     const args = parseFFmpegCommand('-i in.mp4 -f null -');
-    expect(extractOutputFile(args)).toBeUndefined();
+    expect(await extractOutputFile(args, OPTS)).toBeUndefined();
   });
 
   it('prefers first absolute input dir over output dir for working directory', () => {
@@ -101,25 +105,46 @@ describe('commandParser', () => {
 
   // ── P1-5: OPTIONS_WITH_VALUES 补全与 flag 移除 ──────────────────────
 
-  it('does not mistake -vframes value for output file', () => {
+  it('does not mistake -vframes value for output file', async () => {
     // -vframes 带值，其后的 `1` 是选项值，不是输出文件
     expect(
-      extractOutputFile(parseFFmpegCommand('-i input.mp4 -vframes 1')),
+      await extractOutputFile(
+        parseFFmpegCommand('-i input.mp4 -vframes 1'),
+        OPTS,
+      ),
     ).toBeUndefined();
   });
 
-  it('does not mistake -vol value for output file', () => {
+  it('does not mistake -vol value for output file', async () => {
     // 复现：-vol 256 无输出文件，旧逻辑误判 `256` 为输出文件
     expect(
-      extractOutputFile(parseFFmpegCommand('-i input.mp3 -vol 256')),
+      await extractOutputFile(
+        parseFFmpegCommand('-i input.mp3 -vol 256'),
+        OPTS,
+      ),
     ).toBeUndefined();
   });
 
-  it('detects output after -an flag (Remove Audio template)', () => {
+  it('detects output after -an flag (Remove Audio template)', async () => {
     // -an 是不带值的 flag，移出 OPTIONS_WITH_VALUES 后不再吞掉其后的输出文件
     const args = parseFFmpegCommand(
       '-i input.mp4 -c:v copy -an output_no_audio.mp4',
     );
-    expect(extractOutputFile(args)).toBe('output_no_audio.mp4');
+    expect(await extractOutputFile(args, OPTS)).toBe('output_no_audio.mp4');
+  });
+
+  it('does not mistake dynamic-table option value for output file', async () => {
+    // -x264-params / -hls_time 不在旧硬编码表里；动态表应识别为带值选项
+    const args = parseFFmpegCommand(
+      '-i input.mp4 -c:v libx264 -x264-params "keyint=250:min-keyint=25" out.mp4',
+    );
+    expect(await extractOutputFile(args, OPTS)).toBe('out.mp4');
+  });
+
+  it('does not mistake -hls_time value for output file (HLS template)', async () => {
+    const args = parseFFmpegCommand(
+      '-i input.mp4 -hls_time 10 -hls_list_size 0 -f hls playlist.m3u8',
+    );
+    expect(await extractOutputFile(args, OPTS)).toBe('playlist.m3u8');
   });
 });

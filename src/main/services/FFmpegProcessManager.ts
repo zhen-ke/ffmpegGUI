@@ -8,6 +8,7 @@ import { spawn, type ChildProcessByStdio } from 'child_process';
 import type { Readable } from 'stream';
 import os from 'os';
 import { getFfmpegBinDir } from '../utils/pathUtils';
+import { ProgressBlockParser } from './progressParser';
 
 export interface FFmpegProcessCallbacks {
   onOutput: (line: string) => void;
@@ -37,6 +38,10 @@ interface ProcessState {
   latestProgressLine: string | null;
   stdout: LineBuffer;
   stderr: LineBuffer;
+  /** 解析 `-progress pipe:1` 输出的 key=value 块 */
+  progressParser: ProgressBlockParser;
+  /** 最近保留的 stderr 行（环形缓冲，用于退出时诊断） */
+  recentStderr: string[];
   outputFile?: string;
 }
 
@@ -66,8 +71,22 @@ const RE_DURATION = /Duration:\s*(\d{2}):(\d{2}):(\d{2}(?:\.\d+)?)/;
 /** 输出节流间隔（ms）：合并高频 \r 进度行，减少 IPC 压力 */
 const OUTPUT_FLUSH_INTERVAL_MS = 80;
 
-/** 进度节流间隔（ms）：ffmpeg 默认按帧刷进度，节流到 ~5Hz 上报进度条 */
-const PROGRESS_FLUSH_INTERVAL_MS = 200;
+/** 进度节流间隔（ms）：防御性上限。`-stats_period 0.5` 下 ~2Hz 已低频；
+ *  仅当用户自定义 `-stats_period 0` 等场景才可能触顶，避免逐帧刷 IPC */
+const PROGRESS_FLUSH_INTERVAL_MS = 500;
+
+/** 保留的 stderr 行数上限（环形缓冲，供退出时诊断错误） */
+const STDERR_RING_SIZE = 30;
+
+/** 判定 stderr 行为"错误诊断行"的关键词（不含 `@ 0x` 地址噪声） */
+const ERROR_HINT_RE =
+  /error|invalid|no such file|not found|failed|unable|incorrect|missing|does not exist|cannot|could not|unsupported|permission denied/i;
+
+/** 从错误行的 `xxx @ 0xaddr` 前缀中剥离地址噪声，保留语义内容 */
+function cleanErrorLine(line: string): string {
+  // 形如 `[mov,mp4 @ 0x7f...] moov atom not found` → `moov atom not found`
+  return line.replace(/^\[[^\]]* @ 0x[0-9a-f]+\]\s*/i, '');
+}
 
 /** 构建传给 ffmpeg 子进程的环境变量 */
 function buildFFmpegEnv(): NodeJS.ProcessEnv {
@@ -124,10 +143,7 @@ export class FFmpegProcessManager {
     // ── 进程优先级：降低 ffmpeg 优先级，避免编码吃满 CPU 导致 GUI 卡顿 ──
     if (proc.pid !== undefined) {
       try {
-        os.setPriority(
-          proc.pid,
-          os.constants.priority.PRIORITY_BELOW_NORMAL,
-        );
+        os.setPriority(proc.pid, os.constants.priority.PRIORITY_BELOW_NORMAL);
       } catch {
         // 部分平台/权限下设置可能失败，静默忽略
       }
@@ -145,14 +161,24 @@ export class FFmpegProcessManager {
       latestProgressLine: null,
       stdout: new LineBuffer(),
       stderr: new LineBuffer(),
+      progressParser: new ProgressBlockParser(),
+      recentStderr: [],
       outputFile,
     };
 
+    // stdout 承载 `-progress pipe:1` 的结构化进度块（key=value，空行分隔）。
+    // 若用户命令未注入 -progress（旧版或自写命令），stdout 可能为空或含普通
+    // 输出，此时进度走 stderr 的 time= 正则兜底。
     proc.stdout.on('data', (data: Buffer) => {
       const s = this.state;
       if (!s) return;
       const lines = s.stdout.push(data.toString());
-      for (const line of lines) this.enqueueOutput(s, line, callbacks);
+      for (const line of lines) {
+        const time = s.progressParser.push(line);
+        if (!Number.isNaN(time)) {
+          this.scheduleProgressEmit(s, time, callbacks);
+        }
+      }
     });
 
     proc.stderr.on('data', (data: Buffer) => {
@@ -165,6 +191,12 @@ export class FFmpegProcessManager {
       // 刷屏）。普通日志行照常节流送终端。
       const lines = s.stderr.push(data.toString());
       for (const line of lines) {
+        // 环形缓冲最近 stderr 行，供退出失败时诊断
+        s.recentStderr.push(line);
+        if (s.recentStderr.length > STDERR_RING_SIZE) {
+          s.recentStderr.shift();
+        }
+
         this.tryReportDuration(line, callbacks);
         const time = this.extractProgress(line);
         if (Number.isNaN(time)) {
@@ -341,10 +373,17 @@ export class FFmpegProcessManager {
     // 刷出缓冲区残余行（LineBuffer + 节流队列）
     for (const line of s.stdout.flush()) s.pendingLines.push(line);
     for (const line of s.stderr.flush()) s.pendingLines.push(line);
+    // 冲刷 -progress 残余块（进程可能未及输出结尾空行），补报最后进度
+    const finalTime = s.progressParser.flush();
+    if (!Number.isNaN(finalTime)) {
+      this.scheduleProgressEmit(s, finalTime, callbacks);
+      this.flushProgress(s, callbacks);
+    }
     this.flushPendingOutput(s, callbacks);
 
     const stoppedByUser = s.isStopping;
-    const outputFile = s.outputFile;
+    const { outputFile } = s;
+    const diagnostic = this.buildErrorMessage(s, code);
     this.teardown();
 
     if (stoppedByUser) {
@@ -357,7 +396,25 @@ export class FFmpegProcessManager {
       return;
     }
 
-    callbacks.onError(`FFmpeg process exited with code ${code}.`);
+    callbacks.onError(diagnostic);
+  }
+
+  /**
+   * 从最近 stderr 行中提取错误诊断信息。
+   * ffmpeg 报错时关键原因行（如 `Error opening input files: No such file`）
+   * 通常带 Error/Invalid/No such 等关键词；过滤含 `@ 0x` 地址噪声的行，
+   * 取最后 2 条拼接，让用户看到可操作的错误原因而非裸 exit code。
+   */
+  private buildErrorMessage(s: ProcessState, code: number | null): string {
+    const base = `FFmpeg process exited with code ${code}.`;
+    const hints = s.recentStderr
+      .map(cleanErrorLine)
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0 && ERROR_HINT_RE.test(l))
+      .slice(-2);
+
+    if (hints.length === 0) return base;
+    return `${base}\n${hints.join('\n')}`;
   }
 
   /**
@@ -395,6 +452,20 @@ export class FFmpegProcessManager {
         callbacks.onProgress(s.latestProgressTime);
       }
     }, PROGRESS_FLUSH_INTERVAL_MS);
+  }
+
+  /** 立即上报最新进度并清除定时器（供进程退出前冲刷最后进度） */
+  private flushProgress(
+    s: ProcessState,
+    callbacks: FFmpegProcessCallbacks,
+  ): void {
+    if (s.progressTimer !== null) {
+      clearTimeout(s.progressTimer);
+      s.progressTimer = null;
+    }
+    if (Number.isFinite(s.latestProgressTime)) {
+      callbacks.onProgress(s.latestProgressTime);
+    }
   }
 
   private tryReportDuration(chunk: string, callbacks: FFmpegProcessCallbacks) {

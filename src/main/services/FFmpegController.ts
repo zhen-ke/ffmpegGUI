@@ -127,7 +127,7 @@ class FFmpegController {
         return { success: false, error };
       }
 
-      const outputFile = extractOutputFile(args);
+      const outputFile = await extractOutputFile(args);
       const workingDirectory = deriveWorkingDirectory(args);
       const resolvedOutputFile = resolveOutputFilePath(
         outputFile,
@@ -175,6 +175,28 @@ class FFmpegController {
         args = ['-hide_banner', ...args];
       }
 
+      // -nostdin：显式禁用 stdin 交互（旧版依赖“非 TTY 自动禁用”的隐性行为，
+      // 不同 build 行为不一致；显式注入更稳）。
+      if (!args.includes('-nostdin')) {
+        args = ['-nostdin', ...args];
+      }
+
+      // -stats_period 0.5：让 ffmpeg 自身以 ~2Hz 均匀输出进度（stats + -progress），
+      // 替代 JS 端 200ms 节流，进度更平滑且省 IPC。
+      if (!args.includes('-stats_period')) {
+        args = ['-stats_period', '0.5', ...args];
+      }
+
+      // -progress pipe:1：让 ffmpeg 向 stdout 输出结构化的 key=value 进度块
+      // （frame/fps/out_time_us/bitrate/progress=end）。相比解析 stderr 的
+      // `time=HH:MM:SS`，out_time_us 微秒级更精确，且自带结束信号，能覆盖
+      // 图片序列/纯滤镜等无 time= 的场景。stdout 被进度占用后，普通日志
+      // 全部走 stderr，互不干扰。
+      // 注意：不注入 -progress 的兼容路径仍保留 stderr time= 正则解析。
+      if (!args.includes('-progress')) {
+        args = ['-progress', 'pipe:1', ...args];
+      }
+
       const callbacks: FFmpegProcessCallbacks = {
         onOutput: (line) => safeReply(ipcEvent, 'ffmpeg-output', line),
         onProgress: (time) =>
@@ -208,7 +230,11 @@ class FFmpegController {
       // 在 spawn 前向终端回显实际执行的命令（含 GUI 注入的 -hide_banner / -y），
       // 让用户看到 ffmpeg 真正接收到的参数，消除“命令没生效”的疑虑。
       // 走 ffmpeg-output 通道、不经 ProcessManager 的 80ms 节流，确保首行即显示。
-      safeReply(ipcEvent, 'ffmpeg-output', `$ ${formatCommandForDisplay(args)}`);
+      safeReply(
+        ipcEvent,
+        'ffmpeg-output',
+        `$ ${formatCommandForDisplay(args)}`,
+      );
 
       // 进程启动是异步效果；我们不等待其完成
       this.manager.start(
