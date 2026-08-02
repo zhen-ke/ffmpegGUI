@@ -54,7 +54,7 @@ function PipelineStripImpl({
   const chipBase =
     'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium min-w-0 transition-all duration-150 cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-500/40';
   const filled =
-    'bg-slate-100 dark:bg-slate-700/60 text-slate-700 dark:text-slate-200 border border-slate-200/70 dark:border-slate-600/60 hover:bg-primary-50 dark:hover:bg-primary-900/30 hover:border-primary-300 dark:hover:border-primary-600 hover:text-primary-700 dark:hover:text-primary-300 shadow-2xs';
+    'bg-slate-100 dark:bg-slate-700/60 text-slate-700 dark:text-slate-200 border border-slate-200/70 dark:border-slate-600/60 hover:bg-primary-50 dark:hover:bg-primary-900/30 hover:border-primary-300 dark:hover:border-primary-600 hover:text-primary-700 dark:hover:text-primary-300 shadow-card';
   const empty =
     'bg-transparent text-slate-400 dark:text-slate-500 border border-dashed border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800 hover:border-slate-400';
 

@@ -5,6 +5,8 @@ import { useCallback, useRef, useState, type DragEvent } from 'react';
  */
 export function useWindowDragDrop(options: {
   onFileDrop: (filePath: string, index: number) => void;
+  /** 拖入文件时按扩展名匹配模板（若未匹配则返回 false） */
+  onMatchTemplate?: (filePath: string) => boolean;
 }): {
   isWindowDragActive: boolean;
   dragHandlers: {
@@ -14,7 +16,7 @@ export function useWindowDragDrop(options: {
     onDrop: (e: DragEvent) => void;
   };
 } {
-  const { onFileDrop } = options;
+  const { onFileDrop, onMatchTemplate } = options;
   const [isWindowDragActive, setIsWindowDragActive] = useState(false);
   const dragCounter = useRef(0);
 
@@ -52,11 +54,13 @@ export function useWindowDragDrop(options: {
       if (files && files.length > 0) {
         const file = files[0] as File & { path: string };
         if (file.path) {
-          onFileDrop(file.path, 0);
+          // 优先尝试按扩展名匹配模板；未匹配则回退为普通输入文件
+          const matched = onMatchTemplate?.(file.path) ?? false;
+          if (!matched) onFileDrop(file.path, 0);
         }
       }
     },
-    [onFileDrop],
+    [onFileDrop, onMatchTemplate],
   );
 
   return {

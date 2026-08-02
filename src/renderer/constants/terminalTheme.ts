@@ -7,10 +7,10 @@
 import type { ITheme } from 'xterm';
 
 export const TERMINAL_THEME: ITheme = {
-  background: '#0D1117',
+  background: '#0f172a',
   foreground: '#E6EDF3',
   cursor: '#58A6FF',
-  cursorAccent: '#0D1117',
+  cursorAccent: '#0f172a',
   selectionBackground: 'rgba(88,166,255,0.3)',
   black: '#21262D',
   brightBlack: '#6E7681',

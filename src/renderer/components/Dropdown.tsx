@@ -46,6 +46,8 @@ interface DropdownProps {
   onDelete?: (templateId: string) => void;
   /** 点击 × 时触发，用于清除当前选中的模板 */
   onClear?: () => void;
+  /** 外部触发打开：值变化即打开下拉（配合键盘/引导跳转） */
+  openSignal?: number;
 }
 
 type SourceFilter = 'all' | 'builtin' | 'custom';
@@ -126,6 +128,7 @@ function Dropdown({
   onEdit,
   onDelete,
   onClear,
+  openSignal = 0,
 }: DropdownProps) {
   const { t } = useLanguage();
   const [isOpen, setIsOpen] = useState(false);
@@ -219,6 +222,11 @@ function Dropdown({
     },
     [resetFilters],
   );
+
+  // 外部触发打开（openSignal 每次 +1）
+  useEffect(() => {
+    if (openSignal > 0) setIsOpen(true);
+  }, [openSignal]);
 
   useEffect(() => {
     if (!isOpen) return undefined;

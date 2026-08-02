@@ -227,7 +227,7 @@ function WorkspaceDrawerImpl({
                 ? 'none'
                 : 'auto',
           }}
-          className="bg-[#0B1120]"
+          className="bg-slate-900"
         >
           {/* 始终挂载：折叠/切 pane 仅切 visibility，避免反复 pty-kill / pty-start。
               与上方 FFmpegTerminal 的 visibility 策略保持一致。 */}

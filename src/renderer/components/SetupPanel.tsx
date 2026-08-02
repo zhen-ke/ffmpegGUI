@@ -1,3 +1,4 @@
+/* eslint-disable react/require-default-props -- 可选 props 用默认参数替代 defaultProps（React 19 移除） */
 /**
  * SetupPanel — 左栏配置区（模板 / 输入 / 输出 / 开始）
  *
@@ -22,6 +23,8 @@ export interface InputSlot {
 interface SetupPanelProps {
   isCompact: boolean;
   isMac: boolean;
+  /** 非紧凑布局下左栏宽度（px） */
+  sidebarWidth?: number;
   templateControlId: string;
   templateOptions: DropdownOption[];
   selectedTemplate: DropdownOption | null;
@@ -29,6 +32,8 @@ interface SetupPanelProps {
   onEditTemplate: (template: { id: string }) => void;
   onDeleteTemplate: (templateId: string) => void;
   onClearTemplate: () => void;
+  /** 外部触发模板下拉打开（值变化即打开） */
+  templateOpenSignal?: number;
   inputSlots: InputSlot[];
   onSelectInput: (index: number) => Promise<void>;
   onClearInput: (index: number) => void;
@@ -55,6 +60,7 @@ interface SetupPanelProps {
 function SetupPanel({
   isCompact,
   isMac,
+  sidebarWidth = 300,
   templateControlId,
   templateOptions,
   selectedTemplate,
@@ -62,6 +68,7 @@ function SetupPanel({
   onEditTemplate,
   onDeleteTemplate,
   onClearTemplate,
+  templateOpenSignal,
   inputSlots,
   onSelectInput,
   onClearInput,
@@ -88,10 +95,11 @@ function SetupPanel({
 
   return (
     <aside
+      style={isCompact ? undefined : { width: sidebarWidth }}
       className={`${
         isCompact
           ? 'w-full'
-          : 'w-[300px] flex-shrink-0 overflow-y-auto border-r border-slate-200/60 dark:border-slate-700/60'
+          : 'flex-shrink-0 overflow-y-auto border-r border-slate-200/60 dark:border-slate-700/60'
       } px-4 py-4 space-y-3 ${isMac ? 'bg-white/50 dark:bg-slate-900/40' : ''}`}
     >
       {/* ① 模板 */}
@@ -111,6 +119,7 @@ function SetupPanel({
           onEdit={onEditTemplate}
           onDelete={onDeleteTemplate}
           onClear={onClearTemplate}
+          openSignal={templateOpenSignal}
         />
       </div>
 
@@ -181,7 +190,7 @@ function SetupPanel({
               {language === 'zh' ? '只读预览' : 'Read-only'}
             </span>
           </div>
-          <div className="h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/60 flex items-center justify-between gap-2 shadow-2xs">
+          <div className="h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/60 flex items-center justify-between gap-2 shadow-card">
             <div className="flex items-center gap-2 min-w-0 flex-1">
               <Lock
                 size={13}

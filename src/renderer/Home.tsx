@@ -1,5 +1,6 @@
 import { Upload } from 'lucide-react';
-import { useCallback, useId, useRef } from 'react';
+import { useCallback, useId, useRef, useState } from 'react';
+import type React from 'react';
 import FFmpegDownloader from './components/FFmpegDownloader';
 import { TemplateDialog } from './components/TemplateDialog';
 import { useLanguage } from './LanguageContext';
@@ -24,6 +25,7 @@ import { MediaInfoCard } from './components/MediaInfoCard';
 import { PipelineStrip } from './components/PipelineStrip';
 import SetupPanel from './components/SetupPanel';
 import { WorkspaceDrawer } from './components/WorkspaceDrawer';
+import RunningBar from './components/RunningBar';
 
 import { useWorkspaceLayout } from './hooks/useWorkspaceLayout';
 import { useConfirmModal } from './hooks/useConfirmModal';
@@ -32,6 +34,28 @@ import { useOnboardingGuide } from './hooks/useOnboardingGuide';
 import { useTemplateSync } from './hooks/useTemplateSync';
 import { useInputOutputSlots } from './hooks/useInputOutputSlots';
 import { useResultCards } from './hooks/useResultCards';
+import { useLocalStorage } from './hooks/useLocalStorage';
+
+/**
+ * 拖入文件按扩展名 → 自动匹配的模板命令。
+ * 仅收录「语义确定」的转换：扩展名能直接推导出目标格式。
+ */
+const DROP_MATCH_BY_EXT: Record<string, string> = {
+  // 视频 → 常见容器/编码
+  mp4: '-i input.mp4 -c:v libx264 -preset medium -crf 23 -c:a aac -b:a 128k output.mp4',
+  mkv: '-i input.mkv -c:v libx264 -preset medium -crf 23 -c:a aac -b:a 128k output.mp4',
+  avi: '-i input.avi -c:v libx264 -preset medium -crf 23 -c:a aac -b:a 128k output.mp4',
+  mov: '-i input.mov -c:v libx264 -preset medium -crf 23 -c:a aac -b:a 128k output.mp4',
+  webm: '-i input.webm -c:v libx264 -preset medium -crf 23 -c:a aac -b:a 128k output.mp4',
+  // 音频 → 提取/转 MP3
+  mp3: '-i input.mp3 -vn -c:a libmp3lame -b:a 192k output.mp3',
+  flac: '-i input.flac -c:a libmp3lame -ar 44100 -ab 192k output.mp3',
+  wav: '-i input.wav -c:a libmp3lame -ar 44100 -ab 192k output.mp3',
+  m4a: '-i input.m4a -c:a libmp3lame -ar 44100 -ab 192k output.mp3',
+  ogg: '-i input.ogg -c:a libmp3lame -ar 44100 -ab 192k output.mp3',
+  // 图片 → GIF / 视频
+  gif: '-i input.gif -c:v libx264 -pix_fmt yuv420p -movflags +faststart output.mp4',
+};
 
 function Home() {
   const { language, setLanguage, t } = useLanguage();
@@ -42,10 +66,41 @@ function Home() {
   const inputControlBaseId = useId();
   const outputControlId = useId();
   const commandControlId = useId();
+  // 用于从 CommandBox 的「浏览全部模板」触发左侧模板下拉打开
+  const [templateOpenSignal, setTemplateOpenSignal] = useState(0);
 
   const { activePane, isCompact, expandDrawerRef, handleActivePaneChange } =
     useWorkspaceLayout();
   const { confirmState, openConfirm, closeConfirm } = useConfirmModal();
+
+  // 左栏宽度（可拖拽调宽，持久化）
+  const [sidebarWidth, setSidebarWidth] = useLocalStorage<number>(
+    'ffmpeg-sidebar-width-v1',
+    300,
+    {
+      serialize: String,
+      deserialize: (raw) => Math.max(240, Number(raw) || 300),
+    },
+  );
+  const handleSidebarPointerDown = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      const startX = e.clientX;
+      const startW = sidebarWidth;
+      const onMove = (ev: PointerEvent) => {
+        setSidebarWidth(
+          Math.max(240, Math.min(480, startW + (ev.clientX - startX))),
+        );
+      };
+      const onUp = () => {
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', onUp);
+      };
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp);
+    },
+    [setSidebarWidth, sidebarWidth],
+  );
 
   const startButtonRef = useRef<HTMLButtonElement>(null);
   const { toasts, pushToast, dismissToast } = useToast();
@@ -177,8 +232,25 @@ function Home() {
     commandControlId,
   });
 
+  // 拖入文件时按扩展名自动匹配模板；匹配成功则应用模板 + 绑定输入，返回 true
+  const handleMatchTemplateForDrop = useCallback(
+    (filePath: string): boolean => {
+      const ext = filePath.split('.').pop()?.toLowerCase() ?? '';
+      const templateCommand = DROP_MATCH_BY_EXT[ext];
+      if (!templateCommand) return false;
+
+      // 先写入输入文件（触发 inputFiles 状态 + 输出目录自动联动）
+      handleDropInputAtIndex(filePath, 0);
+      // 用匹配的模板命令重写 command，并绑定真实输入/输出路径
+      updateCommandWithPaths(templateCommand, [filePath], outputFolder);
+      return true;
+    },
+    [handleDropInputAtIndex, outputFolder, updateCommandWithPaths],
+  );
+
   const { isWindowDragActive, dragHandlers } = useWindowDragDrop({
     onFileDrop: handleDropInputAtIndex,
+    onMatchTemplate: handleMatchTemplateForDrop,
   });
 
   const { showOnboardingGuide, dismissGuide, handleGuideStepClick } =
@@ -360,11 +432,12 @@ function Home() {
       <div
         className={`flex-1 min-h-0 flex backdrop-blur-sm ${
           isCompact ? 'flex-col overflow-y-auto' : 'flex-row'
-        } ${isMac ? 'bg-transparent' : 'bg-white/80 dark:bg-slate-800/80'}`}
+        } ${isMac ? 'bg-transparent' : 'bg-white/80 dark:bg-slate-900/80'}`}
       >
         <SetupPanel
           isCompact={isCompact}
           isMac={isMac}
+          sidebarWidth={sidebarWidth}
           templateControlId={templateControlId}
           templateOptions={templateOptions}
           selectedTemplate={selectedTemplate}
@@ -372,6 +445,7 @@ function Home() {
           onEditTemplate={templateManager.handleEditTemplate}
           onDeleteTemplate={handleDeleteTemplateWithConfirm}
           onClearTemplate={handleTemplateClear}
+          templateOpenSignal={templateOpenSignal}
           inputSlots={inputSlots}
           onSelectInput={handleSelectInputAtIndex}
           onClearInput={handleClearInputAtIndex}
@@ -395,11 +469,28 @@ function Home() {
           setupBlockerMessage={setupBlockerMessage}
         />
 
+        {!isCompact && (
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize sidebar"
+            onPointerDown={handleSidebarPointerDown}
+            className="w-1 flex-shrink-0 cursor-col-resize bg-transparent hover:bg-primary-500/30 active:bg-primary-500/40 transition-colors duration-150"
+          />
+        )}
+
         <main
           className={`flex-1 min-w-0 px-4 py-4 space-y-4 ${
             isCompact ? '' : 'overflow-y-auto'
           }`}
         >
+          <RunningBar
+            isRunning={isRunning}
+            isStopping={isStopping}
+            canStop={canStop}
+            onStop={onStop}
+          />
+
           <CommandBox
             id={commandControlId}
             command={command}
@@ -414,6 +505,7 @@ function Home() {
             commandSource={commandSource}
             onReset={handleResetToTemplate}
             onSelectPreset={handleSelectPreset}
+            onBrowseTemplates={() => setTemplateOpenSignal((n) => n + 1)}
           />
 
           <PipelineStrip

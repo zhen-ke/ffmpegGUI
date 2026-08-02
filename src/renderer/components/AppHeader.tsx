@@ -10,7 +10,6 @@
 import { PlusCircle, X, Zap } from 'lucide-react';
 import { memo } from 'react';
 import { useLanguage } from '../LanguageContext';
-import FFmpegProgressBar from './FFmpegProgressBar';
 
 export type GuideStep = 'template' | 'input' | 'output' | 'start';
 
@@ -179,9 +178,6 @@ function AppHeaderImpl({
         >
           {workflowLabel}
         </span>
-
-        {/* 进度条：高频订阅已下放到 FFmpegProgressBar 内部；组件内部按 isRunning 自门控 */}
-        <FFmpegProgressBar isRunning={isRunning} language={language} />
 
         {showOnboardingGuide && !isRunning && (
           <div className="flex items-center gap-1.5 flex-wrap">

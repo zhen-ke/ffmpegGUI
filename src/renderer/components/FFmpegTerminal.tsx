@@ -124,7 +124,7 @@ export function FFmpegTerminal({
   }, [writeln]);
 
   return (
-    <div className="h-full w-full bg-[#0D1117] overflow-hidden relative">
+    <div className="h-full w-full bg-slate-900 overflow-hidden relative">
       {/* xterm 的 padding option 部分版本不生效，改用 CSS 注入内边距 */}
       <style>{`
         .xterm .xterm-viewport { padding: 6px 8px !important; box-sizing: border-box; }

@@ -33,6 +33,8 @@ interface ProcessState {
   pendingLines: string[];
   /** 待上报的最新进度时间（秒） */
   latestProgressTime: number;
+  /** 最近一条进度行（仅保留最新，用于日志合并，避免逐帧刷屏） */
+  latestProgressLine: string | null;
   stdout: LineBuffer;
   stderr: LineBuffer;
   outputFile?: string;
@@ -140,6 +142,7 @@ export class FFmpegProcessManager {
       progressTimer: null,
       pendingLines: [],
       latestProgressTime: NaN,
+      latestProgressLine: null,
       stdout: new LineBuffer(),
       stderr: new LineBuffer(),
       outputFile,
@@ -157,10 +160,9 @@ export class FFmpegProcessManager {
       if (!s) return;
 
       // 在 LineBuffer 切出的完整行上解析进度 / 时长（非原始 chunk，避免
-      // time= 跨 chunk 边界漏匹配）。同时区分“进度行”与“普通日志行”：
-      // 进度行（frame=... time=...）由进度条呈现，不再灌入终端，避免长
-      // 编码时 xterm 被逐帧 \r 行刷屏、把真正的日志（Input/Output/错误）
-      // 顶出 scrollback。普通日志行照常节流送终端。
+      // time= 跨 chunk 边界漏匹配）。进度行（frame=... time=...）既上报
+      // 进度条，也保留最新一条进日志（enqueueOutput 合并，避免逐帧 \r
+      // 刷屏）。普通日志行照常节流送终端。
       const lines = s.stderr.push(data.toString());
       for (const line of lines) {
         this.tryReportDuration(line, callbacks);
@@ -168,6 +170,15 @@ export class FFmpegProcessManager {
         if (Number.isNaN(time)) {
           this.enqueueOutput(s, line, callbacks);
         } else {
+          s.latestProgressLine = line;
+          // 确保 flush 定时器存在：即使窗口内只有进度行，也能按节流频率
+          // 把最新进度刷进日志（否则进度行会一直滞留到有普通行才输出）。
+          if (s.flushTimer === null) {
+            s.flushTimer = setTimeout(() => {
+              s.flushTimer = null;
+              this.flushPendingOutput(s, callbacks);
+            }, OUTPUT_FLUSH_INTERVAL_MS);
+          }
           this.scheduleProgressEmit(s, time, callbacks);
         }
       }
@@ -274,8 +285,7 @@ export class FFmpegProcessManager {
     if (s.flushTimer === null) {
       s.flushTimer = setTimeout(() => {
         s.flushTimer = null;
-        const lines = s.pendingLines.splice(0);
-        for (const l of lines) callbacks.onOutput(l);
+        this.flushPendingOutput(s, callbacks);
       }, OUTPUT_FLUSH_INTERVAL_MS);
     }
   }
@@ -290,6 +300,12 @@ export class FFmpegProcessManager {
       s.flushTimer = null;
     }
     const lines = s.pendingLines.splice(0);
+    // 把窗口内最新的一条进度行也合并进日志（进度行不常驻 pendingLines，
+    // 只在 flush 时取最新值），让转码过程在日志层可见且不逐帧刷屏。
+    if (s.latestProgressLine !== null) {
+      lines.push(s.latestProgressLine);
+      s.latestProgressLine = null;
+    }
     for (const l of lines) callbacks.onOutput(l);
   }
 

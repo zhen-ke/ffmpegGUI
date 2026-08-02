@@ -2,12 +2,15 @@
 import {
   FileVideo,
   Film,
+  LayoutGrid,
   Music,
   RotateCcw,
   Scissors,
+  Shrink,
   Sparkles,
   Terminal as TerminalIcon,
   UploadCloud,
+  Volume2,
 } from 'lucide-react';
 import { memo, useState, useId, type DragEvent } from 'react';
 import { useLanguage } from '../LanguageContext';
@@ -21,7 +24,15 @@ export interface CommandSource {
 
 export interface QuickPreset {
   id: string;
-  iconName: 'h264' | 'audio' | 'gif' | 'trim';
+  iconName:
+    | 'h264'
+    | 'audio'
+    | 'gif'
+    | 'trim'
+    | 'shrink'
+    | 'volume'
+    | 'webm'
+    | 'thumbnail';
   titleEn: string;
   titleZh: string;
   command: string;
@@ -44,6 +55,14 @@ const QUICK_PRESETS: QuickPreset[] = [
     command: '-i input.mp4 -vn -c:a libmp3lame -b:a 192k output.mp3',
   },
   {
+    id: 'shrink',
+    iconName: 'shrink',
+    titleEn: 'Compress Video',
+    titleZh: '压缩视频体积',
+    command:
+      '-i input.mp4 -vf "scale=iw*0.5:ih*0.5" -c:v libx264 -crf 28 -preset slower -c:a aac -b:a 96k output_compressed.mp4',
+  },
+  {
     id: 'gif',
     iconName: 'gif',
     titleEn: 'Convert to Animated GIF',
@@ -58,6 +77,29 @@ const QUICK_PRESETS: QuickPreset[] = [
     titleZh: '无损快速剪切',
     command: '-ss 00:00:10 -i input.mp4 -t 00:00:30 -c copy output_trimmed.mp4',
   },
+  {
+    id: 'volume',
+    iconName: 'volume',
+    titleEn: 'Normalize Loudness',
+    titleZh: '响度标准化',
+    command:
+      '-i input.mp4 -filter:a loudnorm=I=-23:LRA=7:TP=-2 -c:v copy output_normalized.mp4',
+  },
+  {
+    id: 'webm',
+    iconName: 'webm',
+    titleEn: 'Convert to WebM',
+    titleZh: '转换为 WebM',
+    command:
+      '-i input.mp4 -c:v libvpx-vp9 -crf 30 -b:v 0 -b:a 128k -c:a libopus output.webm',
+  },
+  {
+    id: 'thumbnail',
+    iconName: 'thumbnail',
+    titleEn: 'Make Thumbnail',
+    titleZh: '生成视频缩略图',
+    command: '-i input.mp4 -ss 00:00:05 -vframes 1 thumbnail.jpg',
+  },
 ];
 
 export interface CommandBoxProps {
@@ -70,6 +112,8 @@ export interface CommandBoxProps {
   /** 点击后将命令重置为模板原始内容 */
   onReset?: () => void;
   onSelectPreset?: (command: string, label: string) => void;
+  /** 点击「浏览全部模板」打开模板下拉 */
+  onBrowseTemplates?: () => void;
   id?: string;
   placeholder?: string;
   hasMultipleInputs: boolean;
@@ -88,6 +132,7 @@ function CommandBoxImpl({
   onClear,
   onReset,
   onSelectPreset,
+  onBrowseTemplates,
   id,
   placeholder,
   hasMultipleInputs,
@@ -239,7 +284,11 @@ function CommandBoxImpl({
         </div>
 
         {/* 命令文本域区域 */}
-        <div className="relative min-h-[160px] flex flex-col justify-between">
+        <div
+          className={`relative flex flex-col justify-between ${
+            command.trim().length === 0 ? '' : 'min-h-[160px]'
+          }`}
+        >
           <label htmlFor={textareaId} className="sr-only">
             {t('FFmpeg Command')}
           </label>
@@ -291,6 +340,12 @@ function CommandBoxImpl({
                         {preset.iconName === 'audio' && <Music size={13} />}
                         {preset.iconName === 'gif' && <Film size={13} />}
                         {preset.iconName === 'trim' && <Scissors size={13} />}
+                        {preset.iconName === 'shrink' && <Shrink size={13} />}
+                        {preset.iconName === 'volume' && <Volume2 size={13} />}
+                        {preset.iconName === 'webm' && <Film size={13} />}
+                        {preset.iconName === 'thumbnail' && (
+                          <FileVideo size={13} />
+                        )}
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className="text-[11px] font-medium text-slate-700 dark:text-slate-300 truncate group-hover/preset:text-primary-600 dark:group-hover/preset:text-primary-400">
@@ -300,6 +355,20 @@ function CommandBoxImpl({
                     </button>
                   );
                 })}
+                {onBrowseTemplates && (
+                  <button
+                    type="button"
+                    onClick={onBrowseTemplates}
+                    className="flex items-center justify-center gap-2 p-2 rounded-lg border-2 border-dashed border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:border-primary-400 dark:hover:border-primary-500 hover:text-primary-600 dark:hover:text-primary-400 hover:bg-primary-50/40 dark:hover:bg-primary-900/15 transition-all duration-150"
+                  >
+                    <LayoutGrid size={13} className="flex-shrink-0" />
+                    <span className="text-[11px] font-medium truncate">
+                      {language === 'zh'
+                        ? '浏览全部模板'
+                        : 'Browse all templates'}
+                    </span>
+                  </button>
+                )}
               </div>
             </div>
           )}
