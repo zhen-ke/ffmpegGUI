@@ -3,6 +3,7 @@ import {
   deriveWorkingDirectory,
   extractOutputFile,
   parseFFmpegCommand,
+  splitCommandChain,
 } from './commandParser';
 import { FALLBACK_OPTIONS_WITH_VALUES } from './ffmpegOptions';
 
@@ -95,12 +96,65 @@ describe('commandParser', () => {
     expect(deriveWorkingDirectory(args)).toBe('/tmp');
   });
 
-  it('detects unsupported shell control operators', () => {
+  it('allows && chaining but rejects other shell operators', () => {
+    // && 是受支持的顺序执行链
     expect(
       containsUnsupportedShellOperators(
         parseFFmpegCommand('-i in.mp4 out.mp4 && ffmpeg -version'),
       ),
+    ).toBe(false);
+
+    // 管道 / 分号 / 重定向 / || 仍被拒绝
+    expect(
+      containsUnsupportedShellOperators(
+        parseFFmpegCommand('-i in.mp4 | ffmpeg -'),
+      ),
     ).toBe(true);
+    expect(
+      containsUnsupportedShellOperators(
+        parseFFmpegCommand('-i in.mp4 ; ffmpeg -'),
+      ),
+    ).toBe(true);
+    expect(
+      containsUnsupportedShellOperators(
+        parseFFmpegCommand('-i in.mp4 > out.txt'),
+      ),
+    ).toBe(true);
+    expect(
+      containsUnsupportedShellOperators(
+        parseFFmpegCommand('-i a.mp4 || ffmpeg -i b.mp4'),
+      ),
+    ).toBe(true);
+  });
+
+  it('splits command chain by && into segments', () => {
+    const segments = splitCommandChain(
+      parseFFmpegCommand(
+        '-i in.mp4 -c:v libx264 out.mp4 && ffmpeg -i out.mp4 -vf scale=320:240 thumb.jpg',
+      ),
+    );
+
+    expect(segments).toEqual([
+      ['-i', 'in.mp4', '-c:v', 'libx264', 'out.mp4'],
+      ['ffmpeg', '-i', 'out.mp4', '-vf', 'scale=320:240', 'thumb.jpg'],
+    ]);
+  });
+
+  it('splits chain and strips empty segments', () => {
+    const segments = splitCommandChain(
+      parseFFmpegCommand('-i a.mp4 out.mp4 && && ffmpeg -i b.mp4 out2.mp4'),
+    );
+    expect(segments).toEqual([
+      ['-i', 'a.mp4', 'out.mp4'],
+      ['ffmpeg', '-i', 'b.mp4', 'out2.mp4'],
+    ]);
+  });
+
+  it('returns single segment when no && present', () => {
+    const segments = splitCommandChain(
+      parseFFmpegCommand('-i a.mp4 -c:v libx264 out.mp4'),
+    );
+    expect(segments).toEqual([['-i', 'a.mp4', '-c:v', 'libx264', 'out.mp4']]);
   });
 
   // ── P1-5: OPTIONS_WITH_VALUES 补全与 flag 移除 ──────────────────────

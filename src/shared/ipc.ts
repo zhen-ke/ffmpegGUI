@@ -38,6 +38,10 @@ export interface FFmpegEventPayloads {
   'ffmpeg-complete': { outputFile: string | null };
   /** FFmpeg 可用性变更（安装完成等） */
   'ffmpeg-status': boolean;
+  /** 进程长时间无输出（可能卡死）：已停滞时长（ms） */
+  'ffmpeg-stalled': { stalledForMs: number };
+  /** 命令链切换到新段：当前段号（1-based）与总段数 */
+  'ffmpeg-chain-segment': { segment: number; total: number };
 }
 
 /**
@@ -59,11 +63,22 @@ export interface IpcEventPayloads extends FFmpegEventPayloads {
 export interface IpcInvokeMap {
   'start-ffmpeg': { args: [command: string]; result: IpcResult };
   'stop-ffmpeg': { args: []; result: IpcResult };
+  'ffmpeg-resume': { args: []; result: IpcResult };
   'check-ffmpeg-status': { args: []; result: boolean };
   'check-media-probe-status': { args: []; result: boolean };
-  'probe-media': { args: [filePath: string]; result: IpcResult<MediaProbeResult> };
-  'select-input-file': { args: [currentPath?: string]; result: { canceled: boolean; filePaths: string[] } };
-  'select-output-folder': { args: [currentPath?: string]; result: { canceled: boolean; filePaths: string[] } };
+  'check-hardware-encoders': { args: []; result: string[] };
+  'probe-media': {
+    args: [filePath: string];
+    result: IpcResult<MediaProbeResult>;
+  };
+  'select-input-file': {
+    args: [currentPath?: string];
+    result: { canceled: boolean; filePaths: string[] };
+  };
+  'select-output-folder': {
+    args: [currentPath?: string];
+    result: { canceled: boolean; filePaths: string[] };
+  };
   'open-output-file': { args: [filePath: string]; result: IpcResult };
   'open-output-folder': { args: [filePath: string]; result: IpcResult };
   'pty-start': { args: [cols: number, rows: number]; result: void };

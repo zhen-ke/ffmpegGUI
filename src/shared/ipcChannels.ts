@@ -20,6 +20,9 @@ export const IPC_CHANNELS = [
   'ffmpeg-duration',
   'ffmpeg-complete',
   'ffmpeg-status',
+  'ffmpeg-stalled',
+  'ffmpeg-resume',
+  'ffmpeg-chain-segment',
 
   // FFmpeg 下载安装
   'download-ffmpeg',
@@ -35,6 +38,9 @@ export const IPC_CHANNELS = [
   'select-output-folder',
   'check-media-probe-status',
   'probe-media',
+
+  // 硬件编码器探测
+  'check-hardware-encoders',
 
   // PTY 终端
   'pty-start',

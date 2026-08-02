@@ -4,6 +4,7 @@
 
 import { ipcMain, type BrowserWindow } from 'electron';
 import { ffmpegService } from '../services/FFmpegController';
+import { getAvailableHardwareEncoders } from '../services/HardwareEncoderService';
 import type { IpcResult } from '../../shared/ipc';
 import { safeReply } from '../utils/ipcUtils';
 
@@ -19,7 +20,9 @@ export function setupFFmpegHandlers(
   // 幂等保护：先移除可能存在的旧监听，再重新注册
   ipcMain.removeHandler('start-ffmpeg');
   ipcMain.removeHandler('stop-ffmpeg');
+  ipcMain.removeHandler('ffmpeg-resume');
   ipcMain.removeHandler('check-ffmpeg-status');
+  ipcMain.removeHandler('check-hardware-encoders');
 
   // 渲染层只通过 invoke 调用，无 ipcMain.on 注册需求
   ipcMain.handle(
@@ -40,5 +43,13 @@ export function setupFFmpegHandlers(
     return { success: true };
   });
 
+  ipcMain.handle('ffmpeg-resume', (): IpcResult => {
+    return ffmpegService.resume();
+  });
+
   ipcMain.handle('check-ffmpeg-status', () => ffmpegService.checkExists());
+
+  ipcMain.handle('check-hardware-encoders', () =>
+    getAvailableHardwareEncoders(),
+  );
 }

@@ -21,6 +21,7 @@ import {
   deriveWorkingDirectory,
   extractOutputFile,
   parseFFmpegCommand,
+  splitCommandChain,
 } from '../utils/commandParser';
 import { safeReply } from '../utils/ipcUtils';
 import { resolveFfmpegPath } from '../utils/pathUtils';
@@ -33,6 +34,7 @@ import {
 type FFmpegProgress = { time: number };
 type FFmpegDuration = { duration: number };
 type FFmpegCompletePayload = { outputFile: string | null };
+type FFmpegChainSegmentPayload = { segment: number; total: number };
 
 function resolveOutputFilePath(
   outputFile: string | undefined,
@@ -122,130 +124,27 @@ class FFmpegController {
 
       if (containsUnsupportedShellOperators(args)) {
         const error =
-          'Only a single FFmpeg command is supported. Remove shell operators such as &&, ||, |, or redirects.';
+          'Unsupported shell operator. Only && chaining is allowed (no |, ;, ||, or redirects).';
         safeReply(ipcEvent, 'ffmpeg-error', error);
         return { success: false, error };
       }
 
-      const outputFile = await extractOutputFile(args);
-      const workingDirectory = deriveWorkingDirectory(args);
-      const resolvedOutputFile = resolveOutputFilePath(
-        outputFile,
-        workingDirectory,
-      );
-
-      if (resolvedOutputFile && fs.existsSync(resolvedOutputFile)) {
-        if (!mainWindow) {
-          const error = t('cannotConfirmOverwrite');
-          safeReply(ipcEvent, 'ffmpeg-error', error);
-          return { success: false, error };
-        }
-
-        const { response } = await dialog.showMessageBox(mainWindow, {
-          type: 'question',
-          buttons: [t('yes'), t('no')],
-          defaultId: 1,
-          cancelId: 1,
-          title: t('confirmOverwrite'),
-          message: t('fileAlreadyExists', { filename: resolvedOutputFile }),
-        });
-
-        if (response === 1) {
-          const message = t('operationCancelled');
-          safeReply(ipcEvent, 'ffmpeg-cancelled', message);
-          return { success: false, error: message };
-        }
-        // 用户已确认覆盖；-y 在下方统一注入
-      }
-
-      // 无条件注入 -y：
-      // 本进程 stdin 为管道（非 TTY），ffmpeg 遇已存在输出文件时不会交互
-      // 提示，而是直接报错退出。GUI 的覆盖对话框只覆盖“我们能识别到的
-      // 输出”，一旦 extractOutputFile 漏判（例如命令以未知取值选项结尾），
-      // 就不会注入 -y，ffmpeg 仍会因文件已存在而失败。因此此处无条件注入，
-      // 作为兜底；若用户已显式写 -y 或 -n，尊重其选择，不重复 / 不冲突。
-      if (!args.includes('-y') && !args.includes('-n')) {
-        args = ['-y', ...args];
-      }
-
-      // -hide_banner：抑制 stderr 中的构建信息 / libav 版本等多行噪声，
-      // 降低 LineBuffer / 进度正则的解析压力，终端日志更干净。
-      // 不影响 Duration: / time= 解析。
-      if (!args.includes('-hide_banner')) {
-        args = ['-hide_banner', ...args];
-      }
-
-      // -nostdin：显式禁用 stdin 交互（旧版依赖“非 TTY 自动禁用”的隐性行为，
-      // 不同 build 行为不一致；显式注入更稳）。
-      if (!args.includes('-nostdin')) {
-        args = ['-nostdin', ...args];
-      }
-
-      // -stats_period 0.5：让 ffmpeg 自身以 ~2Hz 均匀输出进度（stats + -progress），
-      // 替代 JS 端 200ms 节流，进度更平滑且省 IPC。
-      if (!args.includes('-stats_period')) {
-        args = ['-stats_period', '0.5', ...args];
-      }
-
-      // -progress pipe:1：让 ffmpeg 向 stdout 输出结构化的 key=value 进度块
-      // （frame/fps/out_time_us/bitrate/progress=end）。相比解析 stderr 的
-      // `time=HH:MM:SS`，out_time_us 微秒级更精确，且自带结束信号，能覆盖
-      // 图片序列/纯滤镜等无 time= 的场景。stdout 被进度占用后，普通日志
-      // 全部走 stderr，互不干扰。
-      // 注意：不注入 -progress 的兼容路径仍保留 stderr time= 正则解析。
-      if (!args.includes('-progress')) {
-        args = ['-progress', 'pipe:1', ...args];
-      }
-
-      const callbacks: FFmpegProcessCallbacks = {
-        onOutput: (line) => safeReply(ipcEvent, 'ffmpeg-output', line),
-        onProgress: (time) =>
-          safeReply(ipcEvent, 'ffmpeg-progress', {
-            time,
-          } satisfies FFmpegProgress),
-        onDuration: (duration) =>
-          safeReply(ipcEvent, 'ffmpeg-duration', {
-            duration,
-          } satisfies FFmpegDuration),
-        onCancelled: () =>
-          safeReply(ipcEvent, 'ffmpeg-cancelled', 'FFmpeg process stopped.'),
-        onComplete: (completedOutputFile) => {
-          const file = completedOutputFile ?? resolvedOutputFile;
-          safeReply(ipcEvent, 'ffmpeg-complete', {
-            outputFile: file ?? null,
-          } satisfies FFmpegCompletePayload);
-          if (file) this.notifyCompletion(file);
-        },
-        onError: (message) => safeReply(ipcEvent, 'ffmpeg-error', message),
-      };
-
-      const ffmpegPath = await resolveFfmpegPath();
-      if (!ffmpegPath) {
+      // 按 && 拆链：单段 = 原逻辑；多段 = 逐段顺序执行
+      const segments = splitCommandChain(args);
+      if (segments.length === 0) {
         const error =
-          'FFmpeg is not available. Install it on your system or use the built-in downloader.';
+          'Command has no arguments. Please provide a valid FFmpeg command.';
         safeReply(ipcEvent, 'ffmpeg-error', error);
         return { success: false, error };
       }
 
-      // 在 spawn 前向终端回显实际执行的命令（含 GUI 注入的 -hide_banner / -y），
-      // 让用户看到 ffmpeg 真正接收到的参数，消除“命令没生效”的疑虑。
-      // 走 ffmpeg-output 通道、不经 ProcessManager 的 80ms 节流，确保首行即显示。
-      safeReply(
-        ipcEvent,
-        'ffmpeg-output',
-        `$ ${formatCommandForDisplay(args)}`,
-      );
-
-      // 进程启动是异步效果；我们不等待其完成
-      this.manager.start(
-        ffmpegPath,
-        args,
-        callbacks,
-        resolvedOutputFile,
-        workingDirectory && fs.existsSync(workingDirectory)
-          ? workingDirectory
-          : undefined,
-      );
+      // 启动首段；后续段由 onComplete 回调串行推进（见 launchSegment）。
+      // fire-and-forget：不阻塞 start() 返回，异常转发为错误事件。
+      this.launchSegment(segments, 0, ipcEvent, mainWindow).catch((error) => {
+        const message =
+          error instanceof Error ? error.message : 'Failed to start FFmpeg.';
+        safeReply(ipcEvent, 'ffmpeg-error', message);
+      });
       return { success: true };
     }; // end of run()
 
@@ -258,8 +157,185 @@ class FFmpegController {
     }
   }
 
+  /**
+   * 启动命令链的第 index 段（含参数注入、覆盖确认、spawn 与回调转发）。
+   *
+   * 段完成（exit 0）后若还有后续段则递归启动下一段；全部完成才上报
+   * `ffmpeg-complete`。任一段失败/取消即中止整链（不启动后续段）。
+   *
+   * @param segments 链的所有参数段
+   * @param index     当前要启动的段索引（0-based）
+   */
+  private async launchSegment(
+    segments: string[][],
+    index: number,
+    ipcEvent: IpcMainEvent,
+    mainWindow: BrowserWindow | null,
+  ): Promise<void> {
+    const args = segments[index];
+
+    const outputFile = await extractOutputFile(args);
+    await this.launchSegmentPrepared(
+      args,
+      outputFile,
+      index,
+      segments,
+      ipcEvent,
+      mainWindow,
+    );
+  }
+
+  /**
+   * 覆盖确认 + 参数注入 + spawn 一段命令。
+   * 与 launchSegment 分离以便异步等待 extractOutputFile。
+   */
+  private async launchSegmentPrepared(
+    args: string[],
+    outputFile: string | undefined,
+    index: number,
+    segments: string[][],
+    ipcEvent: IpcMainEvent,
+    mainWindow: BrowserWindow | null,
+  ): Promise<void> {
+    const total = segments.length;
+    const ctx = { segment: index + 1, total };
+    const workingDirectory = deriveWorkingDirectory(args);
+    const resolvedOutputFile = resolveOutputFilePath(
+      outputFile,
+      workingDirectory,
+    );
+
+    if (resolvedOutputFile && fs.existsSync(resolvedOutputFile)) {
+      if (!mainWindow) {
+        const error = t('cannotConfirmOverwrite');
+        safeReply(ipcEvent, 'ffmpeg-error', error);
+        return;
+      }
+
+      const { response } = await dialog.showMessageBox(mainWindow, {
+        type: 'question',
+        buttons: [t('yes'), t('no')],
+        defaultId: 1,
+        cancelId: 1,
+        title: t('confirmOverwrite'),
+        message: t('fileAlreadyExists', {
+          filename: resolvedOutputFile,
+        }),
+      });
+
+      if (response === 1) {
+        const message = t('operationCancelled');
+        safeReply(ipcEvent, 'ffmpeg-cancelled', message);
+        return;
+      }
+      // 用户已确认覆盖；-y 在下方统一注入
+    }
+
+    // 无条件注入 -y：本进程 stdin 为管道（非 TTY），ffmpeg 遇已存在输出
+    // 文件时不会交互提示，而是直接报错退出。GUI 覆盖对话框只覆盖我们能
+    // 识别到的输出；此处无条件注入作为兜底。若用户已写 -y/-n 则尊重。
+    const preparedArgs = [...args];
+    if (!preparedArgs.includes('-y') && !preparedArgs.includes('-n')) {
+      preparedArgs.unshift('-y');
+    }
+    if (!preparedArgs.includes('-hide_banner')) {
+      preparedArgs.unshift('-hide_banner');
+    }
+    if (!preparedArgs.includes('-nostdin')) {
+      preparedArgs.unshift('-nostdin');
+    }
+    if (!preparedArgs.includes('-stats_period')) {
+      preparedArgs.unshift('-stats_period', '0.5');
+    }
+    if (!preparedArgs.includes('-progress')) {
+      preparedArgs.unshift('-progress', 'pipe:1');
+    }
+
+    // 广播段切换（单段 total=1 也广播，UI 进度条据此重置）
+    safeReply(ipcEvent, 'ffmpeg-chain-segment', {
+      segment: ctx.segment,
+      total: ctx.total,
+    } satisfies FFmpegChainSegmentPayload);
+
+    const callbacks: FFmpegProcessCallbacks = {
+      onOutput: (line) => safeReply(ipcEvent, 'ffmpeg-output', line),
+      onProgress: (time) =>
+        safeReply(ipcEvent, 'ffmpeg-progress', {
+          time,
+        } satisfies FFmpegProgress),
+      onDuration: (duration) =>
+        safeReply(ipcEvent, 'ffmpeg-duration', {
+          duration,
+        } satisfies FFmpegDuration),
+      onCancelled: () =>
+        safeReply(ipcEvent, 'ffmpeg-cancelled', 'FFmpeg process stopped.'),
+      onComplete: (completedOutputFile) => {
+        const file = completedOutputFile ?? resolvedOutputFile;
+        const nextIndex = index + 1;
+
+        // 链模式：还有后续段则继续；否则整链完成
+        if (segments.length > 1 && nextIndex < segments.length) {
+          safeReply(
+            ipcEvent,
+            'ffmpeg-output',
+            `[chain] segment ${ctx.segment}/${ctx.total} done → starting next`,
+          );
+          this.launchSegment(segments, nextIndex, ipcEvent, mainWindow);
+          return;
+        }
+
+        safeReply(ipcEvent, 'ffmpeg-complete', {
+          outputFile: file ?? null,
+        } satisfies FFmpegCompletePayload);
+        if (file) this.notifyCompletion(file);
+      },
+      onError: (message) => safeReply(ipcEvent, 'ffmpeg-error', message),
+      onStalled: (stalledForMs) =>
+        safeReply(ipcEvent, 'ffmpeg-stalled', {
+          stalledForMs,
+        }),
+    };
+
+    const ffmpegPath = await resolveFfmpegPath();
+    if (!ffmpegPath) {
+      const error =
+        'FFmpeg is not available. Install it on your system or use the built-in downloader.';
+      safeReply(ipcEvent, 'ffmpeg-error', error);
+      return;
+    }
+
+    // 在 spawn 前向终端回显实际执行的命令（含 GUI 注入参数），让用户看到
+    // ffmpeg 真正接收到的参数，消除“命令没生效”的疑虑。
+    safeReply(
+      ipcEvent,
+      'ffmpeg-output',
+      `$ ${formatCommandForDisplay(preparedArgs)}`,
+    );
+
+    this.manager.start(
+      ffmpegPath,
+      preparedArgs,
+      callbacks,
+      resolvedOutputFile,
+      workingDirectory && fs.existsSync(workingDirectory)
+        ? workingDirectory
+        : undefined,
+    );
+  }
+
   stop(): boolean {
     return this.manager.stop();
+  }
+
+  /**
+   * 卡死提示后用户选择"继续等待"：重置卡死检测计时器，继续监测。
+   */
+  resume(): IpcResult {
+    if (!this.manager.isRunning()) {
+      return { success: false, error: 'No FFmpeg process is running.' };
+    }
+    this.manager.resumeAfterStall();
+    return { success: true };
   }
 
   cleanup(): void {

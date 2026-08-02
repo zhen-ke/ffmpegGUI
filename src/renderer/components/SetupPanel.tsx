@@ -34,6 +34,9 @@ interface SetupPanelProps {
   onClearTemplate: () => void;
   /** 外部触发模板下拉打开（值变化即打开） */
   templateOpenSignal?: number;
+  /** 当前机器可用的硬件编码器（动态探测），用于模板可用性过滤 */
+  availableEncoders?: string[];
+  encodersLoaded?: boolean;
   inputSlots: InputSlot[];
   onSelectInput: (index: number) => Promise<void>;
   onClearInput: (index: number) => void;
@@ -69,6 +72,8 @@ function SetupPanel({
   onDeleteTemplate,
   onClearTemplate,
   templateOpenSignal,
+  availableEncoders = [],
+  encodersLoaded = false,
   inputSlots,
   onSelectInput,
   onClearInput,
@@ -120,6 +125,8 @@ function SetupPanel({
           onDelete={onDeleteTemplate}
           onClear={onClearTemplate}
           openSignal={templateOpenSignal}
+          availableEncoders={availableEncoders}
+          encodersLoaded={encodersLoaded}
         />
       </div>
 

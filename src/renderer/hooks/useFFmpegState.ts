@@ -13,7 +13,7 @@
  * 避免连点 Start 触发竞态（dispatch START 后 status 不再是 idle）。
  */
 
-import { useCallback, useEffect, useReducer } from 'react';
+import { useCallback, useEffect, useReducer, useState } from 'react';
 import { onFFmpegEvent } from '../ipc/ffmpegEvents';
 import { useLatest } from './useLatest';
 import { ipcInvoke } from '../ipc/ipcTyped';
@@ -103,6 +103,8 @@ export function deriveFFmpegFlags(status: FFmpegStatus) {
  */
 export function useFFmpegState() {
   const [state, dispatch] = useReducer(reducer, initialState);
+  /** 卡死提示：记录停滞时长（ms），非 null 表示已触发 */
+  const [stalledForMs, setStalledForMs] = useState<number | null>(null);
 
   const stateRef = useLatest(state);
 
@@ -144,18 +146,41 @@ export function useFFmpegState() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /** 卡死提示后用户选择"继续等待"：通知主进程重置检测计时器 */
+  const handleResumeStalled = useCallback(() => {
+    ipcInvoke('ffmpeg-resume')
+      .then(() => {
+        setStalledForMs(null);
+        return undefined;
+      })
+      .catch(() => {
+        setStalledForMs(null);
+        return undefined;
+      });
+  }, []);
+
   useEffect(() => {
     const listeners = [
       onFFmpegEvent('ffmpeg-error', () => {
         dispatch({ type: 'ERROR' });
+        setStalledForMs(null);
       }),
 
       onFFmpegEvent('ffmpeg-cancelled', () => {
         dispatch({ type: 'CANCELLED' });
+        setStalledForMs(null);
       }),
 
       onFFmpegEvent('ffmpeg-complete', ({ outputFile }) => {
         dispatch({ type: 'COMPLETE', payload: { outputFile } });
+        setStalledForMs(null);
+      }),
+
+      onFFmpegEvent('ffmpeg-stalled', ({ stalledForMs: ms }) => {
+        // 只在 running 状态提示（starting/stopping 不打扰）
+        if (stateRef.current.status === 'running') {
+          setStalledForMs(ms);
+        }
       }),
     ];
 
@@ -169,8 +194,10 @@ export function useFFmpegState() {
     status: state.status,
     lastStartedCommand: state.lastStartedCommand,
     lastCompletedOutputFile: state.lastCompletedOutputFile,
+    stalledForMs,
     ...flags,
     handleStart,
     handleStop,
+    handleResumeStalled,
   };
 }

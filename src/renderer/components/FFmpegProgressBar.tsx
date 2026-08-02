@@ -36,7 +36,7 @@ function FFmpegProgressBar({ isRunning, language }: FFmpegProgressBarProps) {
   const lastProgressRef = useRef(0);
   const lastTimeRef = useRef(0);
 
-  // 订阅 progress / duration：组件常驻即挂载，跨多次运行复用监听器
+  // 订阅 progress / duration / chain-segment：组件常驻即挂载，跨多次运行复用监听器
   useEffect(() => {
     const unlistenProgress = onFFmpegEvent('ffmpeg-progress', ({ time }) => {
       timeRef.current = time;
@@ -50,9 +50,19 @@ function FFmpegProgressBar({ isRunning, language }: FFmpegProgressBarProps) {
         setProgress(computePct(timeRef.current, duration));
       },
     );
+    const unlistenSegment = onFFmpegEvent('ffmpeg-chain-segment', () => {
+      // 命令链切换到新段：重置进度与时长，避免跨段百分比错乱
+      timeRef.current = 0;
+      durationRef.current = 0;
+      rateRef.current = 0;
+      lastProgressRef.current = 0;
+      lastTimeRef.current = 0;
+      setProgress(0);
+    });
     return () => {
       unlistenProgress();
       unlistenDuration();
+      unlistenSegment();
     };
   }, []);
 

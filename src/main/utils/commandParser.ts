@@ -16,9 +16,12 @@ import {
 
 // ========== 常量 ==========
 
-/** 不支持的 shell 控制符，项目只允许单条 FFmpeg 命令 */
+/**
+ * 不支持的 shell 控制符。
+ * `&&` 是唯一支持的链操作符（见 splitCommandChain），其余（管道/重定向/`;`/`||`）
+ * 全部拒绝——GUI 只允许"顺序执行多条 ffmpeg 命令"，不允许 shell 级数据流操作。
+ */
 const SHELL_OPERATORS = new Set([
-  '&&',
   '||',
   '|',
   ';',
@@ -60,8 +63,38 @@ export function parseFFmpegCommand(command: string): string[] {
 }
 
 /**
+ * 将参数数组按 `&&` 拆分为多条子命令的参数段。
+ * `&&` 是 GUI 支持的顺序执行链（转码→提取封面等组合）。
+ *
+ * @param args 解析后的完整参数数组
+ * @returns    每条子命令的参数数组（去除了 `&&` 分隔符；空段被剔除）
+ */
+export function splitCommandChain(args: string[]): string[][] {
+  const segments: string[][] = [];
+  let current: string[] = [];
+
+  for (const arg of args) {
+    if (arg === '&&') {
+      if (current.length > 0) {
+        segments.push(current);
+        current = [];
+      }
+      continue;
+    }
+    current.push(arg);
+  }
+
+  if (current.length > 0) {
+    segments.push(current);
+  }
+
+  return segments;
+}
+
+/**
  * 检查参数列表中是否含有不支持的 shell 控制符。
- * 项目只支持单条 FFmpeg 命令，不允许管道、重定向等操作。
+ * 项目只支持"顺序执行多条 ffmpeg 命令"（`&&`），
+ * 不允许管道、重定向、`;`、`||` 等操作。
  */
 export function containsUnsupportedShellOperators(args: string[]): boolean {
   return args.some((arg) => SHELL_OPERATORS.has(arg));

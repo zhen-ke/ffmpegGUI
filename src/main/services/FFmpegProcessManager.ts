@@ -17,7 +17,12 @@ export interface FFmpegProcessCallbacks {
   onComplete: (outputFile?: string) => void;
   onCancelled: () => void;
   onError: (message: string) => void;
+  /** 进程长时间无任何输出（可能卡死） */
+  onStalled?: (stalledForMs: number) => void;
 }
+
+/** 卡死检测：默认无输出阈值（ms）。0 表示关闭。 */
+export const DEFAULT_STALL_TIMEOUT_MS = 60_000;
 
 interface ProcessState {
   process: ChildProcessByStdio<null, Readable, Readable>;
@@ -30,6 +35,12 @@ interface ProcessState {
   flushTimer: ReturnType<typeof setTimeout> | null;
   /** 进度节流定时器 */
   progressTimer: ReturnType<typeof setTimeout> | null;
+  /** 卡死检测定时器（无输出超时） */
+  stallTimer: ReturnType<typeof setTimeout> | null;
+  /** 卡死检测阈值（ms）；0 关闭 */
+  stallTimeoutMs: number;
+  /** 上次收到输出的时间戳（ms），用于计算已停滞时长 */
+  lastOutputAt: number;
   /** 待合并的输出行缓冲 */
   pendingLines: string[];
   /** 待上报的最新进度时间（秒） */
@@ -127,9 +138,11 @@ export class FFmpegProcessManager {
     callbacks: FFmpegProcessCallbacks,
     outputFile?: string,
     workingDirectory?: string,
+    stallTimeoutMs = DEFAULT_STALL_TIMEOUT_MS,
   ) {
     if (this.state) return; // 上层应先检查 isRunning()
 
+    this.currentCallbacks = callbacks;
     const proc = spawn(executablePath, args, {
       cwd: workingDirectory,
       shell: false,
@@ -156,6 +169,9 @@ export class FFmpegProcessManager {
       forceKillTimer: null,
       flushTimer: null,
       progressTimer: null,
+      stallTimer: null,
+      stallTimeoutMs,
+      lastOutputAt: Date.now(),
       pendingLines: [],
       latestProgressTime: NaN,
       latestProgressLine: null,
@@ -166,12 +182,18 @@ export class FFmpegProcessManager {
       outputFile,
     };
 
+    // 卡死检测：无输出超时（stallTimeoutMs > 0 时启用）
+    if (stallTimeoutMs > 0 && callbacks.onStalled) {
+      this.resetStallTimer(this.state, callbacks);
+    }
+
     // stdout 承载 `-progress pipe:1` 的结构化进度块（key=value，空行分隔）。
     // 若用户命令未注入 -progress（旧版或自写命令），stdout 可能为空或含普通
     // 输出，此时进度走 stderr 的 time= 正则兜底。
     proc.stdout.on('data', (data: Buffer) => {
       const s = this.state;
       if (!s) return;
+      this.touchOutput(s, callbacks);
       const lines = s.stdout.push(data.toString());
       for (const line of lines) {
         const time = s.progressParser.push(line);
@@ -185,6 +207,7 @@ export class FFmpegProcessManager {
       const s = this.state;
       if (!s) return;
 
+      this.touchOutput(s, callbacks);
       // 在 LineBuffer 切出的完整行上解析进度 / 时长（非原始 chunk，避免
       // time= 跨 chunk 边界漏匹配）。进度行（frame=... time=...）既上报
       // 进度条，也保留最新一条进日志（enqueueOutput 合并，避免逐帧 \r
@@ -363,8 +386,54 @@ export class FFmpegProcessManager {
     if (s.forceKillTimer) clearTimeout(s.forceKillTimer);
     if (s.flushTimer) clearTimeout(s.flushTimer);
     if (s.progressTimer) clearTimeout(s.progressTimer);
+    if (s.stallTimer) clearTimeout(s.stallTimer);
+    this.currentCallbacks = null;
     this.state = null;
   }
+
+  /**
+   * 收到任何输出（stdout/stderr）时调用：更新上次输出时间并重置卡死计时器。
+   */
+  private touchOutput(
+    s: ProcessState,
+    callbacks: FFmpegProcessCallbacks,
+  ): void {
+    s.lastOutputAt = Date.now();
+    this.resetStallTimer(s, callbacks);
+  }
+
+  /** 重置卡死检测计时器（stallTimeoutMs > 0 且回调存在时启用） */
+  private resetStallTimer(
+    s: ProcessState,
+    callbacks: FFmpegProcessCallbacks,
+  ): void {
+    if (s.stallTimeoutMs <= 0 || !callbacks.onStalled) return;
+    if (s.stallTimer) clearTimeout(s.stallTimer);
+    s.stallTimer = setTimeout(() => {
+      s.stallTimer = null;
+      // 进程已退出/停止则不再提示
+      if (this.state !== s || s.isStopping) return;
+      // 从"最后输出"起算停滞时长（可能因定时器延迟略超阈值）
+      const stalledFor = Date.now() - s.lastOutputAt;
+      callbacks.onStalled?.(stalledFor);
+      // 触发后不再自动重设：由上层决定"继续等待"（调用 resumeAfterStall）还是终止
+    }, s.stallTimeoutMs);
+  }
+
+  /**
+   * 卡死提示后用户选择"继续等待"：重置卡死计时器，继续监测。
+   * 若进程已退出/停止则为空操作。
+   */
+  resumeAfterStall(): void {
+    const s = this.state;
+    if (!s || s.isStopping) return;
+    s.lastOutputAt = Date.now();
+    const callbacks = this.currentCallbacks;
+    if (callbacks) this.resetStallTimer(s, callbacks);
+  }
+
+  /** 记录最近一次启动传入的回调（供 resumeAfterStall 复用） */
+  private currentCallbacks: FFmpegProcessCallbacks | null = null;
 
   private handleClose(code: number | null, callbacks: FFmpegProcessCallbacks) {
     const s = this.state;

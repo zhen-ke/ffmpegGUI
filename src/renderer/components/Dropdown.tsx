@@ -48,10 +48,33 @@ interface DropdownProps {
   onClear?: () => void;
   /** 外部触发打开：值变化即打开下拉（配合键盘/引导跳转） */
   openSignal?: number;
+  /** 当前机器可用的硬件编码器集合（如 ['h264_videotoolbox']） */
+  availableEncoders?: string[];
+  /** 编码器探测是否完成；完成前不据此隐藏模板，避免误判 */
+  encodersLoaded?: boolean;
 }
 
 type SourceFilter = 'all' | 'builtin' | 'custom';
 type SupportedPlatform = 'darwin' | 'win32' | 'linux';
+
+/**
+ * 从命令文本中提取所需的视频编码器名。
+ * 匹配 `-c:v <enc>`、`-c <enc>` 或 `-vcodec <enc>`（含带流限定符的 -c:v:0）。
+ * 仅返回编码器名；无匹配返回 null。
+ */
+function extractVideoEncoder(command: string): string | null {
+  const match = /(?:^|\s)-(?:c(?::[vas]\d*)?|vcodec)\s+([A-Za-z0-9_-]+)/i.exec(
+    command,
+  );
+  return match ? match[1] : null;
+}
+
+/** 编码器是否属于硬件编码器（通过已知后缀/前缀识别） */
+function isHardwareEncoderName(name: string): boolean {
+  return /(?:^|_)(nvenc|qsv|amf|videotoolbox|vaapi|vulkan|opencl)(?:_|$)|^(h264|hevc|av1|vp9|prores)_(videotoolbox|nvenc|qsv|amf|vaapi)|_(at|mft|mediacodec)$/i.test(
+    name,
+  );
+}
 
 function getCompatiblePlatforms(command: string): SupportedPlatform[] | null {
   if (/\b(?:h264|hevc)_videotoolbox\b/i.test(command)) {
@@ -71,6 +94,33 @@ function getCompatiblePlatforms(command: string): SupportedPlatform[] | null {
   }
 
   return null;
+}
+
+/**
+ * 判定模板在当前机器上是否可用。
+ * - 若命令使用了硬件编码器，则必须在 availableEncoders 中（动态探测）；
+ * - 若无法提取编码器或编码器是软件编码，则按静态平台过滤兜底。
+ */
+function isTemplateAvailable(
+  option: DropdownOption,
+  currentPlatform: string,
+  availableEncoders: string[],
+  encodersLoaded: boolean,
+): boolean {
+  const encoder = extractVideoEncoder(option.command);
+
+  // 命令使用了硬件编码器 → 需要动态探测确认
+  if (encoder && isHardwareEncoderName(encoder)) {
+    if (!encodersLoaded) return true; // 探测未完成，暂不隐藏
+    return availableEncoders.includes(encoder);
+  }
+
+  // 其余情况：静态平台过滤兜底
+  const compatiblePlatforms = getCompatiblePlatforms(option.command);
+  return (
+    !compatiblePlatforms ||
+    compatiblePlatforms.includes(currentPlatform as SupportedPlatform)
+  );
 }
 
 function getPlatformLabel(
@@ -108,17 +158,6 @@ function getCompatibilityBadge(
     .join(' / ');
 }
 
-function matchesCurrentPlatform(
-  option: DropdownOption,
-  currentPlatform: string,
-): boolean {
-  const compatiblePlatforms = getCompatiblePlatforms(option.command);
-  return (
-    !compatiblePlatforms ||
-    compatiblePlatforms.includes(currentPlatform as SupportedPlatform)
-  );
-}
-
 function Dropdown({
   id,
   options,
@@ -129,6 +168,8 @@ function Dropdown({
   onDelete,
   onClear,
   openSignal = 0,
+  availableEncoders = [],
+  encodersLoaded = false,
 }: DropdownProps) {
   const { t } = useLanguage();
   const [isOpen, setIsOpen] = useState(false);
@@ -148,8 +189,15 @@ function Dropdown({
     const normalizedQuery = searchQuery.trim().toLowerCase();
 
     return options.filter((option) => {
-      // 自动过滤不兼容当前平台的模板
-      if (!matchesCurrentPlatform(option, currentPlatform)) {
+      // 自动过滤：不兼容当前平台 / 硬件编码器不可用
+      if (
+        !isTemplateAvailable(
+          option,
+          currentPlatform,
+          availableEncoders,
+          encodersLoaded,
+        )
+      ) {
         return false;
       }
 
@@ -162,7 +210,14 @@ function Dropdown({
         field.toLowerCase().includes(normalizedQuery),
       );
     });
-  }, [currentPlatform, options, searchQuery, sourceFilter]);
+  }, [
+    currentPlatform,
+    options,
+    searchQuery,
+    sourceFilter,
+    availableEncoders,
+    encodersLoaded,
+  ]);
 
   const groupedOptions = useMemo(() => {
     const customOptions = visibleOptions.filter((option) => option.isCustom);

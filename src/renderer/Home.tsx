@@ -1,5 +1,5 @@
 import { Upload } from 'lucide-react';
-import { useCallback, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import type React from 'react';
 import FFmpegDownloader from './components/FFmpegDownloader';
 import { TemplateDialog } from './components/TemplateDialog';
@@ -7,6 +7,7 @@ import { useLanguage } from './LanguageContext';
 
 import { useCommandManager } from './hooks/useCommandManager';
 import { useElectronIPC } from './hooks/useElectronIPC';
+import { useHardwareEncoders } from './hooks/useHardwareEncoders';
 import { useFFmpegState } from './hooks/useFFmpegState';
 import { useFileSelection } from './hooks/useFileSelection';
 import { useGlobalHotkeys } from './hooks/useGlobalHotkeys';
@@ -60,6 +61,7 @@ const DROP_MATCH_BY_EXT: Record<string, string> = {
 function Home() {
   const { language, setLanguage, t } = useLanguage();
   const { ffmpegExists } = useElectronIPC();
+  const { availableEncoders, isLoaded: encodersLoaded } = useHardwareEncoders();
   const isMac = window.electron.platform === 'darwin';
 
   const templateControlId = useId();
@@ -155,8 +157,10 @@ function Home() {
     isStopping,
     lastCompletedOutputFile,
     status,
+    stalledForMs,
     handleStart,
     handleStop,
+    handleResumeStalled,
   } = useFFmpegState();
 
   const {
@@ -199,6 +203,34 @@ function Home() {
     handleOperationalError,
     t,
   });
+
+  // 卡死检测：进程长时间无输出时弹出"继续等待 / 停止"确认框
+  const stalledHandledRef = useRef(false);
+  useEffect(() => {
+    if (stalledForMs === null) {
+      stalledHandledRef.current = false;
+      return;
+    }
+    if (stalledHandledRef.current) return;
+    stalledHandledRef.current = true;
+
+    openConfirm(
+      t('ffmpegStalledTitle'),
+      () => {
+        // 确认 = 继续等待，重置检测计时器
+        handleResumeStalled();
+      },
+      {
+        description: t('ffmpegStalledDescription'),
+        confirmLabel: t('Continue Waiting'),
+        cancelLabel: t('Stop'),
+        // 取消 = 停止进程
+        onCancel: () => {
+          handleStop();
+        },
+      },
+    );
+  }, [stalledForMs, openConfirm, handleResumeStalled, handleStop, t]);
 
   const {
     inputSlots,
@@ -446,6 +478,8 @@ function Home() {
           onDeleteTemplate={handleDeleteTemplateWithConfirm}
           onClearTemplate={handleTemplateClear}
           templateOpenSignal={templateOpenSignal}
+          availableEncoders={availableEncoders}
+          encodersLoaded={encodersLoaded}
           inputSlots={inputSlots}
           onSelectInput={handleSelectInputAtIndex}
           onClearInput={handleClearInputAtIndex}
@@ -571,8 +605,16 @@ function Home() {
         title={confirmState.isOpen ? confirmState.title : ''}
         description={confirmState.isOpen ? confirmState.description : undefined}
         danger={confirmState.isOpen ? confirmState.danger : undefined}
+        confirmLabel={
+          confirmState.isOpen ? confirmState.confirmLabel : undefined
+        }
+        cancelLabel={confirmState.isOpen ? confirmState.cancelLabel : undefined}
         onConfirm={confirmState.isOpen ? confirmState.onConfirm : closeConfirm}
-        onCancel={closeConfirm}
+        onCancel={
+          confirmState.isOpen
+            ? (confirmState.onCancel ?? closeConfirm)
+            : closeConfirm
+        }
       />
 
       <TemplateDialog

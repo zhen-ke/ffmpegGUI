@@ -7,7 +7,10 @@ export type ConfirmState =
       title: string;
       description?: string;
       danger?: boolean;
+      confirmLabel?: string;
+      cancelLabel?: string;
       onConfirm: () => void;
+      onCancel?: () => void;
     };
 
 /**
@@ -18,7 +21,13 @@ export function useConfirmModal(): {
   openConfirm: (
     title: string,
     onConfirm: () => void,
-    opts?: { description?: string; danger?: boolean },
+    opts?: {
+      description?: string;
+      danger?: boolean;
+      confirmLabel?: string;
+      cancelLabel?: string;
+      onCancel?: () => void;
+    },
   ) => void;
   closeConfirm: () => void;
 } {
@@ -30,7 +39,13 @@ export function useConfirmModal(): {
     (
       title: string,
       onConfirm: () => void,
-      opts?: { description?: string; danger?: boolean },
+      opts?: {
+        description?: string;
+        danger?: boolean;
+        confirmLabel?: string;
+        cancelLabel?: string;
+        onCancel?: () => void;
+      },
     ) => {
       setConfirmState({ isOpen: true, title, onConfirm, ...opts });
     },

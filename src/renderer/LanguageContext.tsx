@@ -26,6 +26,10 @@ export const translations: Record<Language, Record<string, string>> = {
     'FFmpeg Tool': 'FFmpeg Tool',
     'Command Template': 'Command Template',
     'Select a template': 'Select a template',
+    ffmpegStalledTitle: 'FFmpeg appears unresponsive',
+    ffmpegStalledDescription:
+      'No output received for a while. The process may be stuck. Continue waiting?',
+    'Continue Waiting': 'Continue Waiting',
     'FFmpeg Command': 'FFmpeg Command',
     'Enter FFmpeg command or drag & drop files here':
       'Enter FFmpeg command or drag & drop files here',
@@ -219,6 +223,10 @@ export const translations: Record<Language, Record<string, string>> = {
     Terminal: '终端',
     'Command Template': '命令模板',
     'Select a template': '选择模板',
+    ffmpegStalledTitle: 'FFmpeg 可能无响应',
+    ffmpegStalledDescription:
+      '已有一段时间没有收到输出，进程可能卡住了。是否继续等待？',
+    'Continue Waiting': '继续等待',
     'FFmpeg Command': 'FFmpeg 命令',
     'Enter FFmpeg command or drag & drop files here':
       '输入 FFmpeg 命令或拖放文件到这里',

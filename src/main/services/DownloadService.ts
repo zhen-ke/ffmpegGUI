@@ -20,6 +20,7 @@ import {
   invalidateFfmpegPathCache,
 } from '../utils/pathUtils';
 import { invalidateFfprobePathCache } from './MediaProbeService';
+import { invalidateHardwareEncoderCache } from './HardwareEncoderService';
 
 // ========== 工具函数 ==========
 
@@ -175,6 +176,8 @@ class DownloadService {
       invalidateFfmpegPathCache();
       // ffprobe 通常随 ffmpeg 一同下载，同步失效其探测缓存
       invalidateFfprobePathCache();
+      // 新安装的 ffmpeg 可能有不同的硬件编码器，失效探测缓存
+      invalidateHardwareEncoderCache();
 
       console.log('FFmpeg installed successfully to:', ffmpegDestPath);
       safeReply(event, 'ffmpeg-install-complete');
