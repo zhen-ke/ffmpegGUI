@@ -3,7 +3,7 @@
  *
  * v2：抽屉高度所有权收归于此（px 单一真相源），drawerSize 退化为派生高亮态。
  * - 拖拽 resize 手柄（只缩放内容区，标签栏常驻）
- * - 运行时自动展开到 lg、结束后恢复
+ * - 运行状态不再强制展开抽屉（尊重用户折叠意愿，状态靠标签栏圆点提示）
  * - 切 pane 时若折叠则展开
  * - toggle / sm·md·lg 三档按钮映射到目标 px
  */
@@ -14,6 +14,7 @@ import { memo, useCallback, useEffect, useRef } from 'react';
 import type { MutableRefObject } from 'react';
 import { DrawerSize, DrawerTabBar, type WorkspacePane } from './DrawerTabBar';
 import { FFmpegTerminal, type TerminalLogType } from './FFmpegTerminal';
+import type { RunState } from '../hooks/useRunState';
 import Terminal from './Terminal/Terminal';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { useLatest } from '../hooks/useLatest';
@@ -33,6 +34,8 @@ interface WorkspaceDrawerProps {
   canStop: boolean;
   isRunning: boolean;
   isStopping: boolean;
+  /** 运行状态指示（驱动标签栏圆点：running 脉冲 / success 绿 / error 红） */
+  runState: RunState;
   onStop: () => void;
   onCopyLogs: () => void;
   xtermClearRef: MutableRefObject<(() => void) | null>;
@@ -51,6 +54,7 @@ function WorkspaceDrawerImpl({
   canStop,
   isRunning,
   isStopping,
+  runState,
   onStop,
   onCopyLogs,
   xtermClearRef,
@@ -73,7 +77,6 @@ function WorkspaceDrawerImpl({
     },
   );
   const lastNonZeroRef = useRef<number>(drawerHeightPx || PX_TARGETS.md);
-  const preRunHeightRef = useRef<number>(drawerHeightPx);
   // useLatest 统一管理渲染期 ref 同步，替代手写 heightRef.current = drawerHeightPx
   const heightRef = useLatest(drawerHeightPx);
 
@@ -114,18 +117,8 @@ function WorkspaceDrawerImpl({
     };
   }, [onExpandRef, setDrawerHeightPx]);
 
-  // 运行时自动展开到 lg，结束后恢复
-  const prevIsRunningRef = useRef(false);
-  useEffect(() => {
-    const wasRunning = prevIsRunningRef.current;
-    prevIsRunningRef.current = isRunning;
-    if (!wasRunning && isRunning) {
-      preRunHeightRef.current = heightRef.current;
-      setDrawerHeightPx(PX_TARGETS.lg);
-    } else if (wasRunning && !isRunning) {
-      setDrawerHeightPx(preRunHeightRef.current);
-    }
-  }, [isRunning, heightRef, setDrawerHeightPx]);
+  // 运行时不再强制展开抽屉（原 v2 会在 isRunning 时撑到 lg、结束后恢复，
+  // 与"尊重用户折叠意愿"冲突）。用户折叠后运行任务，仅靠标签栏圆点提示状态。
 
   // ── 拖拽 resize ──
   const onHandlePointerDown = useCallback(
@@ -164,6 +157,7 @@ function WorkspaceDrawerImpl({
         canStop={canStop}
         isRunning={isRunning}
         isStopping={isStopping}
+        runState={runState}
         onStop={onStop}
         onClearLogs={() => xtermClearRef.current?.()}
         onCopyLogs={onCopyLogs}

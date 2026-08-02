@@ -1,5 +1,6 @@
 import { Loader2 } from 'lucide-react';
 import { useLanguage } from '../LanguageContext';
+import type { RunState } from '../hooks/useRunState';
 
 export type DrawerSize = 'sm' | 'md' | 'lg';
 export type WorkspacePane = 'activity' | 'terminal';
@@ -10,6 +11,8 @@ export interface DrawerTabBarProps {
   isRunning: boolean;
   isStopping: boolean;
   canStop: boolean;
+  /** 运行状态指示：running 脉冲 / success 绿 / error 红，idle 隐藏 */
+  runState: RunState;
   onStop: () => void;
   onClearLogs: () => void;
   onCopyLogs: () => void;
@@ -25,12 +28,21 @@ const DRAWER_SIZE_LABELS: Record<DrawerSize, string> = {
   lg: '□',
 };
 
+// 运行状态圆点样式：running 走脉冲分支，success/error 用静态色，idle 透明。
+const DOT_STYLES: Record<RunState, string> = {
+  running: 'bg-transparent opacity-0',
+  success: 'bg-emerald-500 opacity-100',
+  error: 'bg-red-500 opacity-100',
+  idle: 'bg-transparent opacity-0',
+};
+
 export function DrawerTabBar({
   activePane,
   onActivePaneChange,
   isRunning,
   isStopping,
   canStop,
+  runState,
   onStop,
   onClearLogs,
   onCopyLogs,
@@ -52,6 +64,24 @@ export function DrawerTabBar({
     terminal: t('Shell'),
   };
 
+  // 运行状态圆点：running 脉冲动画 / success 绿 / error 红，idle 淡出隐藏。
+  // 始终渲染 span，用 opacity 控制显隐，保证 success/error→idle 时有平滑淡出。
+  const statusDot =
+    runState === 'running' ? (
+      <span
+        className="relative inline-flex h-2 w-2 ml-1.5 transition-opacity duration-500 opacity-100"
+        aria-hidden="true"
+      >
+        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60" />
+        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+      </span>
+    ) : (
+      <span
+        className={`ml-1.5 inline-block rounded-full h-2 w-2 transition-opacity duration-500 ${DOT_STYLES[runState]}`}
+        aria-hidden="true"
+      />
+    );
+
   return (
     <div className="flex-shrink-0 flex items-center gap-2 px-4 h-11 bg-white dark:bg-slate-800 border-t border-slate-200/80 dark:border-slate-700/80 shadow-[0_-1px_8px_rgba(0,0,0,0.04)] dark:shadow-[0_-1px_8px_rgba(0,0,0,0.2)]">
       <div className="flex items-center gap-2 flex-shrink-0 min-w-0">
@@ -62,6 +92,7 @@ export function DrawerTabBar({
           className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors duration-150 cursor-pointer"
         >
           {t('Workspace')}
+          {statusDot}
         </button>
         <div className="flex items-center gap-0.5 bg-slate-100 dark:bg-slate-700/50 rounded-md p-0.5">
           {(['activity', 'terminal'] as WorkspacePane[]).map((pane) => (

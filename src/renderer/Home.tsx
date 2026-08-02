@@ -29,6 +29,7 @@ import { WorkspaceDrawer } from './components/WorkspaceDrawer';
 import RunningBar from './components/RunningBar';
 
 import { useWorkspaceLayout } from './hooks/useWorkspaceLayout';
+import { useRunState } from './hooks/useRunState';
 import { useConfirmModal } from './hooks/useConfirmModal';
 import { useWindowDragDrop } from './hooks/useWindowDragDrop';
 import { useOnboardingGuide } from './hooks/useOnboardingGuide';
@@ -162,6 +163,8 @@ function Home() {
     handleStop,
     handleResumeStalled,
   } = useFFmpegState();
+
+  const runState = useRunState(status);
 
   const {
     templateOptions,
@@ -306,16 +309,11 @@ function Home() {
   const onStart = useCallback(() => {
     const cmd = command.trim();
     if (!cmd || !canStart || !setupReadiness.isSetupComplete) return;
-    handleActivePaneChange('activity');
+    // 不再自动展开抽屉/切换 pane——执行时用户不想看日志就不弹，
+    // 状态由标签栏圆点提示（running 脉冲 / success 绿 / error 红）。
     xtermClearRef.current?.();
     handleStart(cmd);
-  }, [
-    canStart,
-    command,
-    handleActivePaneChange,
-    handleStart,
-    setupReadiness.isSetupComplete,
-  ]);
+  }, [canStart, command, handleStart, setupReadiness.isSetupComplete]);
 
   const onStop = useCallback(() => {
     if (!canStop) return;
@@ -589,6 +587,7 @@ function Home() {
         canStop={canStop}
         isRunning={isRunning}
         isStopping={isStopping}
+        runState={runState}
         onStop={onStop}
         onCopyLogs={handleCopyLogs}
         xtermClearRef={xtermClearRef}

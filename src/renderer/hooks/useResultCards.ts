@@ -64,14 +64,14 @@ export function useResultCards(options: {
     if (status === 'error' && prevStatus !== 'error') {
       setShowFailedResult(true);
       pushToast('error', t('Task failed. Check the activity log for details.'));
-      handleActivePaneChange('activity');
-      expandDrawerRef.current?.();
+      // 失败不自动弹出日志抽屉——尊重用户折叠意愿，
+      // 靠标签栏红色圆点 + toast 提示，需要看日志时点击即可。
     }
 
     if (status === 'running') {
       setShowFailedResult(false);
     }
-  }, [handleActivePaneChange, pushToast, status, t]);
+  }, [pushToast, status, t]);
 
   const handleViewLogs = useCallback(() => {
     handleActivePaneChange('activity');
