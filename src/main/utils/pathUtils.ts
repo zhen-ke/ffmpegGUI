@@ -177,12 +177,17 @@ export function probeExecutableExists(command: string): Promise<boolean> {
 /** 路径探测结果缓存：undefined = 还未探测，null = 确认不存在，string = 已确认路径 */
 let _cachedFfmpegPath: string | null | undefined = undefined;
 
+/** FFmpeg 版本缓存：undefined = 还未探测，string = 版本号 */
+let _cachedFfmpegVersion: string | undefined = undefined;
+
 /**
  * 使 resolveFfmpegPath 缓存失效。
  * 在下载/更新 FFmpeg 二进制后调用，确保下次解析时重新探测。
+ * 版本号来自同一二进制，一并失效。
  */
 export function invalidateFfmpegPathCache(): void {
   _cachedFfmpegPath = undefined;
+  _cachedFfmpegVersion = undefined;
 }
 
 /**
@@ -231,6 +236,36 @@ export async function resolveFfmpegPath(): Promise<string | null> {
 
   _cachedFfmpegPath = null;
   return null;
+}
+
+/**
+ * 获取当前 FFmpeg 版本号（解析 `ffmpeg -version` 首行，如 `7.1.1`）。
+ *
+ * 带缓存：路径缓存失效时同步失效（见 invalidateFfmpegPathCache）。
+ * 解析失败或未安装返回 null；null 不缓存，下次调用重试。
+ */
+export async function getFfmpegVersion(): Promise<string | null> {
+  if (_cachedFfmpegVersion !== undefined) return _cachedFfmpegVersion;
+
+  const ffmpegPath = await resolveFfmpegPath();
+  if (!ffmpegPath) return null;
+
+  const version = await new Promise<string | null>((resolve) => {
+    execFile(
+      ffmpegPath,
+      ['-version'],
+      { timeout: 5_000, windowsHide: true },
+      (error, stdout) => {
+        const match = error
+          ? null
+          : stdout.match(/version\s+(\d+(?:\.\d+)*)/);
+        resolve(match ? match[1] : null);
+      },
+    );
+  });
+
+  if (version) _cachedFfmpegVersion = version;
+  return version;
 }
 
 /**

@@ -65,6 +65,7 @@ export interface IpcInvokeMap {
   'stop-ffmpeg': { args: []; result: IpcResult };
   'ffmpeg-resume': { args: []; result: IpcResult };
   'check-ffmpeg-status': { args: []; result: boolean };
+  'get-ffmpeg-version': { args: []; result: string | null };
   'check-media-probe-status': { args: []; result: boolean };
   'check-hardware-encoders': { args: []; result: string[] };
   'probe-media': {

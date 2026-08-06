@@ -11,6 +11,7 @@ export const IPC_CHANNELS = [
   'start-ffmpeg',
   'stop-ffmpeg',
   'check-ffmpeg-status',
+  'get-ffmpeg-version',
 
   // FFmpeg 事件
   'ffmpeg-output',

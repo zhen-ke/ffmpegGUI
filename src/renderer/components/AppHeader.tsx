@@ -10,6 +10,7 @@
 import { PlusCircle, X, Zap } from 'lucide-react';
 import { memo } from 'react';
 import { useLanguage } from '../LanguageContext';
+import FFmpegUpdater from './FFmpegUpdater';
 
 export type GuideStep = 'template' | 'input' | 'output' | 'start';
 
@@ -148,6 +149,7 @@ function AppHeaderImpl({
 
         {/* 右侧操作按钮 */}
         <div className="flex items-center gap-2 justify-end flex-wrap">
+          <FFmpegUpdater isRunning={isRunning} />
           <button
             type="button"
             onClick={toggleLanguage}

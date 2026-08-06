@@ -5,6 +5,7 @@
 import { ipcMain, type BrowserWindow } from 'electron';
 import { ffmpegService } from '../services/FFmpegController';
 import { getAvailableHardwareEncoders } from '../services/HardwareEncoderService';
+import { getFfmpegVersion } from '../utils/pathUtils';
 import type { IpcResult } from '../../shared/ipc';
 import { safeReply } from '../utils/ipcUtils';
 
@@ -22,6 +23,7 @@ export function setupFFmpegHandlers(
   ipcMain.removeHandler('stop-ffmpeg');
   ipcMain.removeHandler('ffmpeg-resume');
   ipcMain.removeHandler('check-ffmpeg-status');
+  ipcMain.removeHandler('get-ffmpeg-version');
   ipcMain.removeHandler('check-hardware-encoders');
 
   // 渲染层只通过 invoke 调用，无 ipcMain.on 注册需求
@@ -48,6 +50,8 @@ export function setupFFmpegHandlers(
   });
 
   ipcMain.handle('check-ffmpeg-status', () => ffmpegService.checkExists());
+
+  ipcMain.handle('get-ffmpeg-version', () => getFfmpegVersion());
 
   ipcMain.handle('check-hardware-encoders', () =>
     getAvailableHardwareEncoders(),
