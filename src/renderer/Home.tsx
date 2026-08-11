@@ -1,5 +1,5 @@
 import { Upload } from 'lucide-react';
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useId, useRef, useState } from 'react';
 import type React from 'react';
 import FFmpegDownloader from './components/FFmpegDownloader';
 import { TemplateDialog } from './components/TemplateDialog';
@@ -27,6 +27,7 @@ import { PipelineStrip } from './components/PipelineStrip';
 import SetupPanel from './components/SetupPanel';
 import { WorkspaceDrawer } from './components/WorkspaceDrawer';
 import RunningBar from './components/RunningBar';
+import StalledBanner from './components/StalledBanner';
 
 import { useWorkspaceLayout } from './hooks/useWorkspaceLayout';
 import { useRunState } from './hooks/useRunState';
@@ -207,33 +208,9 @@ function Home() {
     t,
   });
 
-  // 卡死检测：进程长时间无输出时弹出"继续等待 / 停止"确认框
-  const stalledHandledRef = useRef(false);
-  useEffect(() => {
-    if (stalledForMs === null) {
-      stalledHandledRef.current = false;
-      return;
-    }
-    if (stalledHandledRef.current) return;
-    stalledHandledRef.current = true;
-
-    openConfirm(
-      t('ffmpegStalledTitle'),
-      () => {
-        // 确认 = 继续等待，重置检测计时器
-        handleResumeStalled();
-      },
-      {
-        description: t('ffmpegStalledDescription'),
-        confirmLabel: t('Continue Waiting'),
-        cancelLabel: t('Stop'),
-        // 取消 = 停止进程
-        onCancel: () => {
-          handleStop();
-        },
-      },
-    );
-  }, [stalledForMs, openConfirm, handleResumeStalled, handleStop, t]);
+  // 卡死检测提示改为非模态横幅（StalledBanner）：原确认框把 Esc / 点遮罩
+  // 映射到取消（= 停止任务），用户想"关掉提示"会误终止转码。横幅只提供
+  // 显式按钮（继续等待 / 停止任务），无遮罩、不打断操作。
 
   const {
     inputSlots,
@@ -546,6 +523,16 @@ function Home() {
             canStop={canStop}
             onStop={onStop}
           />
+
+          {stalledForMs !== null && status === 'running' && (
+            <StalledBanner
+              stalledForMs={stalledForMs}
+              isStopping={isStopping}
+              canStop={canStop}
+              onResume={handleResumeStalled}
+              onStop={handleStop}
+            />
+          )}
 
           <CommandBox
             id={commandControlId}

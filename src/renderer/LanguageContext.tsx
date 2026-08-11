@@ -232,6 +232,7 @@ export const translations: Record<Language, Record<string, string>> = {
       'A matching template for this file type will replace the current command.',
     'Apply template': 'Apply template',
     'Just add input': 'Just add input',
+    'Stop task': 'Stop task',
   },
   zh: {
     'Add Template': '添加模板',
@@ -438,6 +439,7 @@ export const translations: Record<Language, Record<string, string>> = {
       '套用该文件类型的匹配模板将覆盖当前命令。',
     'Apply template': '应用模板',
     'Just add input': '仅添加为输入',
+    'Stop task': '停止任务',
   },
 };
 
