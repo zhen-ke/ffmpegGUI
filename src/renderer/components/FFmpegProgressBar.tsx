@@ -98,7 +98,11 @@ function FFmpegProgressBar({ isRunning, language }: FFmpegProgressBarProps) {
   if (!isRunning) return null;
 
   const clampedProgress = Math.max(0, Math.min(100, progress));
+  // 进度到达 100% 但任务仍在 running：ffmpeg 编码已完成，正在写 trailer/moov
+  // 收尾（可能持续数秒），此时 ETA 无意义，替换为"正在封装"提示，避免误判卡住。
+  const isFinalizing = clampedProgress >= 100;
   const showEta =
+    !isFinalizing &&
     clampedProgress > 3 &&
     rateRef.current > 0 &&
     Number.isFinite(rateRef.current);
@@ -128,10 +132,16 @@ function FFmpegProgressBar({ isRunning, language }: FFmpegProgressBarProps) {
       <span className="text-[11px] font-semibold text-primary-600 dark:text-primary-400 tabular-nums flex-shrink-0">
         {clampedProgress.toFixed(0)}%
       </span>
-      {etaLabel && (
+      {isFinalizing ? (
         <span className="text-[11px] text-slate-500 dark:text-slate-400 tabular-nums flex-shrink-0 hidden sm:inline">
-          {etaLabel}
+          {t('Finalizing')}…
         </span>
+      ) : (
+        etaLabel && (
+          <span className="text-[11px] text-slate-500 dark:text-slate-400 tabular-nums flex-shrink-0 hidden sm:inline">
+            {etaLabel}
+          </span>
+        )
       )}
     </div>
   );
