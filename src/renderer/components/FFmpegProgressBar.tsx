@@ -10,7 +10,7 @@
  * 原实现因 totalDuration 仍为 0 而显示 0%。这里在 DURATION 到达时用已记录的最新
  * time 回填百分比，进度立即正确。
  */
-import { memo, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { useLanguage } from '../LanguageContext';
 import { onFFmpegEvent } from '../ipc/ffmpegEvents';
 
@@ -35,6 +35,16 @@ function FFmpegProgressBar({ isRunning, language }: FFmpegProgressBarProps) {
   const rateRef = useRef(0);
   const lastProgressRef = useRef(0);
   const lastTimeRef = useRef(0);
+  /** 已纳入 EMA 的采样数：进度跳变帧（duration 回填）不计数，前几帧 ETA 不稳定，达到门槛才显示 */
+  const sampleCountRef = useRef(0);
+
+  /** 重置 ETA 采样基线（duration 回填 / 段切换 / 运行结束都需调用，避免跳变帧污染 EMA） */
+  const resetEtaBaseline = useCallback(() => {
+    rateRef.current = 0;
+    lastProgressRef.current = 0;
+    lastTimeRef.current = 0;
+    sampleCountRef.current = 0;
+  }, []);
 
   // 订阅 progress / duration / chain-segment：组件常驻即挂载，跨多次运行复用监听器
   useEffect(() => {
@@ -46,7 +56,10 @@ function FFmpegProgressBar({ isRunning, language }: FFmpegProgressBarProps) {
       'ffmpeg-duration',
       ({ duration }) => {
         durationRef.current = duration;
-        // 竞态修复：DURATION 晚到时用最新 time 回填，不再卡在 0%
+        // 竞态修复：DURATION 晚到时用最新 time 回填，不再卡在 0%。
+        // 回填这一帧进度会从 0 跳到几十 %，斜率是假数据，必须重置采样基线，
+        // 否则 ETA 会短暂显示极小值。
+        resetEtaBaseline();
         setProgress(computePct(timeRef.current, duration));
       },
     );
@@ -54,9 +67,7 @@ function FFmpegProgressBar({ isRunning, language }: FFmpegProgressBarProps) {
       // 命令链切换到新段：重置进度与时长，避免跨段百分比错乱
       timeRef.current = 0;
       durationRef.current = 0;
-      rateRef.current = 0;
-      lastProgressRef.current = 0;
-      lastTimeRef.current = 0;
+      resetEtaBaseline();
       setProgress(0);
     });
     return () => {
@@ -64,7 +75,7 @@ function FFmpegProgressBar({ isRunning, language }: FFmpegProgressBarProps) {
       unlistenDuration();
       unlistenSegment();
     };
-  }, []);
+  }, [resetEtaBaseline]);
 
   // 运行结束 → 清空，避免下次运行残留 100%
   useEffect(() => {
@@ -72,10 +83,8 @@ function FFmpegProgressBar({ isRunning, language }: FFmpegProgressBarProps) {
     setProgress(0);
     timeRef.current = 0;
     durationRef.current = 0;
-    rateRef.current = 0;
-    lastProgressRef.current = 0;
-    lastTimeRef.current = 0;
-  }, [isRunning]);
+    resetEtaBaseline();
+  }, [isRunning, resetEtaBaseline]);
 
   useEffect(() => {
     if (!isRunning) return;
@@ -89,6 +98,7 @@ function FFmpegProgressBar({ isRunning, language }: FFmpegProgressBarProps) {
         const inst = dp / dt;
         rateRef.current =
           rateRef.current === 0 ? inst : rateRef.current * 0.7 + inst * 0.3;
+        sampleCountRef.current += 1;
       }
     }
     lastProgressRef.current = progress;
@@ -101,9 +111,12 @@ function FFmpegProgressBar({ isRunning, language }: FFmpegProgressBarProps) {
   // 进度到达 100% 但任务仍在 running：ffmpeg 编码已完成，正在写 trailer/moov
   // 收尾（可能持续数秒），此时 ETA 无意义，替换为"正在封装"提示，避免误判卡住。
   const isFinalizing = clampedProgress >= 100;
+  // 前 MIN_ETA_SAMPLES 个采样点内斜率不稳定（含 duration 回填帧），达到门槛才显示 ETA
+  const MIN_ETA_SAMPLES = 3;
   const showEta =
     !isFinalizing &&
     clampedProgress > 3 &&
+    sampleCountRef.current >= MIN_ETA_SAMPLES &&
     rateRef.current > 0 &&
     Number.isFinite(rateRef.current);
   let etaLabel: string | null = null;
