@@ -70,16 +70,18 @@ function MediaInfoCardImpl({
 }: MediaInfoCardProps) {
   const { t } = useLanguage();
 
-  // ── 折叠态：默认收起，首次探测到媒体信息时自动展开一次 ──
+  // ── 折叠态：默认收起，仅当「新的输入文件」首次探测到媒体信息时展开一次。
+  // 原实现用 hasArrivedRef + mediaInfo 判空，加载新文件时 mediaInfo 被置 null
+  // 会重置标记，导致用户折叠后换文件/重试又反复弹开；改用输入文件路径作 key，
+  // 加载中/失败都不再重置已展开状态，尊重用户折叠意愿。 ──
   const [isOpen, setIsOpen] = useState(false);
-  const hasArrivedRef = useRef(false);
+  const expandedForRef = useRef<string | null>(null);
   useEffect(() => {
-    if (mediaInfo && !hasArrivedRef.current) {
-      hasArrivedRef.current = true;
+    if (mediaInfo && primaryInputPath !== expandedForRef.current) {
+      expandedForRef.current = primaryInputPath;
       setIsOpen(true);
     }
-    if (!mediaInfo) hasArrivedRef.current = false;
-  }, [mediaInfo]);
+  }, [mediaInfo, primaryInputPath]);
   const toggleOpen = () => setIsOpen((v) => !v);
 
   const primaryVideoStream = mediaInfo?.videoStreams[0] ?? null;
