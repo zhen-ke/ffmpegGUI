@@ -1,5 +1,5 @@
 import { Upload } from 'lucide-react';
-import { useCallback, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import type React from 'react';
 import FFmpegDownloader from './components/FFmpegDownloader';
 import { TemplateDialog } from './components/TemplateDialog';
@@ -12,6 +12,7 @@ import { useFFmpegState } from './hooks/useFFmpegState';
 import { useFileSelection } from './hooks/useFileSelection';
 import { useGlobalHotkeys } from './hooks/useGlobalHotkeys';
 import { useMediaProbe } from './hooks/useMediaProbe';
+import { useTaskHistory, type TaskHistoryEntry } from './hooks/useTaskHistory';
 import { useTemplateManager } from './hooks/useTemplateManager';
 import { useToast } from './hooks/useToast';
 
@@ -28,6 +29,7 @@ import SetupPanel from './components/SetupPanel';
 import { WorkspaceDrawer } from './components/WorkspaceDrawer';
 import RunningBar from './components/RunningBar';
 import StalledBanner from './components/StalledBanner';
+import TaskHistoryPanel from './components/TaskHistoryPanel';
 
 import { useWorkspaceLayout } from './hooks/useWorkspaceLayout';
 import { useRunState } from './hooks/useRunState';
@@ -38,6 +40,7 @@ import { useTemplateSync } from './hooks/useTemplateSync';
 import { useInputOutputSlots } from './hooks/useInputOutputSlots';
 import { useResultCards } from './hooks/useResultCards';
 import { useLocalStorage } from './hooks/useLocalStorage';
+import { ipcInvoke } from './ipc/ipcTyped';
 
 /**
  * 拖入文件按扩展名 → 自动匹配的模板命令。
@@ -157,6 +160,7 @@ function Home() {
     canStop,
     isRunning,
     isStopping,
+    lastStartedCommand,
     lastCompletedOutputFile,
     lastError,
     status,
@@ -167,6 +171,53 @@ function Home() {
   } = useFFmpegState();
 
   const runState = useRunState(status);
+
+  // 最近任务历史：运行结束（成功/失败）时记录一条，持久化供后续复用
+  const { entries: historyEntries, addEntry, clearHistory } = useTaskHistory();
+
+  useEffect(() => {
+    if (status === 'done') {
+      addEntry({
+        status: 'done',
+        command: lastStartedCommand,
+        outputFile: lastCompletedOutputFile,
+      });
+    } else if (status === 'error') {
+      addEntry({
+        status: 'error',
+        command: lastStartedCommand,
+        outputFile: '',
+        errorMessage: lastError || undefined,
+      });
+    }
+    // done/error 的字段（输出文件 / 错误消息）在同一帧随 status 一起就位，
+    // 仅依赖 status 变化触发即可，避免重复记录
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status]);
+
+  // 历史面板操作：加载历史命令到命令框 / 打开历史输出文件夹
+  const handleLoadHistoryCommand = useCallback(
+    (entry: TaskHistoryEntry) => {
+      updateCommand(entry.command);
+      pushToast('info', t('Command loaded'));
+    },
+    [updateCommand, pushToast, t],
+  );
+
+  const handleOpenHistoryFolder = useCallback(
+    async (entry: TaskHistoryEntry) => {
+      if (!entry.outputFile) return;
+      try {
+        const result = await ipcInvoke('open-output-folder', entry.outputFile);
+        if (!result?.success) {
+          handleOperationalError('Failed to open output folder.');
+        }
+      } catch {
+        handleOperationalError('Failed to open output folder.');
+      }
+    },
+    [handleOperationalError],
+  );
 
   const {
     templateOptions,
@@ -608,6 +659,13 @@ function Home() {
               errorMessage={lastError}
             />
           )}
+
+          <TaskHistoryPanel
+            entries={historyEntries}
+            onLoadCommand={handleLoadHistoryCommand}
+            onOpenFolder={handleOpenHistoryFolder}
+            onClear={clearHistory}
+          />
         </main>
       </div>
 

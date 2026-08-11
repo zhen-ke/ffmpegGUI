@@ -236,6 +236,11 @@ export const translations: Record<Language, Record<string, string>> = {
     'A task is already running or stopping.':
       'A task is already running or stopping.',
     Finalizing: 'Finalizing',
+    'Task History': 'Task History',
+    'Clear history': 'Clear history',
+    'Load command': 'Load command',
+    'Task succeeded': 'Task succeeded',
+    'Command loaded': 'Command loaded',
   },
   zh: {
     'Add Template': '添加模板',
@@ -445,6 +450,11 @@ export const translations: Record<Language, Record<string, string>> = {
     'Stop task': '停止任务',
     'A task is already running or stopping.': '已有任务正在运行或停止中。',
     Finalizing: '正在封装',
+    'Task History': '任务历史',
+    'Clear history': '清空历史',
+    'Load command': '加载命令',
+    'Task succeeded': '任务成功',
+    'Command loaded': '已加载命令',
   },
 };
 
