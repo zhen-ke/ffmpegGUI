@@ -158,6 +158,7 @@ function Home() {
     isRunning,
     isStopping,
     lastCompletedOutputFile,
+    lastError,
     status,
     stalledForMs,
     handleStart,
@@ -604,6 +605,7 @@ function Home() {
               onTryAgain={onStart}
               canRetry={isReadyToRun}
               onDismiss={() => setShowFailedResult(false)}
+              errorMessage={lastError}
             />
           )}
         </main>

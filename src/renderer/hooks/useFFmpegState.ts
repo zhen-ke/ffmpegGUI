@@ -32,6 +32,8 @@ interface FFmpegState {
   status: FFmpegStatus;
   lastStartedCommand: string;
   lastCompletedOutputFile: string;
+  /** 最近一次失败的诊断消息（主进程聚合的 stderr 原因行），供失败卡片展示 */
+  lastError: string;
 }
 
 type FFmpegAction =
@@ -39,7 +41,7 @@ type FFmpegAction =
   | { type: 'STARTED' }
   | { type: 'STOP' }
   | { type: 'COMPLETE'; payload: { outputFile: string | null } }
-  | { type: 'ERROR' }
+  | { type: 'ERROR'; payload: { message?: string } }
   | { type: 'CANCELLED' }
   | { type: 'RESET' };
 
@@ -47,6 +49,7 @@ const initialState: FFmpegState = {
   status: 'idle',
   lastStartedCommand: '',
   lastCompletedOutputFile: '',
+  lastError: '',
 };
 
 function reducer(state: FFmpegState, action: FFmpegAction): FFmpegState {
@@ -56,6 +59,7 @@ function reducer(state: FFmpegState, action: FFmpegAction): FFmpegState {
         status: 'starting',
         lastStartedCommand: action.payload.command,
         lastCompletedOutputFile: '',
+        lastError: '',
       };
     case 'STARTED':
       return { ...state, status: 'running' };
@@ -69,7 +73,11 @@ function reducer(state: FFmpegState, action: FFmpegAction): FFmpegState {
         lastCompletedOutputFile: action.payload.outputFile ?? '',
       };
     case 'ERROR':
-      return { ...state, status: 'error' };
+      return {
+        ...state,
+        status: 'error',
+        lastError: action.payload.message ?? '',
+      };
     case 'CANCELLED':
       return { ...state, status: 'idle' };
     case 'RESET':
@@ -119,12 +127,12 @@ export function useFFmpegState() {
         if (result.success) {
           dispatch({ type: 'STARTED' });
         } else {
-          dispatch({ type: 'ERROR' });
+          dispatch({ type: 'ERROR', payload: { message: result.error } });
         }
         return undefined;
       })
       .catch(() => {
-        dispatch({ type: 'ERROR' });
+        dispatch({ type: 'ERROR', payload: {} });
         return undefined;
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -161,8 +169,8 @@ export function useFFmpegState() {
 
   useEffect(() => {
     const listeners = [
-      onFFmpegEvent('ffmpeg-error', () => {
-        dispatch({ type: 'ERROR' });
+      onFFmpegEvent('ffmpeg-error', (message) => {
+        dispatch({ type: 'ERROR', payload: { message } });
         setStalledForMs(null);
       }),
 
@@ -194,6 +202,7 @@ export function useFFmpegState() {
     status: state.status,
     lastStartedCommand: state.lastStartedCommand,
     lastCompletedOutputFile: state.lastCompletedOutputFile,
+    lastError: state.lastError,
     stalledForMs,
     ...flags,
     handleStart,

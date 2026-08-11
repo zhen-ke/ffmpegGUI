@@ -1,3 +1,4 @@
+/* eslint-disable react/require-default-props -- 可选 props 用 undefined 判空，无需 defaultProps（React 19 移除） */
 /**
  * FailedResultCard — 任务失败结果卡片
  */
@@ -10,6 +11,8 @@ interface FailedResultCardProps {
   onTryAgain: () => void;
   canRetry: boolean;
   onDismiss?: () => void;
+  /** 最近一次失败的诊断摘要（主进程聚合的 stderr 原因行），可选 */
+  errorMessage?: string;
 }
 
 export function FailedResultCard({
@@ -17,6 +20,7 @@ export function FailedResultCard({
   onTryAgain,
   canRetry,
   onDismiss,
+  errorMessage,
 }: FailedResultCardProps) {
   const { t } = useLanguage();
 
@@ -41,6 +45,14 @@ export function FailedResultCard({
           <h2 className="mt-1 text-sm font-semibold text-red-900 dark:text-red-100">
             {t('Task failed. Check the activity log for details.')}
           </h2>
+          {errorMessage && (
+            <p
+              className="mt-2 text-xs font-mono text-red-800/90 dark:text-red-200/90 line-clamp-2 break-all leading-relaxed"
+              title={errorMessage}
+            >
+              {errorMessage}
+            </p>
+          )}
         </div>
 
         <div className="flex flex-wrap gap-2">
