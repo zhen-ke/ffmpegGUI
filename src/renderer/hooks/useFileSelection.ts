@@ -54,10 +54,10 @@ export function useFileSelection({ onError }: UseFileSelectionProps = {}) {
       const filePath = result.filePaths[0];
       setInputFiles((prev) => setFileAt(prev, index, filePath));
 
-      // 智能联动：输出目录为空时自动设为输入文件所在目录
-      if (index === 0) {
-        setOutputFolder((prev) => prev || getFileDirectory(filePath));
-      }
+      // 智能联动：输出目录为空时自动设为输入文件所在目录。
+      // 任意输入槽生效（多输入场景选 Input 2/3 也应联动），避免首次
+      // 使用多输入的用户踩到"输出目录为空"的坑。
+      setOutputFolder((prev) => prev || getFileDirectory(filePath));
 
       return filePath;
     } catch (error) {
@@ -103,9 +103,8 @@ export function useFileSelection({ onError }: UseFileSelectionProps = {}) {
   const handleInputFileDrop = useCallback((filePath: string, index = 0) => {
     setInputFiles((prev) => setFileAt(prev, index, filePath));
 
-    if (index === 0) {
-      setOutputFolder((prev) => prev || getFileDirectory(filePath));
-    }
+    // 与选择对话框一致：任意输入槽都联动输出目录（仅在为空时填充）
+    setOutputFolder((prev) => prev || getFileDirectory(filePath));
   }, []);
 
   const handleOutputFolderDrop = useCallback((folderPath: string) => {
