@@ -309,12 +309,29 @@ function Home() {
 
   const onStart = useCallback(() => {
     const cmd = command.trim();
-    if (!cmd || !canStart || !setupReadiness.isSetupComplete) return;
+    if (!cmd || !canStart || !setupReadiness.isSetupComplete) {
+      // 快捷键 / 按钮触发但被阻塞时给出可见反馈：按钮下方有 blockerHint，
+      // 但 ⌘↵ 快捷键路径看不到，静默失败会让用户以为没生效。
+      if (!canStart) {
+        pushToast('info', t('A task is already running or stopping.'));
+      } else if (setupBlockerMessage) {
+        pushToast('info', setupBlockerMessage);
+      }
+      return;
+    }
     // 不再自动展开抽屉/切换 pane——执行时用户不想看日志就不弹，
     // 状态由标签栏圆点提示（running 脉冲 / success 绿 / error 红）。
     xtermClearRef.current?.();
     handleStart(cmd);
-  }, [canStart, command, handleStart, setupReadiness.isSetupComplete]);
+  }, [
+    canStart,
+    command,
+    handleStart,
+    pushToast,
+    setupBlockerMessage,
+    setupReadiness.isSetupComplete,
+    t,
+  ]);
 
   const onStop = useCallback(() => {
     if (!canStop) return;

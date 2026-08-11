@@ -233,6 +233,8 @@ export const translations: Record<Language, Record<string, string>> = {
     'Apply template': 'Apply template',
     'Just add input': 'Just add input',
     'Stop task': 'Stop task',
+    'A task is already running or stopping.':
+      'A task is already running or stopping.',
   },
   zh: {
     'Add Template': '添加模板',
@@ -440,6 +442,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'Apply template': '应用模板',
     'Just add input': '仅添加为输入',
     'Stop task': '停止任务',
+    'A task is already running or stopping.': '已有任务正在运行或停止中。',
   },
 };
 
