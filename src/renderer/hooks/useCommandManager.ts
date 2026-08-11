@@ -180,6 +180,10 @@ export function useCommandManager({
   const handleDrop = useCallback(
     (e: DragEvent<HTMLTextAreaElement>) => {
       e.preventDefault();
+      // 阻止冒泡到窗口级拖放处理：命令框内拖放只做「光标处插入路径」，
+      // 不做「分配输入 1 / 套模板」，避免同一拖放被两个入口重复处理、
+      // 模板重写覆盖掉刚插入的路径。
+      e.stopPropagation();
 
       const files = Array.from(e.dataTransfer.files);
       // 在同步帧内读取，不在 setCommand 回调内访问 e.currentTarget

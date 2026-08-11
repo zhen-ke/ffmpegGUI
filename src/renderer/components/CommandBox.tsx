@@ -186,13 +186,13 @@ function CommandBoxImpl({
             </div>
             <p className="text-sm font-semibold text-primary-900 dark:text-primary-200">
               {language === 'zh'
-                ? '松开以导入文件或解析路径'
-                : 'Drop media file to parse command'}
+                ? '松开以将文件路径插入命令'
+                : 'Drop file to insert its path into the command'}
             </p>
             <p className="text-xs text-primary-600 dark:text-primary-400 mt-1">
               {language === 'zh'
-                ? '将自动读取格式信息与文件路径'
-                : 'File path will be inserted into FFmpeg input parameters'}
+                ? '文件路径将插入到光标所在位置'
+                : 'The file path will be inserted at the cursor position'}
             </p>
           </div>
         )}

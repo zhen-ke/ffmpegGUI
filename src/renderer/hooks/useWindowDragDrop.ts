@@ -14,6 +14,7 @@ export function useWindowDragDrop(options: {
     onDragLeave: (e: DragEvent) => void;
     onDragOver: (e: DragEvent) => void;
     onDrop: (e: DragEvent) => void;
+    onDropCapture: (e: DragEvent) => void;
   };
 } {
   const { onFileDrop, onMatchTemplate } = options;
@@ -43,6 +44,20 @@ export function useWindowDragDrop(options: {
     e.stopPropagation();
   }, []);
 
+  /**
+   * 捕获阶段的 drop 清理：命令框等深层组件在 drop 时调用
+   * stopPropagation 后，冒泡阶段的 handleWindowDrop 不再执行，
+   * isWindowDragActive 会残留为 true（drop 后浏览器不再触发 dragleave）。
+   * 捕获阶段先于目标阶段执行、不受 stopPropagation 影响，在这里
+   * 复位拖放状态；真正的文件处理仍在冒泡阶段的 handleWindowDrop 中，
+   * 命令框内 drop 不会走到文件处理。
+   */
+  const handleWindowDropCapture = useCallback((e: DragEvent) => {
+    e.preventDefault();
+    setIsWindowDragActive(false);
+    dragCounter.current = 0;
+  }, []);
+
   const handleWindowDrop = useCallback(
     (e: DragEvent) => {
       e.preventDefault();
@@ -70,6 +85,7 @@ export function useWindowDragDrop(options: {
       onDragLeave: handleWindowDragLeave,
       onDragOver: handleWindowDragOver,
       onDrop: handleWindowDrop,
+      onDropCapture: handleWindowDropCapture,
     },
   };
 }
