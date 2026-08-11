@@ -267,20 +267,44 @@ function Home() {
     commandControlId,
   });
 
-  // 拖入文件时按扩展名自动匹配模板；匹配成功则应用模板 + 绑定输入，返回 true
+  // 拖入文件时按扩展名自动匹配模板；匹配成功则应用模板 + 绑定输入，返回 true。
+  // 命令非空时直接覆盖会丢失当前命令，先弹确认框；取消则仅将文件添加为输入。
   const handleMatchTemplateForDrop = useCallback(
     (filePath: string): boolean => {
       const ext = filePath.split('.').pop()?.toLowerCase() ?? '';
       const templateCommand = DROP_MATCH_BY_EXT[ext];
       if (!templateCommand) return false;
 
-      // 先写入输入文件（触发 inputFiles 状态 + 输出目录自动联动）
-      handleDropInputAtIndex(filePath, 0);
-      // 用匹配的模板命令重写 command，并绑定真实输入/输出路径
-      updateCommandWithPaths(templateCommand, [filePath], outputFolder);
+      const applyDropTemplate = () => {
+        // 先写入输入文件（触发 inputFiles 状态 + 输出目录自动联动）
+        handleDropInputAtIndex(filePath, 0);
+        // 用匹配的模板命令重写 command，并绑定真实输入/输出路径
+        updateCommandWithPaths(templateCommand, [filePath], outputFolder);
+      };
+
+      // 命令为空：全新开始，直接应用模板（无覆盖风险）
+      if (command.trim().length === 0) {
+        applyDropTemplate();
+        return true;
+      }
+
+      // 命令非空：套模板会覆盖当前命令，先征求用户确认
+      openConfirm(t('Apply drop template?'), applyDropTemplate, {
+        description: t('Drop template will replace the current command.'),
+        confirmLabel: t('Apply template'),
+        cancelLabel: t('Just add input'),
+        onCancel: () => handleDropInputAtIndex(filePath, 0),
+      });
       return true;
     },
-    [handleDropInputAtIndex, outputFolder, updateCommandWithPaths],
+    [
+      command,
+      handleDropInputAtIndex,
+      openConfirm,
+      outputFolder,
+      updateCommandWithPaths,
+      t,
+    ],
   );
 
   const { isWindowDragActive, dragHandlers } = useWindowDragDrop({

@@ -227,6 +227,11 @@ export const translations: Record<Language, Record<string, string>> = {
     'Press shortcut to start': 'Press shortcut to start',
     'to start': 'to start',
     Confirm: 'Confirm',
+    'Apply drop template?': 'Apply template for the dropped file?',
+    'Drop template will replace the current command.':
+      'A matching template for this file type will replace the current command.',
+    'Apply template': 'Apply template',
+    'Just add input': 'Just add input',
   },
   zh: {
     'Add Template': '添加模板',
@@ -428,6 +433,11 @@ export const translations: Record<Language, Record<string, string>> = {
     'Missing output': '缺少输出',
     'Press shortcut to start': '快捷键启动',
     'to start': '开始',
+    'Apply drop template?': '为拖入文件应用匹配模板？',
+    'Drop template will replace the current command.':
+      '套用该文件类型的匹配模板将覆盖当前命令。',
+    'Apply template': '应用模板',
+    'Just add input': '仅添加为输入',
   },
 };
 
