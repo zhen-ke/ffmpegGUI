@@ -1,6 +1,6 @@
 {
   "name": "ffmpeg-gui",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "A FFmpeg GUI project",
   "license": "MIT",
   "author": {

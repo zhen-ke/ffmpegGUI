@@ -1,6 +1,6 @@
 {
   "name": "ffmpeg-gui",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "A user-friendly graphical interface for FFmpeg, simplifying video and audio processing tasks",
   "keywords": [
     "ffmpeg",
